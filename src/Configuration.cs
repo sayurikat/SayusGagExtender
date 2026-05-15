@@ -31,10 +31,9 @@ public class Configuration : IPluginConfiguration
     public string ActiveRestraintSet { get; set; }
     public Dictionary<int, string> ActiveRestrictions { get; set; } = new Dictionary<int, string>();
     public Dictionary<int, string> ActiveGags { get; set; } = new Dictionary<int, string>();
+    public bool GagSpeakRestraintCloner { get; set; }
     public string GagSpeakMasterName { get; set; }
     public string GagSpeakMasterWorld { get; set; }
-    public string GagSpeakMasterID { get; set; }
-    public string GagSpeakSlaveID { get; set; }
 
     // The below exists just to make saving less cumbersome
     public void Save()

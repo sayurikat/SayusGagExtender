@@ -53,11 +53,11 @@ public sealed class Plugin : IDalamudPlugin
     public BlindfoldMonitor BlindfoldMonitor { get; set; }
     public MirrorGagSpeak MirrorGagSpeak { get; set; }
 
-    private const string CommandName = "/pmycommand";
+    private const string CommandName = "/sge";
 
     public Configuration Configuration { get; init; }
 
-    public readonly WindowSystem WindowSystem = new("SamplePlugin");
+    public readonly WindowSystem WindowSystem = new("Sayus Gag Extender");
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
 
@@ -77,7 +77,7 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "A useful message to display in /xlhelp"
+            HelpMessage = "/sge help"
         });
 
         // Tell the UI system that we want our windows to be drawn through the window system
@@ -163,10 +163,21 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnCommand(string command, string args)
     {
-        
 
 
 
+
+        if (args.StartsWith("help"))
+        {
+            ChatGui.Print($"/sge autozap on : Enables auto zap feature");
+            ChatGui.Print($"/sge autozap off : Disables auto zap feature");
+            ChatGui.Print($"/sge handguard : Enables handguard feature");
+            ChatGui.Print($"/sge apply restriction [name]: applies restriction in next available layer");
+            ChatGui.Print($"/sge remove restriction [name]: removes restriction from any layer");
+            ChatGui.Print($"/sge apply restraintset [name]: applies restraintset");
+            ChatGui.Print($"/sge remove restraintset [name]: removes restraintset");
+            return;
+        }
         if (args.StartsWith("autozap on"))
         {
             RandomEmoteSender.Enable();

@@ -1,6 +1,7 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Plugin.Services;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using SayusGagExtender.API.GagSpeak;
 using System;
 using System.Collections.Generic;
@@ -51,6 +52,9 @@ namespace SayusGagExtender
         }
         private void MirrorGagSpeakState()
         {
+            if (plugin.Configuration.GagSpeakMasterName == null || plugin.Configuration.GagSpeakMasterName.Length < 0 || plugin.Configuration.GagSpeakMasterWorld == null || plugin.Configuration.GagSpeakMasterWorld.Length < 0)
+                return;
+
             var activeRestraintSet = plugin.GagSpeakRestraintSetApi.GetActiveRestraintSet();
             var activeRestrictions = plugin.GagSpeakRestrictionsApi.GetActiveRestrictions();
             var activeGags = plugin.GagSpeakGagsApi.GetActiveGags();

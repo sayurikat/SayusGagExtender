@@ -108,6 +108,7 @@ namespace SayusGagExtender
         private void SendEmote()
         {
             var controllerName = plugin.Configuration.ZapControllerName;
+            if (controllerName == null) return;
 
             if (controllerName.Length > 3 && plugin.FriendListHelper.IsFriendOnline(controllerName))
             {

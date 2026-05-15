@@ -16,11 +16,10 @@ public class ConfigWindow : Window, IDisposable
     // and the window ID will always be "###XYZ counter window" for ImGui
     public ConfigWindow(Plugin plugin) : base("A Wonderful Configuration Window###With a constant ID")
     {
-        Flags = ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
-                ImGuiWindowFlags.NoScrollWithMouse;
+        Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
 
         Size = new Vector2(232, 90);
-        SizeCondition = ImGuiCond.Always;
+        SizeCondition = ImGuiCond.FirstUseEver;
 
         this.plugin = plugin;
         configuration = plugin.Configuration;
@@ -30,15 +29,15 @@ public class ConfigWindow : Window, IDisposable
 
     public override void PreDraw()
     {
-        // Flags must be added or removed before Draw() is being called, or they won't apply
-        if (configuration.IsConfigWindowMovable)
-        {
-            Flags &= ~ImGuiWindowFlags.NoMove;
-        }
-        else
-        {
-            Flags |= ImGuiWindowFlags.NoMove;
-        }
+        //// Flags must be added or removed before Draw() is being called, or they won't apply
+        //if (configuration.IsConfigWindowMovable)
+        //{
+        //    Flags &= ~ImGuiWindowFlags.NoMove;
+        //}
+        //else
+        //{
+        //    Flags |= ImGuiWindowFlags.NoMove;
+        //}
     }
 
     public override void Draw()
@@ -111,6 +110,8 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        ImGui.Spacing();
+
         var autoZapEnabled = configuration.AutoZapEnabled;
         if (ImGui.Checkbox("Enable Auto Zap", ref autoZapEnabled))
         {
@@ -141,7 +142,7 @@ public class ConfigWindow : Window, IDisposable
         }
 
 
-
+        ImGui.Spacing();
 
         if (ImGui.Button("Save Chat2 position for Blindfold"))
         {
@@ -158,6 +159,7 @@ public class ConfigWindow : Window, IDisposable
         {
             plugin.Chat2Api.SetPositionAndSize(configuration.Chat2Bounds);
         }
+        /*
         if (ImGui.Button("Enable Chat2 Inputs"))
         {
             plugin.Chat2Api.EnableInputInAllTabs();
@@ -165,12 +167,12 @@ public class ConfigWindow : Window, IDisposable
         if (ImGui.Button("Disable Chat2 Inputs"))
         {
             plugin.Chat2Api.DisableInputInAllTabs();
-        }
-
+        }*/
+        ImGui.Text("Pick a tab Chat2 stays locked on while vanilla Chatbox is hidden by GagSpeak");
         ImGui.SetNextItemWidth(100);
         string chat2HiddenTabName = configuration.Chat2HiddenTabName;
         if (ImGui.InputText(
-                "Chat2 Hidden Tab Name",
+                "Hide Chat2 Tab Name",
                 ref chat2HiddenTabName))
         {
             configuration.Chat2HiddenTabName = chat2HiddenTabName;
@@ -178,7 +180,7 @@ public class ConfigWindow : Window, IDisposable
         }
         ImGui.SameLine();
         ImGui.SetNextItemWidth(300);
-        if (ImGui.Button("Set active tab as hidden tab"))
+        if (ImGui.Button("Set current tab as Hide Chat2 tab"))
         {
             var activeTabName = plugin.Chat2Api.GetActiveTabName();
             if (activeTabName != null)
@@ -187,13 +189,15 @@ public class ConfigWindow : Window, IDisposable
                 configuration.Save();
             }
         }
+
+        /*
         ImGui.SameLine();
         ImGui.SetNextItemWidth(300);
         if (ImGui.Button("Set Hidden tab as current"))
         {
             plugin.Chat2Api.SetActiveTab(configuration.Chat2HiddenTabName);
         }
-
+        */
         //ImGui.SetNextItemWidth(300);
         //if (ImGui.Button("Save active restraints"))
         //{
@@ -218,11 +222,21 @@ public class ConfigWindow : Window, IDisposable
         //    configuration.Save();
         //}
 
+        ImGui.Spacing();
+
+        var restraintCloner = configuration.GagSpeakRestraintCloner;
+        if (ImGui.Checkbox("Clone restraints to alt characters", ref restraintCloner))
+        {
+            configuration.GagSpeakRestraintCloner = restraintCloner;
+            configuration.Save();
+        }
+
+
 
         ImGui.SetNextItemWidth(100);
         string gagSpeakMasterName = configuration.GagSpeakMasterName;
         if (ImGui.InputText(
-                "GagSpeak Master Name",
+                "GagSpeak Main Char Name",
                 ref gagSpeakMasterName))
         {
             configuration.GagSpeakMasterName = gagSpeakMasterName;
@@ -232,7 +246,7 @@ public class ConfigWindow : Window, IDisposable
         ImGui.SetNextItemWidth(100);
         string gagSpeakMasterWorld = configuration.GagSpeakMasterWorld;
         if (ImGui.InputText(
-                "GagSpeak Master World",
+                "GagSpeak Main Char World",
                 ref gagSpeakMasterWorld))
         {
             configuration.GagSpeakMasterWorld = gagSpeakMasterWorld;
@@ -252,23 +266,5 @@ public class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
-        ImGui.SetNextItemWidth(100);
-        string gagSpeakMasterID = configuration.GagSpeakMasterID;
-        if (ImGui.InputText(
-                "GagSpeak Master ID",
-                ref gagSpeakMasterID))
-        {
-            configuration.GagSpeakMasterID = gagSpeakMasterID;
-            configuration.Save();
-        }
-        ImGui.SetNextItemWidth(100);
-        string gagSpeakSlaveID = configuration.GagSpeakSlaveID;
-        if (ImGui.InputText(
-                "GagSpeak Slave ID",
-                ref gagSpeakSlaveID))
-        {
-            configuration.GagSpeakSlaveID = gagSpeakSlaveID;
-            configuration.Save();
-        }
     }
 }
