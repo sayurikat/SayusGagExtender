@@ -34,7 +34,8 @@ Thumbs.db
 *.local.json
 appsettings.Development.json
 
+# Visual Studio publish profiles
+**/Properties/PublishProfiles/
 
-PublishProfiles/
 
 Ressources/
