@@ -177,6 +177,8 @@ public sealed class Plugin : IDalamudPlugin
             //ChatGui.Print($"/sge handguard : Enables handguard feature");
             ChatGui.Print($"/sge apply restriction [name]: applies restriction in next available layer");
             ChatGui.Print($"/sge remove restriction [name]: removes restriction from any layer");
+            ChatGui.Print($"/sge apply gag [name]: applies gag in next available layer");
+            ChatGui.Print($"/sge remove gag [name]: removes gag from any layer");
             ChatGui.Print($"/sge apply restraintset [name]: applies restraintset");
             ChatGui.Print($"/sge remove restraintset [name]: removes restraintset");
             return;
@@ -210,6 +212,20 @@ public sealed class Plugin : IDalamudPlugin
             string restrictionName = args.Substring("remove restriction ".Length).Trim();
 
             GagSpeakRestrictionsApi.RemoveRestriction(restrictionName);
+            return;
+        }
+        if (args.StartsWith("apply gag ", StringComparison.OrdinalIgnoreCase))
+        {
+            string restrictionName = args.Substring("apply gag ".Length).Trim();
+
+            GagSpeakGagsApi.ApplyGag(restrictionName);
+            return;
+        }
+        if (args.StartsWith("remove gag ", StringComparison.OrdinalIgnoreCase))
+        {
+            string restrictionName = args.Substring("remove gag ".Length).Trim();
+
+            GagSpeakGagsApi.RemoveGag(restrictionName);
             return;
         }
         if (args.StartsWith("apply restraintset ", StringComparison.OrdinalIgnoreCase))

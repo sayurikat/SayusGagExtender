@@ -51,7 +51,7 @@ namespace SayusGagExtender
 
         private void CheckIfWearingRestrictiveItems()
         {
-            wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyHandGuardBlockedItemActive(
+            wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(
                 plugin.Configuration.AutoVibeRequiredRestrictions);
         }
 

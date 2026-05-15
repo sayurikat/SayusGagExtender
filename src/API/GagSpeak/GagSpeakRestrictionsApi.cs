@@ -136,7 +136,7 @@ namespace SayusGagExtender.API.GagSpeak
 
             return result;
         }
-        public bool IsAnyHandGuardBlockedItemActive(Dictionary<Guid, string> handGuardBlockedItems)
+        public bool IsAnyListedRestrictionsActive(Dictionary<Guid, string> handGuardBlockedItems)
         {
             try
             {
