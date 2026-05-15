@@ -1,4 +1,5 @@
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,6 +17,10 @@ namespace SayusGagExtender
         private DateTime onUpdateNextUTC = DateTime.MinValue;
         private bool forceGagSpeakState = false;
         private bool appliedAfterReload = false;
+        private TimeSpan waitAfterReload = TimeSpan.FromSeconds(10);
+        private DateTime waitUntilAfterReload = DateTime.MaxValue;
+        private TimeSpan mirrorCooldown = TimeSpan.FromSeconds(5);
+        private DateTime mirrorCooldownUntil = DateTime.MinValue;
 
         public MirrorGagSpeak(Plugin plugin)
         {
@@ -29,17 +34,20 @@ namespace SayusGagExtender
 
         private void OnFrameworkUpdate(IFramework framework)
         {
-            if (onUpdateNextUTC > DateTime.UtcNow)
+            var now = DateTime.UtcNow;
+            if (onUpdateNextUTC > now)
                 return;
-            onUpdateNextUTC = DateTime.UtcNow + OnUpdateCooldown;
+            onUpdateNextUTC = now + OnUpdateCooldown;
 
-            if (plugin.GagSpeakContext.EnsureReady())
+            if (plugin.GagSpeakContext.EnsureReady() && Plugin.Condition.Any(ConditionFlag.NormalConditions))
             {
                 if (!appliedAfterReload)
                 {
                     if (!IsMasterCharacter())
                     {
-                        MirrorGagSpeakState();
+                        waitUntilAfterReload = now + waitAfterReload;
+                        //Plugin.ChatGui.Print($"time now. {now}");
+                        //Plugin.ChatGui.Print($"Mirroring timer started. {waitUntilAfterReload}");
                     }
                     appliedAfterReload = true;
                 }
@@ -49,9 +57,28 @@ namespace SayusGagExtender
                 //gag speak not ready, likely reloading GagSpeak or relogging character. Reset applied state.
                 appliedAfterReload = false;
             }
+
+
+            if (now > waitUntilAfterReload)
+            {
+                //Plugin.ChatGui.Print($"Mirroring timer complete. {now}");
+                waitUntilAfterReload = DateTime.MaxValue;
+                MirrorGagSpeakState();
+            }
+            
+
+
         }
-        private void MirrorGagSpeakState()
+        public void MirrorGagSpeakState()
         {
+            var now = DateTime.UtcNow;
+            if (now < mirrorCooldownUntil)
+                return;
+            mirrorCooldownUntil = now + mirrorCooldown;
+
+            Plugin.ChatGui.Print("Mirroring saved Gag Speak restraints.");
+            
+            
             if (plugin.Configuration.GagSpeakMasterName == null || plugin.Configuration.GagSpeakMasterName.Length < 0 || plugin.Configuration.GagSpeakMasterWorld == null || plugin.Configuration.GagSpeakMasterWorld.Length < 0)
                 return;
 

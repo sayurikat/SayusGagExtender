@@ -675,14 +675,27 @@ namespace SayusGagExtender.API.GagSpeak
                 ChatPrint($"GagSpeak local ApplyGag returned: {result}");
 
                 var item = args[3];
-                if (item != null)
+                if (item == null)
                 {
-                    var label = context.GetPropertyValue(item, "Label") as string ?? gagType.ToString() ?? "<unknown>";
-                    ChatPrint($"GagSpeak local applied gag: {label}, layer {layer + 1}");
+                    ChatPrintError("ApplyGag returned null GarblerRestriction. Gag slot may update, but visuals cannot apply.");
+                    return;
+                }
+
+                var label =
+                    context.GetPropertyValue(item, "Label") as string ??
+                    context.GetPropertyValue(item, "Name") as string ??
+                    gagType.ToString() ??
+                    "<unknown>";
+
+                ChatPrint($"GagSpeak local applied gag: {label}, layer {layer + 1}");
+
+                if (result is bool hasVisuals && hasVisuals)
+                {
+                    InvokeCacheAddGagItemNoBlock(item, layer, enactor);
                 }
                 else
                 {
-                    ChatPrint("ApplyGag returned no GarblerRestriction item. This may be normal if the storage item is missing or disabled.");
+                    ChatPrint($"Gag \"{label}\" is active, but ApplyGag returned false. Its GarblerRestriction may be disabled or have no visual data.");
                 }
             }
             catch (TargetInvocationException ex)
@@ -694,6 +707,8 @@ namespace SayusGagExtender.API.GagSpeak
                 ChatPrintError($"GagSpeak local ApplyGag invoke failed: {ex}");
             }
         }
+
+
 
         private void InvokeLocalRemove(int layer, string enactor)
         {
@@ -732,15 +747,21 @@ namespace SayusGagExtender.API.GagSpeak
                 ChatPrint($"GagSpeak local RemoveGag returned: {result}");
 
                 var item = args[2];
-                if (item != null)
+                if (item == null)
                 {
-                    var label = context.GetPropertyValue(item, "Label") as string ?? "<unknown>";
-                    ChatPrint($"GagSpeak local removed gag: {label}, layer {layer + 1}");
+                    ChatPrint("RemoveGag returned null GarblerRestriction.");
+                    return;
                 }
-                else
-                {
-                    ChatPrint("RemoveGag returned no GarblerRestriction item.");
-                }
+                
+                var label =
+                    context.GetPropertyValue(item, "Label") as string ??
+                    context.GetPropertyValue(item, "Name") as string ??
+                    "<unknown>";
+
+                ChatPrint($"GagSpeak local removed gag: {label}, layer {layer + 1}");
+
+                if (result is bool hadVisuals && hadVisuals)
+                    InvokeCacheRemoveGagItemNoBlock(item, layer);
             }
             catch (TargetInvocationException ex)
             {
@@ -751,7 +772,195 @@ namespace SayusGagExtender.API.GagSpeak
                 ChatPrintError($"GagSpeak local RemoveGag invoke failed: {ex}");
             }
         }
+        private object? GetCacheStateManager()
+        {
+            var cache = context.TryResolveServiceByTypeName("CacheStateManager");
 
+            if (cache == null)
+                ChatPrintError("Could not resolve GagSpeak CacheStateManager.");
+
+            return cache;
+        }
+
+        private void InvokeCacheAddGagItemNoBlock(object gagItem, int layer, string enabler)
+        {
+            try
+            {
+                var cache = GetCacheStateManager();
+                if (cache == null)
+                    return;
+
+                var method = FindCacheGagMethod(cache, add: true);
+                if (method == null)
+                {
+                    ChatPrintError("CacheStateManager add-gag method was not found.");
+                    DumpCacheStateManagerMethods("Gag");
+                    return;
+                }
+
+                object? result;
+
+                var p = method.GetParameters();
+
+                if (p.Length == 3)
+                    result = method.Invoke(cache, new object?[] { gagItem, layer, enabler });
+                else if (p.Length == 2)
+                    result = method.Invoke(cache, new object?[] { gagItem, layer });
+                else if (p.Length == 1)
+                    result = method.Invoke(cache, new object?[] { gagItem });
+                else
+                {
+                    ChatPrintError($"Unsupported cache add-gag method shape: {method.Name}");
+                    return;
+                }
+
+                if (result is Task task)
+                {
+                    _ = task.ContinueWith(t =>
+                    {
+                        if (t.Exception != null)
+                            ChatPrintError($"GagSpeak cache add gag failed: {t.Exception.GetBaseException()}");
+                        else
+                            ChatPrint($"GagSpeak cache add gag completed for layer {layer + 1}.");
+                    });
+
+                    return;
+                }
+
+                ChatPrint($"GagSpeak cache add gag invoked for layer {layer + 1}.");
+            }
+            catch (TargetInvocationException ex)
+            {
+                ChatPrintError($"GagSpeak cache add gag failed: {ex.InnerException ?? ex}");
+            }
+            catch (Exception ex)
+            {
+                ChatPrintError($"GagSpeak cache add gag invoke failed: {ex}");
+            }
+        }
+
+        private void InvokeCacheRemoveGagItemNoBlock(object gagItem, int layer)
+        {
+            try
+            {
+                var cache = GetCacheStateManager();
+                if (cache == null)
+                    return;
+
+                var method = FindCacheGagMethod(cache, add: false);
+                if (method == null)
+                {
+                    ChatPrintError("CacheStateManager remove-gag method was not found.");
+                    DumpCacheStateManagerMethods("Gag");
+                    return;
+                }
+
+                object? result;
+
+                var p = method.GetParameters();
+
+                if (p.Length == 2)
+                    result = method.Invoke(cache, new object?[] { gagItem, layer });
+                else if (p.Length == 1)
+                    result = method.Invoke(cache, new object?[] { gagItem });
+                else
+                {
+                    ChatPrintError($"Unsupported cache remove-gag method shape: {method.Name}");
+                    return;
+                }
+
+                if (result is Task task)
+                {
+                    _ = task.ContinueWith(t =>
+                    {
+                        if (t.Exception != null)
+                            ChatPrintError($"GagSpeak cache remove gag failed: {t.Exception.GetBaseException()}");
+                        else
+                            ChatPrint($"GagSpeak cache remove gag completed for layer {layer + 1}.");
+                    });
+
+                    return;
+                }
+
+                ChatPrint($"GagSpeak cache remove gag invoked for layer {layer + 1}.");
+            }
+            catch (TargetInvocationException ex)
+            {
+                ChatPrintError($"GagSpeak cache remove gag failed: {ex.InnerException ?? ex}");
+            }
+            catch (Exception ex)
+            {
+                ChatPrintError($"GagSpeak cache remove gag invoke failed: {ex}");
+            }
+        }
+
+        private MethodInfo? FindCacheGagMethod(object cache, bool add)
+        {
+            var names = add
+                ? new[] { "AddGagItem", "AddGagRestriction", "AddGarblerRestriction", "AddGag" }
+                : new[] { "RemoveGagItem", "RemoveGagRestriction", "RemoveGarblerRestriction", "RemoveGag" };
+
+            return cache.GetType()
+                .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                .FirstOrDefault(m =>
+                {
+                    if (!names.Any(n => string.Equals(m.Name, n, StringComparison.Ordinal)))
+                        return false;
+
+                    var p = m.GetParameters();
+
+                    if (add && p.Length is not (1 or 2 or 3))
+                        return false;
+
+                    if (!add && p.Length is not (1 or 2))
+                        return false;
+
+                    var firstTypeName = p[0].ParameterType.Name;
+
+                    if (firstTypeName != "GarblerRestriction" &&
+                        firstTypeName != "GagRestriction" &&
+                        firstTypeName != "GagItem")
+                    {
+                        return false;
+                    }
+
+                    if (p.Length >= 2 && p[1].ParameterType != typeof(int))
+                        return false;
+
+                    if (p.Length >= 3 && p[2].ParameterType != typeof(string))
+                        return false;
+
+                    return true;
+                });
+        }
+
+        private void DumpCacheStateManagerMethods(string contains)
+        {
+            if (!DebugLog)
+                return;
+
+            var cache = GetCacheStateManager();
+            if (cache == null)
+                return;
+
+            foreach (var method in cache.GetType().GetMethods(
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                if (!method.Name.Contains(contains, StringComparison.OrdinalIgnoreCase) &&
+                    !method.Name.Contains("Garbler", StringComparison.OrdinalIgnoreCase) &&
+                    !method.Name.Contains("Cache", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var parameters = string.Join(
+                    ", ",
+                    method.GetParameters().Select(p =>
+                        $"{(p.IsOut ? "out " : string.Empty)}{p.ParameterType.FullName} {p.Name}"));
+
+                ChatPrintError($"Cache method: {method.Name}({parameters}) -> {method.ReturnType.FullName}");
+            }
+        }
         private object? ExtractActiveGagSlotPayload(object? response)
         {
             if (response == null)

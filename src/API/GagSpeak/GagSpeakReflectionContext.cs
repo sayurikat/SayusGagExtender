@@ -306,6 +306,7 @@ namespace SayusGagExtender.API.GagSpeak
                     asm.GetType("GagSpeak.WebAPI.MainHub", throwOnError: false) ??
                     projectTypes.FirstOrDefault(t => t.Name == "MainHub");
 
+
                 var allTypes = AppDomain.CurrentDomain.GetAssemblies()
                     .Where(a =>
                     {
