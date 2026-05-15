@@ -6,6 +6,7 @@ using Dalamud.Plugin.Services;
 using ECommons;
 using ECommons.Reflection;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
+using SayusGagExtender.API;
 using SayusGagExtender.API.GagSpeak;
 using SayusGagExtender.Windows;
 using System;
@@ -37,6 +38,7 @@ public sealed class Plugin : IDalamudPlugin
     public API.MoodlesApi MoodlesApi { get; private set; }
     public API.PenumbraApi PenumbraApi { get; private set; }
     public API.Chat2Api Chat2Api { get; private set; }
+    public EmoteApi EmoteApi { get; private set; }
     public API.GagSpeak.GagSpeakReflectionContext GagSpeakContext { get; private set; }
     public API.GagSpeak.GagSpeakRestraintSetApi GagSpeakRestraintSetApi { get; private set; }
     public API.GagSpeak.GagSpeakRestrictionsApi GagSpeakRestrictionsApi { get; private set; }
@@ -56,6 +58,7 @@ public sealed class Plugin : IDalamudPlugin
     public MirrorGagSpeak MirrorGagSpeak { get; set; }
     public MoodleEnforcer MoodleEnforcer { get; set; }
     public PenumbraEnforcer PenumbraEnforcer { get; set; }
+    public EmoteEnforcer EmoteEnforcer { get; set; }
 
     private const string CommandName = "/sge";
 
@@ -109,6 +112,7 @@ public sealed class Plugin : IDalamudPlugin
 
         this.MoodlesApi = new API.MoodlesApi(this);
         this.PenumbraApi = new API.PenumbraApi(this);
+        this.EmoteApi = new API.EmoteApi(this);
         this.GagSpeakContext = new GagSpeakReflectionContext(this);
         this.GagSpeakRestraintSetApi = new GagSpeakRestraintSetApi(this, GagSpeakContext);
         this.GagSpeakRestrictionsApi = new GagSpeakRestrictionsApi(this, GagSpeakContext);
@@ -131,6 +135,7 @@ public sealed class Plugin : IDalamudPlugin
         ChatMonitor = new ChatMonitor(Instance);
         MoodleEnforcer = new MoodleEnforcer(Instance);
         PenumbraEnforcer = new PenumbraEnforcer(Instance);
+        EmoteEnforcer = new EmoteEnforcer(Instance);
 
 
     }
@@ -168,6 +173,7 @@ public sealed class Plugin : IDalamudPlugin
         MirrorGagSpeak?.Dispose();
         MoodleEnforcer?.Dispose();
         PenumbraEnforcer?.Dispose();
+        EmoteEnforcer?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);

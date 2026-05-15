@@ -51,7 +51,9 @@ public class Configuration : IPluginConfiguration
     public List<MoodleEnforcerMoodleConfig> MoodleEnforcerMoodles { get; set; } = new();
     public bool PenumbraEnforcerEnabled { get; set; }
     public List<PenumbraEnforcerConfig> PenumbraEnforcerMods { get; set; } = new();
-
+    public bool EmoteEnforcerEnabled { get; set; } = false;
+    public List<EmoteEnforcer.EmoteEnforcerEmoteConfig> EmoteEnforcerEmotes { get; set; } = new();
+    public string EmoteEnforcerCancelCommand { get; set; } = "/quack eval /sit \"/wait 0.5\" /sit";
 
 
 

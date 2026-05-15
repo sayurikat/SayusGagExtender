@@ -22,6 +22,7 @@ namespace SayusGagExtender.Windows
                 configuration.Save();
             }
 
+            ImGui.TextWrapped("Enforce Moodle to restraints. Moodle will not be usable outside of this context. Duplicate Moodle if needed.");
             ImGui.TextWrapped("If any restraints are added to a Moodle, that Moodle will be enforced on/off.");
 
             ImGui.Spacing();
@@ -104,11 +105,7 @@ namespace SayusGagExtender.Windows
             }
         }
 
-        private void DrawGagSpeakItemList(
-    string label,
-    List<GagSpeakItem> configuredItems,
-    Dictionary<Guid, string> availableItems,
-    string selectorKey)
+        private void DrawGagSpeakItemList(string label, List<GagSpeakItem> configuredItems, Dictionary<Guid, string> availableItems, string selectorKey)
         {
             ImGui.Text(label);
 

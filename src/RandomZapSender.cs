@@ -167,7 +167,8 @@ namespace SayusGagExtender
                 {
                     // Optional fallback if no commands are configured
                     //Plugin.CommandManager.ProcessCommand("/quack eval /standup \"/wait 0.5\" /upset");
-                    Plugin.CommandManager.ProcessCommand("/upset");
+                    //Plugin.CommandManager.ProcessCommand("/upset");
+                    plugin.Utils.ExecuteCommand("/upset");
                     return;
                 }
 
@@ -184,6 +185,7 @@ namespace SayusGagExtender
                     {
                         //Plugin.ChatGui.Print($"Rolled: {roll}, using {zapCommand.Command}");
                         Plugin.CommandManager.ProcessCommand(zapCommand.Command);
+                        plugin.Utils.ExecuteCommand(zapCommand.Command);
                         return;
                     }
                 }

@@ -156,7 +156,7 @@ namespace SayusGagExtender
                 if (vibeCommands.Count == 0)
                 {
                     // Optional fallback if no commands are configured.
-                    Plugin.CommandManager.ProcessCommand("/upset");
+                    plugin.Utils.ExecuteCommand("/upset");
                     return;
                 }
 
@@ -171,7 +171,11 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
+                        //plugin commands
                         Plugin.CommandManager.ProcessCommand(vibeCommand.Command);
+
+                        //game commands
+                        plugin.Utils.ExecuteCommand(vibeCommand.Command);
                         return;
                     }
                 }

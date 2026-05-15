@@ -21,7 +21,7 @@ namespace SayusGagExtender.Windows
                 configuration.Save();
             }
 
-            ImGui.TextWrapped("Add specific Penumbra mods one by one, then link restrictions, restraint sets, or gags to each mod.");
+            ImGui.TextWrapped("Enforce Penumbra mod to restraints. Mod will not be usable outside of this context. Duplicate mod if needed.");
 
             ImGui.Spacing();
             ImGui.Separator();
