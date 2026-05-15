@@ -10,8 +10,10 @@ namespace SayusGagExtender
     public unsafe sealed class WeaponSheather : IDisposable
     {
         private readonly Plugin plugin;
+        public bool wearsRestrictedItems { get; private set;  } = false;
 
         private DateTime lastSheatheAttemptUtc = DateTime.MinValue;
+        private DateTime lastItemChekUtc = DateTime.MinValue;
 
         public WeaponSheather(Plugin plugin)
         {
@@ -27,10 +29,29 @@ namespace SayusGagExtender
         {
             plugin.Configuration.HandGuardEnabled = true;
         }
+        private void CheckIfWearingRestrictiveItems()
+        {
+            wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyHandGuardBlockedItemActive(plugin.Configuration.HandGuardBlockedItems);
+        }
         private void OnFrameworkUpdate(IFramework framework)
         {
             if (!plugin.Configuration.HandGuardEnabled)
                 return;
+
+
+            var now = DateTime.UtcNow;
+
+            if ((now - this.lastItemChekUtc).TotalMilliseconds > 5000)
+            {
+                CheckIfWearingRestrictiveItems();
+                this.lastItemChekUtc = now;
+            }
+
+            if (!wearsRestrictedItems)
+                return;
+            
+
+
             var localPlayer = Plugin.ObjectTable.LocalPlayer;
             if (localPlayer == null)
                 return;
@@ -40,19 +61,16 @@ namespace SayusGagExtender
             if (!weaponDrawn)
                 return;
 
-            this.SheatheWeapon();
-        }
-
-        private void SheatheWeapon()
-        {
-            var now = DateTime.UtcNow;
-
-            // Avoid command spam while the game is still processing the toggle.
             if ((now - this.lastSheatheAttemptUtc).TotalMilliseconds < 500)
                 return;
             Plugin.ChatGui.Print($"Weapon drawn");
             this.lastSheatheAttemptUtc = now;
 
+            this.SheatheWeapon();
+        }
+
+        private void SheatheWeapon()
+        {
             try
             {
                 //Plugin.CommandManager.ProcessCommand("/bm");

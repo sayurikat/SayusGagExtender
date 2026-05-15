@@ -1,120 +1,223 @@
-using System;
-using System.Numerics;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Textures;
-using Dalamud.Interface.Utility;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
-using Lumina.Excel.Sheets;
+using System;
+using System.IO;
+using System.Numerics;
+using Dalamud.Interface.Textures.TextureWraps;
 
 namespace SayusGagExtender.Windows;
 
 public class MainWindow : Window, IDisposable
 {
-    private readonly string goatImagePath;
     private readonly Plugin plugin;
+    private readonly Configuration configuration;
+    private readonly string iconPath;
 
-    // We give this window a hidden ID using ##.
-    // The user will see "My Amazing Window" as window title,
-    // but for ImGui the ID is "My Amazing Window##With a hidden ID"
-    public MainWindow(Plugin plugin, string goatImagePath)
-        : base("My Amazing Window##With a hidden ID", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+    public MainWindow(Plugin plugin)
+        : base("Sayu's Gag Extender###SayusGagExtenderMainWindow",
+            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(375, 330),
+            MinimumSize = new Vector2(360, 260),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue)
         };
 
-        this.goatImagePath = goatImagePath;
         this.plugin = plugin;
+        configuration = plugin.Configuration;
+        this.iconPath = Path.Combine(Plugin.PluginInterface.AssemblyLocation.Directory?.FullName!, "icon_512.png");
     }
 
-    public void Dispose() { }
+    public void Dispose()
+    {
+    }
 
     public override void Draw()
     {
-        
-        if (ImGui.Button("Show Settings"))
+        DrawHeader();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        DrawFeatureStatus();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        DrawRuntimeStatus();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        DrawActions();
+    }
+
+    private void DrawHeader()
+    {
+        var icon = Plugin.TextureProvider.GetFromFile(iconPath).GetWrapOrDefault();
+
+        if (icon != null)
+        {
+            ImGui.Image(icon.Handle, new Vector2(48, 48));
+            ImGui.SameLine();
+        }
+
+        ImGui.BeginGroup();
+
+        ImGui.Text("Sayu's Gag Extender");
+        ImGui.TextDisabled("Quick status and controls");
+
+        ImGui.EndGroup();
+
+        ImGui.SameLine();
+
+        var buttonWidth = ImGui.CalcTextSize("Settings").X + ImGui.GetStyle().FramePadding.X * 2;
+        var availableWidth = ImGui.GetContentRegionAvail().X;
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + availableWidth - buttonWidth);
+
+        if (ImGui.Button("Settings"))
         {
             plugin.ToggleConfigUi();
         }
+    }
 
-        ImGui.Spacing();
+    private void DrawFeatureStatus()
+    {
+        ImGui.Text("Features");
 
-        // Normally a BeginChild() would have to be followed by an unconditional EndChild(),
-        // ImRaii takes care of this after the scope ends.
-        // This works for all ImGui functions that require specific handling, examples are BeginTable() or Indent().
-        using (var child = ImRaii.Child("SomeChildWithAScrollbar", Vector2.Zero, true))
+        using (ImRaii.Table("FeatureStatusTable", 2, ImGuiTableFlags.SizingStretchProp))
         {
-            // Check if this child is drawing
-            if (child.Success)
-            {
-                var goatImage = Plugin.TextureProvider.GetFromFile(goatImagePath).GetWrapOrDefault();
-                if (goatImage != null)
-                {
-                    using (ImRaii.PushIndent(55f))
-                    {
-                        ImGui.Image(goatImage.Handle, goatImage.Size);
-                    }
-                }
-                else
-                {
-                    ImGui.Text("Image not found.");
-                }
+            ImGui.TableSetupColumn("Feature", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 90);
 
-                ImGuiHelpers.ScaledDummy(20.0f);
-
-                // Example for other services that Dalamud provides.
-                // PlayerState provides a wrapper filled with information about the player character.
-
-                var playerState = Plugin.PlayerState;
-                if (!playerState.IsLoaded)
-                {
-                    ImGui.Text("Our local player is currently not logged in.");
-                    return;
-                }
-                
-                if (!playerState.ClassJob.IsValid)
-                {
-                    ImGui.Text("Our current job is currently not valid.");
-                    return;
-                }
-                
-                ImGui.AlignTextToFramePadding();
-                ImGui.Text($"Current job:");
-                
-                // Scaling hardcoded pixel values is important, as otherwise users with HUD scales above or below 100%
-                // won't be able to see everything.
-                ImGui.SameLine(120 * ImGuiHelpers.GlobalScale);
-                
-                // Get the icon id from a known offset + the class jobs id
-                var jobIconId = 62100 + playerState.ClassJob.RowId;
-                var iconTexture = Plugin.TextureProvider.GetFromGameIcon(new GameIconLookup(jobIconId)).GetWrapOrEmpty();
-                ImGui.Image(iconTexture.Handle, new Vector2(28, 28) * ImGuiHelpers.GlobalScale);
-                
-                ImGui.SameLine();
-                
-                // If you want to see the Macro representation of this SeString use `.ToMacroString()`
-                // More info about SeStrings: https://dalamud.dev/plugin-development/sestring/
-                ImGui.Text(playerState.ClassJob.Value.Abbreviation.ToString());
-                
-                ImGui.SameLine();
-                ImGui.Text($" [Level {playerState.Level}]");
-                
-                // Example for querying Lumina, getting the name of our current area.
-                var territoryId = Plugin.ClientState.TerritoryType;
-                if (Plugin.DataManager.GetExcelSheet<TerritoryType>().TryGetRow(territoryId, out var territoryRow))
-                {
-                    ImGui.Text($"Current location:");
-                    ImGui.SameLine(120 * ImGuiHelpers.GlobalScale);
-                    ImGui.Text(territoryRow.PlaceName.Value.Name.ToString());
-                }
-                else
-                {
-                    ImGui.Text("Invalid territory.");
-                }
-            }
+            DrawFeaturesRow("Emote Guard", configuration.EmoteGuardEnabled);
+            DrawFeaturesRow("Hand Guard", configuration.HandGuardEnabled);
+            DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled);
+            DrawFeaturesRow("Auto Vibe", configuration.AutoVibeEnabled);
+            DrawFeaturesRow("Teleport Block", configuration.TeleportBlockFeature);
+            DrawFeaturesRow("Mount Block", configuration.MountBlockFeature);
+            DrawFeaturesRow("Job Switch Block", configuration.JobSwitchBlockFeature);
         }
+    }
+
+    private static void DrawFeaturesRow(string label, bool enabled)
+    {
+        ImGui.TableNextRow();
+
+        ImGui.TableSetColumnIndex(0);
+        ImGui.TextUnformatted(label);
+
+        ImGui.TableSetColumnIndex(1);
+
+        var color = enabled
+            ? new Vector4(0.2f, 1.0f, 0.2f, 1.0f)
+            : new Vector4(1.0f, 0.25f, 0.25f, 1.0f);
+
+        ImGui.TextColored(color, enabled ? "Enabled" : "Disabled");
+    }
+    private void DrawRuntimeStatus()
+    {
+        ImGui.Text("Current Status");
+
+        using (ImRaii.Table("RuntimeStatusTable", 2, ImGuiTableFlags.SizingStretchProp))
+        {
+            ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthStretch);
+            ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 120);
+
+            DrawStatusRow("Hand Restraints", plugin.WeaponSheather.wearsRestrictedItems);
+            DrawStatusRow("Shock Collar", plugin.RandomZapSender.wearsRestrictedItems);
+            DrawTextStatusRow(
+                "Zap Controller",
+                string.IsNullOrWhiteSpace(plugin.Configuration.ZapControllerName)
+                    ? "Not set"
+                    : plugin.Configuration.ZapControllerName,
+                !string.IsNullOrWhiteSpace(plugin.Configuration.ZapControllerName));
+
+            DrawStatusRow("Vibrator", plugin.RandomVibeSender.wearsRestrictedItems);
+            DrawTextStatusRow(
+                "Vibe Controller",
+                string.IsNullOrWhiteSpace(plugin.Configuration.VibeControllerName)
+                    ? "Not set"
+                    : plugin.Configuration.VibeControllerName,
+                !string.IsNullOrWhiteSpace(plugin.Configuration.VibeControllerName));
+
+            DrawStatusRow("Mount block Moodle", plugin.MountBlocker.IsBlockMoodleActiveCached());
+            DrawStatusRow("Job switch block Moodle", plugin.JobSwitchBlocker.IsBlockMoodleActiveCached());
+            DrawStatusRow("Teleport block Moodle", plugin.TeleportBlocker.IsBlockMoodleActiveCached());
+
+            DrawStatusRow("Chatbox hidden", plugin.ChatMonitor.chatboxHidden);
+            DrawStatusRow("Chatbox input hidden", plugin.ChatMonitor.chatboxInputHidden);
+            DrawStatusRow("Chatbox input disabled", plugin.ChatMonitor.chatboxInputDisabled);
+
+            DrawStatusRow("Blindfolded", plugin.BlindfoldMonitor.blindfolded);
+        }
+    }
+    private static void DrawStatusRow(string label, bool enabled)
+    {
+        ImGui.TableNextRow();
+
+        ImGui.TableSetColumnIndex(0);
+        ImGui.TextUnformatted(label);
+
+        ImGui.TableSetColumnIndex(1);
+
+        var color = enabled
+            ? new Vector4(0.2f, 1.0f, 0.2f, 1.0f)
+            : new Vector4(1.0f, 0.25f, 0.25f, 1.0f);
+
+        ImGui.TextColored(color, enabled ? "Active" : "Inactive");
+    }
+    private static void DrawTextStatusRow(string label, string value, bool good)
+    {
+        ImGui.TableNextRow();
+
+        ImGui.TableSetColumnIndex(0);
+        ImGui.TextUnformatted(label);
+
+        ImGui.TableSetColumnIndex(1);
+
+        //var color = new Vector4(0.2f, 1.0f, 0.2f, 1.0f);
+
+        ImGui.Text(value);
+    }
+
+    private void DrawActions()
+    {
+        ImGui.Text("Actions");
+
+        //if (ImGui.Button("Open Settings"))
+        //{
+        //    plugin.ToggleConfigUi();
+        //}
+        //
+        //ImGui.SameLine();
+        //
+        //if (ImGui.Button("Reload GagSpeak Restrictions"))
+        //{
+        //    // Add your own refresh method here if available.
+        //    // Example:
+        //    // plugin.RefreshGagSpeakRestrictions();
+        //}
+        //
+        //if (ImGui.Button("Save Chat2 Blindfold Position"))
+        //{
+        //    if (plugin.Chat2Api.TryGetPositionAndSize(out var bounds) && bounds != null)
+        //    {
+        //        configuration.Chat2Bounds = bounds;
+        //        configuration.Save();
+        //    }
+        //}
+        //
+        //ImGui.SameLine();
+        //
+        //if (ImGui.Button("Apply Chat2 Blindfold Position"))
+        //{
+        //    plugin.Chat2Api.SetPositionAndSize(configuration.Chat2Bounds);
+        //}
     }
 }

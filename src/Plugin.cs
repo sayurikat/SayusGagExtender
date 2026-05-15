@@ -44,7 +44,8 @@ public sealed class Plugin : IDalamudPlugin
     public EmoteGuard EmoteGuard { get; set; }
     public AutoAttackKiller AutoAttackKiller { get; set; }
     public WeaponSheather WeaponSheather { get; set; }
-    public RandomZapSender RandomEmoteSender { get; set; }
+    public RandomZapSender RandomZapSender { get; set; }
+    public RandomVibeSender RandomVibeSender { get; set; }
     public FriendListHelper FriendListHelper { get; set; }
     public TeleportBlocker TeleportBlocker { get; set; }
     public MountBlocker MountBlocker { get; set; }
@@ -67,10 +68,10 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
         // You might normally want to embed resources and load them from the manifest stream
-        var goatImagePath = Path.Combine(PluginInterface.AssemblyLocation.Directory?.FullName!, "icon_512.png");
+        
 
         ConfigWindow = new ConfigWindow(this);
-        MainWindow = new MainWindow(this, goatImagePath);
+        MainWindow = new MainWindow(this);
 
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);
@@ -119,7 +120,8 @@ public sealed class Plugin : IDalamudPlugin
         EmoteGuard = new EmoteGuard(Instance);
         AutoAttackKiller = new AutoAttackKiller(Instance);
         WeaponSheather = new WeaponSheather(Instance);
-        RandomEmoteSender = new RandomZapSender(Instance);
+        RandomZapSender = new RandomZapSender(Instance);
+        RandomVibeSender = new RandomVibeSender(Instance);
         MirrorGagSpeak = new MirrorGagSpeak(Instance);
         BlindfoldMonitor = new BlindfoldMonitor(Instance);
         ChatMonitor = new ChatMonitor(Instance);
@@ -144,7 +146,8 @@ public sealed class Plugin : IDalamudPlugin
         EmoteGuard?.Dispose();
         AutoAttackKiller?.Dispose();
         WeaponSheather?.Dispose();
-        RandomEmoteSender?.Dispose();
+        RandomZapSender?.Dispose();
+        RandomVibeSender?.Dispose();
         TeleportBlocker?.Dispose();
         MountBlocker?.Dispose();
         JobSwitchBlocker?.Dispose();
@@ -169,32 +172,32 @@ public sealed class Plugin : IDalamudPlugin
 
         if (args.StartsWith("help"))
         {
-            ChatGui.Print($"/sge autozap on : Enables auto zap feature");
-            ChatGui.Print($"/sge autozap off : Disables auto zap feature");
-            ChatGui.Print($"/sge handguard : Enables handguard feature");
+            //ChatGui.Print($"/sge autozap on : Enables auto zap feature");
+            //ChatGui.Print($"/sge autozap off : Disables auto zap feature");
+            //ChatGui.Print($"/sge handguard : Enables handguard feature");
             ChatGui.Print($"/sge apply restriction [name]: applies restriction in next available layer");
             ChatGui.Print($"/sge remove restriction [name]: removes restriction from any layer");
             ChatGui.Print($"/sge apply restraintset [name]: applies restraintset");
             ChatGui.Print($"/sge remove restraintset [name]: removes restraintset");
             return;
         }
-        if (args.StartsWith("autozap on"))
-        {
-            RandomEmoteSender.Enable();
-            return;
-        }
-        if (args.StartsWith("autozap off"))
-        {
-            RandomEmoteSender.Disable();
-            return;
-        }
-        if (args.StartsWith("handguard"))
-        {
-            WeaponSheather.Enable();
-            AutoAttackKiller.Enable();
-            ChatGui.Print($"Hand guard Enabled, can only be deactivated form settings");
-            return;
-        }
+        //if (args.StartsWith("autozap on"))
+        //{
+        //    RandomEmoteSender.Enable();
+        //    return;
+        //}
+        //if (args.StartsWith("autozap off"))
+        //{
+        //    RandomEmoteSender.Disable();
+        //    return;
+        //}
+        //if (args.StartsWith("handguard"))
+        //{
+        //    WeaponSheather.Enable();
+        //    AutoAttackKiller.Enable();
+        //    ChatGui.Print($"Hand guard Enabled, can only be deactivated form settings");
+        //    return;
+        //}
         if (args.StartsWith("apply restriction ", StringComparison.OrdinalIgnoreCase))
         {
             string restrictionName = args.Substring("apply restriction ".Length).Trim();

@@ -7,7 +7,7 @@ namespace SayusGagExtender
     public sealed class BlindfoldMonitor : IDisposable
     {
         private readonly Plugin plugin;
-        private bool blindfolded;
+        public bool blindfolded { get; private set; } = false;
         private long nextRefreshMs;
         private bool forcePosition = false;
 

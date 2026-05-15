@@ -121,7 +121,7 @@ public unsafe sealed class MountBlocker : IDisposable
         plugin.Utils.ExecuteNativeCommand("/mount");
     }
 
-    private bool IsBlockMoodleActiveCached(bool forceRefresh = false)
+    public bool IsBlockMoodleActiveCached(bool forceRefresh = false)
     {
         var moodleId = plugin.Configuration.MountBlockMoodle;
 

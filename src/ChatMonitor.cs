@@ -10,9 +10,9 @@ namespace SayusGagExtender
     public unsafe sealed class ChatMonitor : IDisposable
     {
         private readonly Plugin plugin;
-        private bool chatboxHidden;
-        private bool chatboxInputHidden;
-        private bool chatboxInputDisabled;
+        public bool chatboxHidden { get; private set; } = false;
+        public bool chatboxInputHidden { get; private set; } = false;
+        public bool chatboxInputDisabled { get; private set; } = false;
         private long nextRefreshMs;
         public ChatMonitor(Plugin plugin)
         {

@@ -1,6 +1,8 @@
 using Dalamud.Configuration;
 using System;
 using System.Collections.Generic;
+using static SayusGagExtender.RandomVibeSender;
+using static SayusGagExtender.RandomZapSender;
 
 namespace SayusGagExtender;
 
@@ -17,9 +19,16 @@ public class Configuration : IPluginConfiguration
 
     public bool EmoteGuardEnabled { get; set; } = true;
     public bool HandGuardEnabled { get; set; } = true;
+    public Dictionary<Guid, string> AutoZapRequiredRestrictions { get; set; } = new Dictionary<Guid, string>();
+    public List<WeightedZapCommand> AutoZapCommands { get; set; } = new();
     public string ZapControllerName { get; set; }
     public bool AutoZapEnabled { get; set; } = true;
     public int AutoZapCount { get; set; } = 8;
+    public Dictionary<Guid, string> AutoVibeRequiredRestrictions { get; set; } = new Dictionary<Guid, string>();
+    public List<WeightedVibeCommand> AutoVibeCommands { get; set; } = new();
+    public string VibeControllerName { get; set; }
+    public bool AutoVibeEnabled { get; set; } = true;
+    public int AutoVibeCount { get; set; } = 8;
     public bool TeleportBlockFeature { get; set; } = true;
     public string TeleportBlockMoodle { get; set; }
     public bool MountBlockFeature { get; set; } = true;
@@ -34,7 +43,7 @@ public class Configuration : IPluginConfiguration
     public bool GagSpeakRestraintCloner { get; set; }
     public string GagSpeakMasterName { get; set; }
     public string GagSpeakMasterWorld { get; set; }
-
+    public Dictionary<Guid, string> HandGuardBlockedItems { get; set; } = new Dictionary<Guid, string>();
     // The below exists just to make saving less cumbersome
     public void Save()
     {

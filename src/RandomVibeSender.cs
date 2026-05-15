@@ -1,15 +1,11 @@
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.System.String;
-using FFXIVClientStructs.FFXIV.Client.UI;
-using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using static FFXIVClientStructs.FFXIV.Client.Game.Character.CustomizeData.Delegates;
 
 namespace SayusGagExtender
 {
-    public sealed class RandomZapSender : IDisposable
+    public sealed class RandomVibeSender : IDisposable
     {
         private readonly Plugin plugin;
         private readonly Random random = new();
@@ -17,58 +13,63 @@ namespace SayusGagExtender
         private int scheduledHour = -1;
         private readonly List<DateTime> triggerTimes = new();
         private int nextTriggerIndex = 0;
+
         public bool wearsRestrictedItems { get; private set; } = false;
-        private DateTime lastItemChekUtc = DateTime.MinValue;
-        public class WeightedZapCommand
+
+        private DateTime lastItemCheckUtc = DateTime.MinValue;
+
+        public class WeightedVibeCommand
         {
             public string Command { get; set; } = "";
             public int Weight { get; set; } = 1;
         }
-        public RandomZapSender(Plugin plugin)
+        public RandomVibeSender(Plugin plugin)
         {
             this.plugin = plugin;
 
             this.ScheduleCurrentHour();
+
             Plugin.Framework.Update += this.OnFrameworkUpdate;
             plugin.FriendListHelper.RequestFriendListUpdateWithCooldown();
-            //this.SendEmote();
         }
 
         public void Dispose()
         {
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
         }
+
         public void Enable()
         {
-            plugin.Configuration.AutoZapEnabled = true;
+            plugin.Configuration.AutoVibeEnabled = true;
             plugin.FriendListHelper.RequestFriendListUpdateWithCooldown();
         }
+
         public void Disable()
         {
-            plugin.Configuration.AutoZapEnabled = false;
+            plugin.Configuration.AutoVibeEnabled = false;
         }
+
         private void CheckIfWearingRestrictiveItems()
         {
-            wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyHandGuardBlockedItemActive(plugin.Configuration.AutoZapRequiredRestrictions);
+            wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyHandGuardBlockedItemActive(
+                plugin.Configuration.AutoVibeRequiredRestrictions);
         }
+
         private void OnFrameworkUpdate(IFramework framework)
         {
-            if (!plugin.Configuration.AutoZapEnabled)
+            if (!plugin.Configuration.AutoVibeEnabled)
                 return;
 
             var now = DateTime.UtcNow;
 
-            if ((now - this.lastItemChekUtc).TotalMilliseconds > 5000)
+            if ((now - this.lastItemCheckUtc).TotalMilliseconds > 5000)
             {
                 CheckIfWearingRestrictiveItems();
-                this.lastItemChekUtc = now;
+                this.lastItemCheckUtc = now;
             }
 
             if (!wearsRestrictedItems)
                 return;
-
-
-
 
             // New hour: generate new random trigger times.
             if (now.Hour != this.scheduledHour)
@@ -91,7 +92,7 @@ namespace SayusGagExtender
                 return;
             }
 
-            this.SendEmote();
+            this.SendVibeCommand();
             this.nextTriggerIndex++;
         }
 
@@ -109,87 +110,71 @@ namespace SayusGagExtender
                 now.Day,
                 now.Hour,
                 0,
-                0);
+                0,
+                DateTimeKind.Utc);
 
             var nextHourStart = hourStart.AddHours(1);
+            var totalSeconds = (int)(nextHourStart - hourStart).TotalSeconds;
 
-            ///Plugin.ChatGui.Print($"Zap triggers this hour");
-            for (var i = 0; i < plugin.Configuration.AutoZapCount; i++)
+            for (var i = 0; i < plugin.Configuration.AutoVibeCount; i++)
             {
-                var totalSeconds = (int)(nextHourStart - hourStart).TotalSeconds;
                 var randomSecond = this.random.Next(0, totalSeconds);
-
                 var triggerTime = hourStart.AddSeconds(randomSecond);
-                
-                // If plugin starts halfway through the hour, avoid scheduling past times.
-                //if (triggerTime <= now)
-                //{
-                //    var remainingSeconds = Math.Max(1, (int)(nextHourStart - now).TotalSeconds);
-                //    triggerTime = now.AddSeconds(this.random.Next(1, remainingSeconds));
-                //}
 
                 this.triggerTimes.Add(triggerTime);
-                //Plugin.ChatGui.Print($"{i+1}: {triggerTime}");
             }
 
             this.triggerTimes.Sort();
         }
 
-        private void SendEmote()
+        private void SendVibeCommand()
         {
-            var controllerName = plugin.Configuration.ZapControllerName;
-            if (controllerName == null) return;
+            var controllerName = plugin.Configuration.VibeControllerName;
+
+            if (controllerName == null)
+                return;
 
             if (controllerName.Length > 3 && plugin.FriendListHelper.IsFriendOnline(controllerName))
             {
-                Plugin.ChatGui.Print($"{controllerName} is online, skipping emote.");
+                Plugin.ChatGui.Print($"{controllerName} is online, skipping vibe command.");
                 return;
             }
+
             try
             {
-                Plugin.ChatGui.Print($"{controllerName} is not online, sending emote.");
-                //plugin.Utils.ExecuteNativeCommand("/upset");
+                Plugin.ChatGui.Print($"{controllerName} is not online, sending vibe command.");
 
-                //Plugin.CommandManager.ProcessCommand("/quack eval /standup /upset");
-                //plugin.Utils.ExecuteCommand("/upset");
-
-                var zapCommands = plugin.Configuration.AutoZapCommands
+                var vibeCommands = plugin.Configuration.AutoVibeCommands
                     .Where(x => !string.IsNullOrWhiteSpace(x.Command) && x.Weight > 0)
                     .ToList();
 
-                if (zapCommands.Count == 0)
+                if (vibeCommands.Count == 0)
                 {
-                    // Optional fallback if no commands are configured
-                    //Plugin.CommandManager.ProcessCommand("/quack eval /standup \"/wait 0.5\" /upset");
+                    // Optional fallback if no commands are configured.
                     Plugin.CommandManager.ProcessCommand("/upset");
                     return;
                 }
 
-                var totalWeight = zapCommands.Sum(x => x.Weight);
+                var totalWeight = vibeCommands.Sum(x => x.Weight);
                 var roll = this.random.Next(0, totalWeight);
 
                 var currentWeight = 0;
 
-                foreach (var zapCommand in zapCommands)
+                foreach (var vibeCommand in vibeCommands)
                 {
-                    currentWeight += zapCommand.Weight;
+                    currentWeight += vibeCommand.Weight;
 
                     if (roll < currentWeight)
                     {
-                        //Plugin.ChatGui.Print($"Rolled: {roll}, using {zapCommand.Command}");
-                        Plugin.CommandManager.ProcessCommand(zapCommand.Command);
+                        Plugin.CommandManager.ProcessCommand(vibeCommand.Command);
                         return;
                     }
                 }
             }
             catch (Exception ex)
             {
-                Plugin.ChatGui.PrintError($"Failed to send zap command: {ex.Message}");
+                Plugin.ChatGui.PrintError($"Failed to send vibe command: {ex.Message}");
             }
-        }
-        public static unsafe class GameCommandHelper
-        {
-            
         }
     }
 }

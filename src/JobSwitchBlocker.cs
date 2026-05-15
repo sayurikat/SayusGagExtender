@@ -221,7 +221,7 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
         return this.IsBlockMoodleActiveCached();
     }
 
-    private bool IsBlockMoodleActiveCached(bool forceRefresh = false)
+    public bool IsBlockMoodleActiveCached(bool forceRefresh = false)
     {
         var moodleId = plugin.Configuration.JobSwitchBlockMoodle;
 

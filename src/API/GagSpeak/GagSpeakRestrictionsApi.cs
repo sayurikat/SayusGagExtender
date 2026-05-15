@@ -97,7 +97,74 @@ namespace SayusGagExtender.API.GagSpeak
 
 
         }
+        public Dictionary<Guid, string> GetAvailableRestrictions()
+        {
+            var result = new Dictionary<Guid, string>();
 
+            try
+            {
+                if (!context.EnsureReady())
+                {
+                    ChatPrintError("GagSpeak context is not ready.");
+                    return result;
+                }
+
+                var storage = context.GetPropertyValue(context.RestrictionManager, "Storage") as IEnumerable;
+                if (storage == null)
+                {
+                    ChatPrintError("GagSpeak RestrictionManager.Storage was null or not enumerable.");
+                    return result;
+                }
+
+                foreach (var restriction in storage)
+                {
+                    var idObj = context.GetPropertyValue(restriction, "Identifier");
+                    if (idObj is not Guid id || id == Guid.Empty)
+                        continue;
+
+                    var label = context.GetPropertyValue(restriction, "Label") as string;
+                    if (string.IsNullOrWhiteSpace(label))
+                        continue;
+
+                    result[id] = NormalizeName(label);
+                }
+            }
+            catch (Exception ex)
+            {
+                ChatPrintError($"Failed to get available GagSpeak restrictions: {ex}");
+            }
+
+            return result;
+        }
+        public bool IsAnyHandGuardBlockedItemActive(Dictionary<Guid, string> handGuardBlockedItems)
+        {
+            try
+            {
+                if (handGuardBlockedItems == null || handGuardBlockedItems.Count == 0)
+                    return false;
+
+                if (!context.EnsureReady())
+                    return false;
+
+                foreach (var blockedItem in handGuardBlockedItems)
+                {
+                    var layer = FindActiveLayerForRestriction(blockedItem.Key);
+
+                    if (layer >= 0)
+                    {
+                        ChatPrint($"HandGuard blocked GagSpeak restriction is active on layer {layer + 1}: {blockedItem.Value}");
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                ChatPrintError($"Failed to check HandGuard blocked GagSpeak restrictions: {ex}");
+                return false;
+            }
+        }
         public bool IsRestrictionActive(string name)
         {
             try

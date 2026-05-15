@@ -23,6 +23,9 @@ public unsafe sealed class TeleportBlocker : IDisposable
     private readonly Hook<UseActionDelegate> useActionHook;
 
     public bool Enabled => plugin.Configuration.TeleportBlockFeature;
+    private bool cachedMoodleActive = false;
+    private long nextMoodleRefreshMs;
+
 
     public TeleportBlocker(Plugin plugin)
     {
@@ -70,7 +73,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
             if (!string.IsNullOrEmpty(plugin.Configuration.TeleportBlockMoodle))
             {
                 //Plugin.ChatGui.Print($"!string.IsNullOrEmpty");
-                if (plugin.MoodlesApi.IsStatusActive(plugin.Configuration.TeleportBlockMoodle))
+                if (IsBlockMoodleActiveCached(forceRefresh: true))
                 {
                     //Plugin.ChatGui.Print($"Blocked teleport / return action due to active moodle: Type ={ actionType}, Id ={ actionId}, Moodle = {plugin.Configuration.TeleportBlockMoodle}");
                     Plugin.ChatGui.Print($"Blocked teleport / return action");
@@ -90,6 +93,27 @@ public unsafe sealed class TeleportBlocker : IDisposable
             mode,
             comboRouteId,
             outOptAreaTargeted);
+    }
+    public bool IsBlockMoodleActiveCached(bool forceRefresh = false)
+    {
+        var moodleId = plugin.Configuration.TeleportBlockMoodle;
+
+        if (string.IsNullOrEmpty(moodleId))
+        {
+            this.cachedMoodleActive = false;
+            return false;
+        }
+
+        var now = Environment.TickCount64;
+
+        // Moodle polling throttled to every 5 seconds.
+        if (!forceRefresh && now < this.nextMoodleRefreshMs)
+            return this.cachedMoodleActive;
+
+        this.nextMoodleRefreshMs = now + 5000;
+
+        this.cachedMoodleActive = plugin.MoodlesApi.IsStatusActive(moodleId);
+        return this.cachedMoodleActive;
     }
 
     private static bool IsTeleportOrReturn(ActionType actionType, uint actionId)
