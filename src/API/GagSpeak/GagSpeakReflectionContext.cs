@@ -51,7 +51,11 @@ namespace SayusGagExtender.API.GagSpeak
             if (debugLogEnabled)
                 Plugin.ChatGui.PrintError(message);
         }
-
+        public class GagSpeakItem
+        {
+            public Guid Id { get; set; } = Guid.Empty;
+            public string Name { get; set; } = string.Empty;
+        }
         private sealed class GagSpeakTypeSet
         {
             public required Assembly Assembly { get; init; }

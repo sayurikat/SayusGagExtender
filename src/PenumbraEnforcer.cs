@@ -1,79 +1,86 @@
 using Dalamud.Plugin.Services;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using static SayusGagExtender.API.GagSpeak.GagSpeakReflectionContext;
+using static SayusGagExtender.MoodleEnforcer;
 
 namespace SayusGagExtender
 {
-    public sealed class MoodleEnforcer : IDisposable
+    public sealed class PenumbraEnforcer : IDisposable
     {
         private readonly Plugin plugin;
 
-        private readonly Dictionary<Guid, bool> lastWantedMoodleStates = new();
+        private readonly Dictionary<string, bool> lastWantedModStates = new(StringComparer.OrdinalIgnoreCase);
         private DateTime onUpdateNextUTC = DateTime.MinValue;
-        private TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
+        private readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
 
-        public class MoodleEnforcerMoodleConfig
+        public sealed class PenumbraEnforcerConfig
         {
-            public Guid MoodleId { get; set; } = Guid.Empty;
-            public string MoodleName { get; set; } = string.Empty;
-            public bool IsMoodleEnabled { get; set; } = false;
+            public string ModDirectory { get; set; } = string.Empty;
+            public string ModName { get; set; } = string.Empty;
+
             public List<GagSpeakItem> RestraintSets { get; set; } = new();
             public List<GagSpeakItem> Restrictions { get; set; } = new();
             public List<GagSpeakItem> Gags { get; set; } = new();
         }
 
-        
-
-        public MoodleEnforcer(Plugin plugin)
+        public PenumbraEnforcer(Plugin plugin)
         {
             this.plugin = plugin;
 
             Plugin.Framework.Update += this.OnFrameworkUpdate;
+
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnAnyChanged;
             plugin.GagSpeakGagsApi.OnGagsChanged += this.OnAnyChanged;
             plugin.GagSpeakRestraintSetApi.OnRestraintSetChanged += this.OnAnyChanged;
-            plugin.MoodlesApi.ActiveMoodlesChanged += this.OnAnyChanged;
         }
         public void Dispose()
         {
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
+
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= this.OnAnyChanged;
             plugin.GagSpeakGagsApi.OnGagsChanged -= this.OnAnyChanged;
             plugin.GagSpeakRestraintSetApi.OnRestraintSetChanged -= this.OnAnyChanged;
-            plugin.MoodlesApi.ActiveMoodlesChanged -= this.OnAnyChanged;
         }
+
         private void OnAnyChanged(object obj)
         {
-            //Plugin.ChatGui.Print("OnAnyChanged.");
             Enforce();
         }
+
         private void OnFrameworkUpdate(IFramework framework)
         {
             if (onUpdateNextUTC > DateTime.UtcNow)
                 return;
+
             onUpdateNextUTC = DateTime.UtcNow + OnUpdateCooldown;
-            
+
             Enforce();
         }
 
-        public MoodleEnforcerMoodleConfig GetOrCreateMoodleEnforcerConfig(Guid moodleId, string moodleName)
+        public PenumbraEnforcerConfig GetOrCreatePenumbraEnforcerConfig(
+            string modDirectory,
+            string modName)
         {
-            var existing = plugin.Configuration.MoodleEnforcerMoodles.FirstOrDefault(x => x.MoodleId == moodleId);
+            var existing = plugin.Configuration.PenumbraEnforcerMods.FirstOrDefault(x =>
+                string.Equals(x.ModDirectory, modDirectory, StringComparison.OrdinalIgnoreCase));
+
             if (existing != null)
             {
-                existing.MoodleName = moodleName;
+                existing.ModName = modName;
                 return existing;
             }
 
-            var created = new MoodleEnforcerMoodleConfig
+            var created = new PenumbraEnforcerConfig
             {
-                MoodleId = moodleId,
-                MoodleName = moodleName,
+                ModDirectory = modDirectory,
+                ModName = modName,
             };
 
-            plugin.Configuration.MoodleEnforcerMoodles.Add(created);
+            plugin.Configuration.PenumbraEnforcerMods.Add(created);
             return created;
         }
 
@@ -81,39 +88,40 @@ namespace SayusGagExtender
         {
             //Plugin.ChatGui.Print("GagSpeak Enforce.");
 
-            if (!plugin.Configuration.MoodleEnforcerEnabled)
+            if (!plugin.Configuration.PenumbraEnforcerEnabled)
                 return;
 
-            if (plugin.Configuration.MoodleEnforcerMoodles.Count == 0)
+            if (plugin.Configuration.PenumbraEnforcerMods.Count == 0)
                 return;
-            //Plugin.ChatGui.Print("GagSpeak Enforce..");
 
             var activeState = GetActiveState();
 
-            foreach (var moodleConfig in plugin.Configuration.MoodleEnforcerMoodles)
+            foreach (var modConfig in plugin.Configuration.PenumbraEnforcerMods)
             {
-                if (moodleConfig.MoodleId == Guid.Empty)
+                if (string.IsNullOrWhiteSpace(modConfig.ModDirectory))
                     continue;
 
-                if (moodleConfig.Restrictions.Count + moodleConfig.Gags.Count + moodleConfig.RestraintSets.Count <= 0)
-                //if (!moodleConfig.IsMoodleEnabled)
+                if (modConfig.Restrictions.Count + modConfig.Gags.Count + modConfig.RestraintSets.Count <= 0)
                     continue;
 
-                var shouldBeActive = ShouldMoodleBeActive(moodleConfig, activeState);
+                var shouldBeActive = ShouldModBeActive(modConfig, activeState);
 
-                //if (lastWantedMoodleStates.TryGetValue(moodleConfig.MoodleId, out var lastState) &&
-                //    lastState == shouldBeActive)
-                //{
-                //    continue;
-                //}
+                // Optional optimization. Uncomment if you want to avoid repeat IPC calls
+                // when the desired state has not changed.
+                //
+                // if (lastWantedModStates.TryGetValue(modConfig.ModDirectory, out var lastState) &&
+                //     lastState == shouldBeActive)
+                // {
+                //     continue;
+                // }
 
-                lastWantedMoodleStates[moodleConfig.MoodleId] = shouldBeActive;
+                lastWantedModStates[modConfig.ModDirectory] = shouldBeActive;
 
-                EnsureMoodleState(moodleConfig, shouldBeActive);
+                EnsureModState(modConfig, shouldBeActive);
             }
         }
 
-        private MoodleEnforcerActiveState GetActiveState()
+        private PenumbraEnforcerActiveState GetActiveState()
         {
             var activeGags = plugin.GagSpeakGagsApi
                 .GetActiveGags()
@@ -145,7 +153,7 @@ namespace SayusGagExtender
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            return new MoodleEnforcerActiveState
+            return new PenumbraEnforcerActiveState
             {
                 ActiveGagNames = activeGags,
                 ActiveRestraintSetIds = activeRestraintSetIds,
@@ -155,23 +163,30 @@ namespace SayusGagExtender
             };
         }
 
-        private bool ShouldMoodleBeActive(MoodleEnforcerMoodleConfig moodleConfig, MoodleEnforcerActiveState activeState)
+        private bool ShouldModBeActive(
+            PenumbraEnforcerConfig modConfig,
+            PenumbraEnforcerActiveState activeState)
         {
-            if (ContainsAnyById(moodleConfig.RestraintSets, activeState.ActiveRestraintSetIds))
+            if (ContainsAnyByIdOrName(
+                    modConfig.RestraintSets,
+                    activeState.ActiveRestraintSetIds,
+                    activeState.ActiveRestraintSetNames))
             {
                 return true;
             }
 
-            if (ContainsAnyById(moodleConfig.Restrictions, activeState.ActiveRestrictionIds))
+            if (ContainsAnyByIdOrName(
+                    modConfig.Restrictions,
+                    activeState.ActiveRestrictionIds,
+                    activeState.ActiveRestrictionNames))
             {
-                //Plugin.ChatGui.Print("ActiveRestrictionIds");
-                //Plugin.ChatGui.Print($"ActiveRestrictions {moodleConfig.MoodleName}");
                 return true;
             }
 
-            if (ContainsAnyByName(moodleConfig.Gags, activeState.ActiveGagNames))
+            if (ContainsAnyByName(
+                    modConfig.Gags,
+                    activeState.ActiveGagNames))
             {
-                //Plugin.ChatGui.Print($"ActiveGags {moodleConfig.MoodleName}");
                 return true;
             }
 
@@ -185,14 +200,12 @@ namespace SayusGagExtender
             foreach (var item in configuredItems)
             {
                 if (item.Id != Guid.Empty && activeIds.Contains(item.Id))
-                {
-                    //Plugin.ChatGui.Print($"ActiveRestrictions {item.Name}");
-                    return true; 
-                }
+                    return true;
             }
 
             return false;
         }
+
         private static bool ContainsAnyByIdOrName(
             List<GagSpeakItem> configuredItems,
             HashSet<Guid> activeIds,
@@ -223,22 +236,24 @@ namespace SayusGagExtender
             return false;
         }
 
-        private void EnsureMoodleState(
-            MoodleEnforcerMoodleConfig moodleConfig,
+        private void EnsureModState(
+            PenumbraEnforcerConfig modConfig,
             bool shouldBeActive)
         {
-            var isActive = plugin.MoodlesApi.IsStatusActive(moodleConfig.MoodleId);
+            var isActive = plugin.PenumbraApi.IsModEnabledOnPlayerCollection(
+                modConfig.ModDirectory,
+                modConfig.ModName);
 
             if (isActive == shouldBeActive)
                 return;
 
-            if (shouldBeActive)
-                plugin.MoodlesApi.ApplyMoodle(moodleConfig.MoodleId);
-            else
-                plugin.MoodlesApi.RemoveMoodle(moodleConfig.MoodleId);
+            plugin.PenumbraApi.SetModEnabledOnPlayerCollection(
+                modConfig.ModDirectory,
+                shouldBeActive,
+                modConfig.ModName);
         }
 
-        private sealed class MoodleEnforcerActiveState
+        private sealed class PenumbraEnforcerActiveState
         {
             public HashSet<Guid> ActiveGagIds { get; init; } = new();
             public HashSet<string> ActiveGagNames { get; init; } = new(StringComparer.OrdinalIgnoreCase);

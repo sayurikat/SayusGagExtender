@@ -62,6 +62,12 @@ public partial class ConfigWindow : Window, IDisposable
             ImGui.EndTabItem();
         }
 
+        if (ImGui.BeginTabItem("Penumbra Enforcer"))
+        {
+            DrawPenumbraEnforcerTab();
+            ImGui.EndTabItem();
+        }
+
         if (ImGui.BeginTabItem("Shock Collar"))
         {
             DrawAutoZapTab();

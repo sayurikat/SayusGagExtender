@@ -35,6 +35,7 @@ public sealed class Plugin : IDalamudPlugin
     public static Plugin? Instance { get; private set; }
     public Utils Utils { get; private set; }
     public API.MoodlesApi MoodlesApi { get; private set; }
+    public API.PenumbraApi PenumbraApi { get; private set; }
     public API.Chat2Api Chat2Api { get; private set; }
     public API.GagSpeak.GagSpeakReflectionContext GagSpeakContext { get; private set; }
     public API.GagSpeak.GagSpeakRestraintSetApi GagSpeakRestraintSetApi { get; private set; }
@@ -54,6 +55,7 @@ public sealed class Plugin : IDalamudPlugin
     public BlindfoldMonitor BlindfoldMonitor { get; set; }
     public MirrorGagSpeak MirrorGagSpeak { get; set; }
     public MoodleEnforcer MoodleEnforcer { get; set; }
+    public PenumbraEnforcer PenumbraEnforcer { get; set; }
 
     private const string CommandName = "/sge";
 
@@ -106,6 +108,7 @@ public sealed class Plugin : IDalamudPlugin
         ECommonsMain.Init(PluginInterface, this);
 
         this.MoodlesApi = new API.MoodlesApi(this);
+        this.PenumbraApi = new API.PenumbraApi(this);
         this.GagSpeakContext = new GagSpeakReflectionContext(this);
         this.GagSpeakRestraintSetApi = new GagSpeakRestraintSetApi(this, GagSpeakContext);
         this.GagSpeakRestrictionsApi = new GagSpeakRestrictionsApi(this, GagSpeakContext);
@@ -127,6 +130,7 @@ public sealed class Plugin : IDalamudPlugin
         BlindfoldMonitor = new BlindfoldMonitor(Instance);
         ChatMonitor = new ChatMonitor(Instance);
         MoodleEnforcer = new MoodleEnforcer(Instance);
+        PenumbraEnforcer = new PenumbraEnforcer(Instance);
 
 
     }
@@ -158,11 +162,12 @@ public sealed class Plugin : IDalamudPlugin
         GagSpeakChatMonitorApi?.Dispose();
         GagSpeakGagsApi?.Dispose();
         MoodlesApi?.Dispose();
+        PenumbraApi?.Dispose();
         ChatMonitor?.Dispose();
         BlindfoldMonitor?.Dispose();
         MirrorGagSpeak?.Dispose();
         MoodleEnforcer?.Dispose();
-
+        PenumbraEnforcer?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);

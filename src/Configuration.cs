@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using static SayusGagExtender.MoodleEnforcer;
+using static SayusGagExtender.PenumbraEnforcer;
 using static SayusGagExtender.RandomVibeSender;
 using static SayusGagExtender.RandomZapSender;
 
@@ -48,7 +49,8 @@ public class Configuration : IPluginConfiguration
     public Dictionary<Guid, string> HandGuardBlockedItems { get; set; } = new Dictionary<Guid, string>();
     public bool MoodleEnforcerEnabled { get; set; } = false;
     public List<MoodleEnforcerMoodleConfig> MoodleEnforcerMoodles { get; set; } = new();
-    
+    public bool PenumbraEnforcerEnabled { get; set; }
+    public List<PenumbraEnforcerConfig> PenumbraEnforcerMods { get; set; } = new();
 
 
 

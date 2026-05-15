@@ -3,6 +3,7 @@ using SayusGagExtender.API.GagSpeak;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static SayusGagExtender.API.GagSpeak.GagSpeakReflectionContext;
 using static SayusGagExtender.MoodleEnforcer;
 
 namespace SayusGagExtender.Windows
@@ -74,7 +75,7 @@ namespace SayusGagExtender.Windows
 
                     ImGui.Spacing();
 
-                    DrawMoodleEnforcerItemList(
+                    DrawGagSpeakItemList(
                         "Restraint Sets",
                         moodleConfig.RestraintSets,
                         availableRestraintSets,
@@ -82,7 +83,7 @@ namespace SayusGagExtender.Windows
 
                     ImGui.Spacing();
 
-                    DrawMoodleEnforcerItemList(
+                    DrawGagSpeakItemList(
                         "Restrictions",
                         moodleConfig.Restrictions,
                         availableRestrictions,
@@ -90,7 +91,7 @@ namespace SayusGagExtender.Windows
 
                     ImGui.Spacing();
 
-                    DrawMoodleEnforcerItemList(
+                    DrawGagSpeakItemList(
                         "Gags",
                         moodleConfig.Gags,
                         availableGags,
@@ -103,9 +104,9 @@ namespace SayusGagExtender.Windows
             }
         }
 
-        private void DrawMoodleEnforcerItemList(
+        private void DrawGagSpeakItemList(
     string label,
-    List<MoodleEnforcerItem> configuredItems,
+    List<GagSpeakItem> configuredItems,
     Dictionary<Guid, string> availableItems,
     string selectorKey)
         {
@@ -189,7 +190,7 @@ namespace SayusGagExtender.Windows
             {
                 var item = orderedAvailable[moodleEnforcerSelectedAddIndices[selectorKey]];
 
-                configuredItems.Add(new MoodleEnforcerItem
+                configuredItems.Add(new GagSpeakItem
                 {
                     Id = item.Key,
                     Name = item.Value,
