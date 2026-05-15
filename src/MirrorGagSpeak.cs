@@ -82,7 +82,7 @@ namespace SayusGagExtender
             if (plugin.Configuration.GagSpeakMasterName == null || plugin.Configuration.GagSpeakMasterName.Length < 0 || plugin.Configuration.GagSpeakMasterWorld == null || plugin.Configuration.GagSpeakMasterWorld.Length < 0)
                 return;
 
-            var activeRestraintSet = plugin.GagSpeakRestraintSetApi.GetActiveRestraintSet();
+            var activeRestraintSet = plugin.GagSpeakRestraintSetApi.GetActiveRestraintSet().Value;
             var activeRestrictions = plugin.GagSpeakRestrictionsApi.GetActiveRestrictions();
             var activeGags = plugin.GagSpeakGagsApi.GetActiveGags();
 

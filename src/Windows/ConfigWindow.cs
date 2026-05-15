@@ -16,7 +16,7 @@ public partial class ConfigWindow : Window, IDisposable
 
     public ConfigWindow(Plugin plugin) : base("Sayu's Gag Extender Config###SayusGagExtenderConfig")
     {
-        Flags = ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse;
+        Flags = ImGuiWindowFlags.None;
 
         Size = new Vector2(520, 360);
         SizeCondition = ImGuiCond.FirstUseEver;
@@ -53,6 +53,12 @@ public partial class ConfigWindow : Window, IDisposable
         if (ImGui.BeginTabItem("Blocks"))
         {
             DrawMoodleBlocksTab();
+            ImGui.EndTabItem();
+        }
+
+        if (ImGui.BeginTabItem("Moodle Enforcer"))
+        {
+            DrawMoodleEnforcerTab();
             ImGui.EndTabItem();
         }
 

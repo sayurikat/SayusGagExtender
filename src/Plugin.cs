@@ -53,6 +53,7 @@ public sealed class Plugin : IDalamudPlugin
     public ChatMonitor ChatMonitor { get; set; }
     public BlindfoldMonitor BlindfoldMonitor { get; set; }
     public MirrorGagSpeak MirrorGagSpeak { get; set; }
+    public MoodleEnforcer MoodleEnforcer { get; set; }
 
     private const string CommandName = "/sge";
 
@@ -125,6 +126,7 @@ public sealed class Plugin : IDalamudPlugin
         MirrorGagSpeak = new MirrorGagSpeak(Instance);
         BlindfoldMonitor = new BlindfoldMonitor(Instance);
         ChatMonitor = new ChatMonitor(Instance);
+        MoodleEnforcer = new MoodleEnforcer(Instance);
 
 
     }
@@ -155,9 +157,11 @@ public sealed class Plugin : IDalamudPlugin
         GagSpeakRestrictionsApi?.Dispose();
         GagSpeakChatMonitorApi?.Dispose();
         GagSpeakGagsApi?.Dispose();
+        MoodlesApi?.Dispose();
         ChatMonitor?.Dispose();
         BlindfoldMonitor?.Dispose();
         MirrorGagSpeak?.Dispose();
+        MoodleEnforcer?.Dispose();
 
 
 

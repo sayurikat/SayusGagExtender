@@ -16,7 +16,7 @@ namespace SayusGagExtender.API.GagSpeak
         private readonly Plugin plugin;
         private readonly GagSpeakReflectionContext context;
 
-        private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(1);
         private DateTime onUpdateNextUTC = DateTime.MinValue;
         private Dictionary<int, string> wornGags = new Dictionary<int, string>();
         public event Action<Dictionary<int, string>>? OnGagsChanged;
@@ -240,7 +240,159 @@ namespace SayusGagExtender.API.GagSpeak
         // Compatibility alias for your originally requested casing.
         public Dictionary<int, string> GetActivegags()
             => GetActiveGags();
+        public Dictionary<Guid, string> GetAvailableGags()
+        {
+            var result = new Dictionary<Guid, string>();
 
+            try
+            {
+                if (!context.EnsureReady())
+                {
+                    ChatPrintError("GagSpeak context is not ready.");
+                    return result;
+                }
+
+                var storage = context.GetPropertyValue(context.GagManager, "Storage") as IEnumerable;
+                if (storage == null)
+                {
+                    ChatPrintError("GagSpeak GagRestrictionManager.Storage was null or not enumerable.");
+                    return result;
+                }
+
+                foreach (var entry in storage)
+                {
+                    var key = UnwrapKeyValuePairPart(entry, "Key");
+                    var value = UnwrapKeyValuePairPart(entry, "Value") ?? entry;
+
+                    if (value == null)
+                        continue;
+
+                    var gagType = context.GetPropertyValue(value, "GagType") ?? key;
+                    if (gagType == null || IsNoneGagType(gagType))
+                        continue;
+
+                    var label =
+                        context.GetPropertyValue(value, "Label") as string ??
+                        context.GetPropertyValue(value, "Name") as string ??
+                        gagType.ToString();
+
+                    if (string.IsNullOrWhiteSpace(label))
+                        continue;
+
+                    var id = GetStableGuidForGag(gagType, value);
+                    if (id == Guid.Empty)
+                        continue;
+
+                    result[id] = NormalizeName(label);
+                }
+            }
+            catch (Exception ex)
+            {
+                ChatPrintError($"Failed to get available GagSpeak gags: {ex}");
+            }
+
+            return result;
+        }
+
+        public bool IsAnyListedGagsActive(Dictionary<Guid, string> gags)
+        {
+            try
+            {
+                if (gags == null || gags.Count == 0)
+                    return false;
+
+                if (!context.EnsureReady())
+                {
+                    ChatPrintError("GagSpeak context is not ready.");
+                    return false;
+                }
+
+                var available = GetAvailableGags();
+                if (available.Count == 0)
+                    return false;
+
+                var wantedNames = new HashSet<string>(
+                    gags.Values
+                        .Where(v => !string.IsNullOrWhiteSpace(v))
+                        .Select(NormalizeName),
+                    StringComparer.OrdinalIgnoreCase);
+
+                var active = GetActiveGags();
+
+                foreach (var activeName in active.Values)
+                {
+                    if (string.IsNullOrWhiteSpace(activeName))
+                        continue;
+
+                    if (wantedNames.Contains(NormalizeName(activeName)))
+                        return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                ChatPrintError($"Failed to check listed active GagSpeak gags: {ex}");
+                return false;
+            }
+        }
+        private static Guid GetStableGuidForGag(object gagType, object gagItem)
+        {
+            try
+            {
+                var explicitId =
+                    gagItem.GetType()
+                        .GetProperty("Identifier", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                        ?.GetValue(gagItem);
+
+                if (explicitId is Guid guid && guid != Guid.Empty)
+                    return guid;
+            }
+            catch
+            {
+                // ignored
+            }
+
+            try
+            {
+                var explicitId =
+                    gagItem.GetType()
+                        .GetProperty("Id", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                        ?.GetValue(gagItem);
+
+                if (explicitId is Guid guid && guid != Guid.Empty)
+                    return guid;
+            }
+            catch
+            {
+                // ignored
+            }
+
+            try
+            {
+                var text = gagType.ToString();
+                if (!string.IsNullOrWhiteSpace(text))
+                    return DeterministicGuidFromString(text);
+            }
+            catch
+            {
+                // ignored
+            }
+
+            return Guid.Empty;
+        }
+
+        private static Guid DeterministicGuidFromString(string value)
+        {
+            using var md5 = System.Security.Cryptography.MD5.Create();
+            var bytes = md5.ComputeHash(System.Text.Encoding.UTF8.GetBytes(value));
+
+            // Mark it as a name-based deterministic UUID-ish value.
+            bytes[6] = (byte)((bytes[6] & 0x0F) | 0x30);
+            bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+
+            return new Guid(bytes);
+        }
         private object? FindGagByName(string name, out object? gagType)
         {
             gagType = null;

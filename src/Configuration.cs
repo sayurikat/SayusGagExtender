@@ -1,6 +1,8 @@
 using Dalamud.Configuration;
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using static SayusGagExtender.MoodleEnforcer;
 using static SayusGagExtender.RandomVibeSender;
 using static SayusGagExtender.RandomZapSender;
 
@@ -44,6 +46,15 @@ public class Configuration : IPluginConfiguration
     public string GagSpeakMasterName { get; set; }
     public string GagSpeakMasterWorld { get; set; }
     public Dictionary<Guid, string> HandGuardBlockedItems { get; set; } = new Dictionary<Guid, string>();
+    public bool MoodleEnforcerEnabled { get; set; } = false;
+    public List<MoodleEnforcerMoodleConfig> MoodleEnforcerMoodles { get; set; } = new();
+    
+
+
+
+
+
+
     // The below exists just to make saving less cumbersome
     public void Save()
     {

@@ -61,6 +61,12 @@ namespace SayusGagExtender.Windows
             if (!ctrlHeld)
                 ImGui.EndDisabled();
 
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            {
+                ImGui.SetTooltip(ctrlHeld
+                    ? "Apply saved restraint set from main character"
+                    : "Hold Ctrl to apply saved restraint set from main character");
+            }
 
             /*
             if (ImGui.Button("Save active restraints"))

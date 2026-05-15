@@ -15,7 +15,7 @@ namespace SayusGagExtender.API.GagSpeak
         private readonly Plugin plugin;
         private readonly GagSpeakReflectionContext context;
 
-        private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(1);
         private DateTime onUpdateNextUTC = DateTime.MinValue;
         private Dictionary<int, string> wornRestrictions = new Dictionary<int, string>();
         public event Action<Dictionary<int, string>>? OnRestrictionsChanged;
@@ -136,17 +136,17 @@ namespace SayusGagExtender.API.GagSpeak
 
             return result;
         }
-        public bool IsAnyListedRestrictionsActive(Dictionary<Guid, string> handGuardBlockedItems)
+        public bool IsAnyListedRestrictionsActive(Dictionary<Guid, string> restrictions)
         {
             try
             {
-                if (handGuardBlockedItems == null || handGuardBlockedItems.Count == 0)
+                if (restrictions == null || restrictions.Count == 0)
                     return false;
 
                 if (!context.EnsureReady())
                     return false;
 
-                foreach (var blockedItem in handGuardBlockedItems)
+                foreach (var blockedItem in restrictions)
                 {
                     var layer = FindActiveLayerForRestriction(blockedItem.Key);
 
@@ -352,7 +352,84 @@ namespace SayusGagExtender.API.GagSpeak
 
             return result;
         }
-        private object? GetCacheStateManager()
+        public Dictionary<Guid, string> GetActiveRestrictionsWithId()
+        {
+            var result = new Dictionary<Guid, string>();
+
+            try
+            {
+                if (!context.EnsureReady())
+                {
+                    ChatPrintError("GagSpeak context is not ready.");
+                    return result;
+                }
+
+                var serverData = context.GetPropertyValue(context.RestrictionManager, "ServerRestrictionData");
+                if (serverData == null)
+                {
+                    ChatPrintError("GagSpeak ServerRestrictionData is null. GagSpeak may not be connected/synced yet.");
+                    return result;
+                }
+
+                var restrictions = context.GetPropertyValue(serverData, "Restrictions") as IEnumerable;
+                if (restrictions == null)
+                {
+                    ChatPrintError("GagSpeak ServerRestrictionData.Restrictions was null or not enumerable.");
+                    return result;
+                }
+
+                var storage = context.GetPropertyValue(context.RestrictionManager, "Storage") as IEnumerable;
+                if (storage == null)
+                {
+                    ChatPrintError("GagSpeak RestrictionManager.Storage was null or not enumerable.");
+                    return result;
+                }
+
+                var storageById = new Dictionary<Guid, string>();
+
+                foreach (var storedRestriction in storage)
+                {
+                    var storedIdObj = context.GetPropertyValue(storedRestriction, "Identifier");
+                    if (storedIdObj is not Guid storedId || storedId == Guid.Empty)
+                        continue;
+
+                    var label = context.GetPropertyValue(storedRestriction, "Label") as string;
+                    if (string.IsNullOrWhiteSpace(label))
+                        continue;
+
+                    storageById[storedId] = NormalizeName(label);
+                }
+
+                
+
+                var layer = 0;
+
+                foreach (var slot in restrictions)
+                {
+                    if (layer >= 5)
+                        break;
+
+                    var idObj = context.GetPropertyValue(slot, "Identifier");
+                    if (idObj is Guid id && id != Guid.Empty)
+                    {
+                        if (storageById.TryGetValue(id, out var name))
+                            result[id] = name;
+                        else
+                            result[id] = id.ToString();
+                        //Plugin.ChatGui.Print($"Active GagSpeak restriction found in layer {layer + 1}: {result[layer]}");
+                    }
+                    
+                    layer++;
+                }
+            }
+            catch (Exception ex)
+            {
+                ChatPrintError($"Failed to get active GagSpeak restrictions: {ex}");
+            }
+
+            return result;
+        }
+private object? GetCacheStateManager()
         {
             var cache = context.TryResolveServiceByTypeName("CacheStateManager");
 

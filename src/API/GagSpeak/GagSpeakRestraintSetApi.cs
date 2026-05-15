@@ -13,9 +13,9 @@ namespace SayusGagExtender.API.GagSpeak
         private readonly Plugin plugin;
         private readonly GagSpeakReflectionContext context;
 
-        private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(2);
+        private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(1);
         private DateTime onUpdateNextUTC = DateTime.MinValue;
-        private string wornRestraintSet = string.Empty;
+        private KeyValuePair<Guid, string> wornRestraintSet = new(Guid.Empty, string.Empty);
         public event Action<string>? OnRestraintSetChanged;
 
         public bool DebugLog = false;
@@ -35,12 +35,17 @@ namespace SayusGagExtender.API.GagSpeak
             if (onUpdateNextUTC < DateTime.UtcNow)
             {
                 onUpdateNextUTC = DateTime.UtcNow + OnUpdateCooldown;
+
                 var restraintSet = GetActiveRestraintSet();
-                if (restraintSet != wornRestraintSet)
+
+                if (!restraintSet.Equals(wornRestraintSet))
                 {
-                    ChatPrint($"GagSpeak active restraint set changed: {wornRestraintSet} -> {restraintSet}", force: true);
+                    ChatPrint(
+                        $"GagSpeak active restraint set changed: {wornRestraintSet.Value} -> {restraintSet.Value}",
+                        force: true);
+
                     wornRestraintSet = restraintSet;
-                    OnRestraintSetChanged?.Invoke(restraintSet);
+                    OnRestraintSetChanged?.Invoke(restraintSet.Value);
                 }
             }
         }
@@ -104,35 +109,35 @@ namespace SayusGagExtender.API.GagSpeak
                 return false;
             }
         }
-        public string GetActiveRestraintSet()
+        public KeyValuePair<Guid, string> GetActiveRestraintSet()
         {
             try
             {
                 if (!context.EnsureReady())
-                    return string.Empty;
+                    return new KeyValuePair<Guid, string>(Guid.Empty, string.Empty);
 
                 var serverData = context.GetPropertyValue(context.RestraintManager, "ServerData");
                 if (serverData == null)
                 {
                     ChatPrintError("GagSpeak ServerData is null. GagSpeak may not be connected/synced yet.");
-                    return string.Empty;
+                    return new KeyValuePair<Guid, string>(Guid.Empty, string.Empty);
                 }
 
                 var activeIdObj = context.GetPropertyValue(serverData, "Identifier");
                 if (activeIdObj is not Guid activeId)
                 {
                     ChatPrintError("GagSpeak ServerData.Identifier was not a Guid.");
-                    return string.Empty;
+                    return new KeyValuePair<Guid, string>(Guid.Empty, string.Empty);
                 }
 
                 if (activeId == Guid.Empty)
-                    return string.Empty;
+                    return new KeyValuePair<Guid, string>(Guid.Empty, string.Empty);
 
                 var storage = context.GetPropertyValue(context.RestraintManager, "Storage") as IEnumerable;
                 if (storage == null)
                 {
                     ChatPrintError("GagSpeak RestraintManager.Storage was null or not enumerable.");
-                    return string.Empty;
+                    return new KeyValuePair<Guid, string>(activeId, activeId.ToString());
                 }
 
                 foreach (var restraint in storage)
@@ -143,18 +148,56 @@ namespace SayusGagExtender.API.GagSpeak
 
                     var label = context.GetPropertyValue(restraint, "Label") as string;
                     if (!string.IsNullOrWhiteSpace(label))
-                        return NormalizeName(label);
+                        return new KeyValuePair<Guid, string>(activeId, NormalizeName(label));
 
-                    return activeId.ToString();
+                    return new KeyValuePair<Guid, string>(activeId, activeId.ToString());
                 }
 
                 ChatPrintError($"Active GagSpeak restraint set id was not found in Storage: {activeId}");
-                return activeId.ToString();
+                return new KeyValuePair<Guid, string>(activeId, activeId.ToString());
             }
             catch (Exception ex)
             {
                 ChatPrintError($"Failed to get active GagSpeak restraint set: {ex}");
-                return string.Empty;
+                return new KeyValuePair<Guid, string>(Guid.Empty, string.Empty);
+            }
+        }
+        public Dictionary<Guid, string> GetAllRestraintSets()
+        {
+            var result = new Dictionary<Guid, string>();
+
+            try
+            {
+                if (!context.EnsureReady())
+                    return result;
+
+                var storage = context.GetPropertyValue(context.RestraintManager, "Storage") as IEnumerable;
+                if (storage == null)
+                {
+                    ChatPrintError("GagSpeak RestraintManager.Storage was null or not enumerable.");
+                    return result;
+                }
+
+                foreach (var restraint in storage)
+                {
+                    var idObj = context.GetPropertyValue(restraint, "Identifier");
+                    if (idObj is not Guid id || id == Guid.Empty)
+                        continue;
+
+                    var label = context.GetPropertyValue(restraint, "Label") as string;
+                    var name = !string.IsNullOrWhiteSpace(label)
+                        ? NormalizeName(label)
+                        : id.ToString();
+
+                    result[id] = name;
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                ChatPrintError($"Failed to get all GagSpeak restraint sets: {ex}");
+                return result;
             }
         }
         public void ApplyRestraintSet(string name)

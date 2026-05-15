@@ -30,6 +30,7 @@ namespace SayusGagExtender
 
             this.ScheduleCurrentHour();
             Plugin.Framework.Update += this.OnFrameworkUpdate;
+            plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnRestrictionsChanged;
             plugin.FriendListHelper.RequestFriendListUpdateWithCooldown();
             //this.SendEmote();
         }
@@ -37,6 +38,7 @@ namespace SayusGagExtender
         public void Dispose()
         {
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
+            plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= this.OnRestrictionsChanged;
         }
         public void Enable()
         {
@@ -50,6 +52,10 @@ namespace SayusGagExtender
         private void CheckIfWearingRestrictiveItems()
         {
             wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(plugin.Configuration.AutoZapRequiredRestrictions);
+        }
+        private void OnRestrictionsChanged(object obj)
+        {
+            CheckIfWearingRestrictiveItems();
         }
         private void OnFrameworkUpdate(IFramework framework)
         {

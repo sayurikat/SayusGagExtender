@@ -30,12 +30,14 @@ namespace SayusGagExtender
             this.ScheduleCurrentHour();
 
             Plugin.Framework.Update += this.OnFrameworkUpdate;
+            plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnRestrictionsChanged;
             plugin.FriendListHelper.RequestFriendListUpdateWithCooldown();
         }
 
         public void Dispose()
         {
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
+            plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= this.OnRestrictionsChanged;
         }
 
         public void Enable()
@@ -54,7 +56,10 @@ namespace SayusGagExtender
             wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(
                 plugin.Configuration.AutoVibeRequiredRestrictions);
         }
-
+        private void OnRestrictionsChanged(object obj)
+        {
+            CheckIfWearingRestrictiveItems();
+        }
         private void OnFrameworkUpdate(IFramework framework)
         {
             if (!plugin.Configuration.AutoVibeEnabled)
