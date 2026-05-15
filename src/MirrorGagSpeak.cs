@@ -39,7 +39,7 @@ namespace SayusGagExtender
                 return;
             onUpdateNextUTC = now + OnUpdateCooldown;
 
-            if (plugin.GagSpeakContext.EnsureReady() && Plugin.Condition.Any(ConditionFlag.NormalConditions))
+            if (plugin.GagSpeakContext.EnsureReady() && Plugin.Condition[ConditionFlag.NormalConditions])
             {
                 if (!appliedAfterReload)
                 {

@@ -1,4 +1,6 @@
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
+using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,9 +12,11 @@ namespace SayusGagExtender
     {
         private readonly Plugin plugin;
 
-        private readonly Dictionary<Guid, bool> lastWantedMoodleStates = new();
+        //private readonly Dictionary<Guid, bool> lastWantedMoodleStates = new();
         private DateTime onUpdateNextUTC = DateTime.MinValue;
         private TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
+        private DateTime betweenAreasNextUTC = DateTime.MinValue;
+        private TimeSpan betweenAreasCooldown = TimeSpan.FromSeconds(10);
 
         public class MoodleEnforcerMoodleConfig
         {
@@ -46,7 +50,6 @@ namespace SayusGagExtender
         }
         private void OnAnyChanged(object obj)
         {
-            //Plugin.ChatGui.Print("OnAnyChanged.");
             Enforce();
         }
         private void OnFrameworkUpdate(IFramework framework)
@@ -79,6 +82,14 @@ namespace SayusGagExtender
 
         public void Enforce()
         {
+            //return;
+            var now = DateTime.UtcNow;
+            if (Plugin.Condition[ConditionFlag.BetweenAreas])
+                betweenAreasNextUTC = now + betweenAreasCooldown;
+
+            if (now < betweenAreasNextUTC)
+                return;
+
             //Plugin.ChatGui.Print("GagSpeak Enforce.");
 
             if (!plugin.Configuration.MoodleEnforcerEnabled)
@@ -107,8 +118,8 @@ namespace SayusGagExtender
                 //    continue;
                 //}
 
-                lastWantedMoodleStates[moodleConfig.MoodleId] = shouldBeActive;
-
+                //lastWantedMoodleStates[moodleConfig.MoodleId] = shouldBeActive;
+                
                 EnsureMoodleState(moodleConfig, shouldBeActive);
             }
         }
@@ -223,9 +234,7 @@ namespace SayusGagExtender
             return false;
         }
 
-        private void EnsureMoodleState(
-            MoodleEnforcerMoodleConfig moodleConfig,
-            bool shouldBeActive)
+        private void EnsureMoodleState(MoodleEnforcerMoodleConfig moodleConfig, bool shouldBeActive)
         {
             var isActive = plugin.MoodlesApi.IsStatusActive(moodleConfig.MoodleId);
 
@@ -235,7 +244,9 @@ namespace SayusGagExtender
             if (shouldBeActive)
                 plugin.MoodlesApi.ApplyMoodle(moodleConfig.MoodleId);
             else
+            {
                 plugin.MoodlesApi.RemoveMoodle(moodleConfig.MoodleId);
+            }
         }
 
         private sealed class MoodleEnforcerActiveState

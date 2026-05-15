@@ -113,7 +113,7 @@ namespace SayusGagExtender.API
             // when you know the enforcer started the currently active emote.
 
             //plugin commands
-            Plugin.CommandManager.ProcessCommand(plugin.Configuration.EmoteEnforcerCancelCommand);
+            //Plugin.CommandManager.ProcessCommand(plugin.Configuration.EmoteEnforcerCancelCommand);
 
             //game commands
             plugin.Utils.ExecuteCommand(plugin.Configuration.EmoteEnforcerCancelCommand);

@@ -1,10 +1,11 @@
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using System;
 using System.IO;
 using System.Numerics;
-using Dalamud.Interface.Textures.TextureWraps;
 
 namespace SayusGagExtender.Windows;
 
@@ -40,7 +41,7 @@ public class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
-
+        ImGui.Text($"Normal Conditions: {Plugin.Condition[ConditionFlag.BetweenAreas]}");
         DrawFeatureStatus();
 
         ImGui.Spacing();

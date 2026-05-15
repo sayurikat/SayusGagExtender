@@ -1,5 +1,4 @@
 using Dalamud.Game.ClientState.Objects.SubKinds;
-using Dalamud.Plugin.Services;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -32,13 +31,103 @@ namespace SayusGagExtender.API
 
         private Dictionary<Guid, string> lastActiveMoodles = new();
 
+        private bool suppressMoodleChangeEvents;
+        private bool moodleEventHandlersAttached;
+        private bool disposed;
+        private int ipcEventSuppressionGeneration;
+
         public event Action<IReadOnlyDictionary<Guid, string>>? ActiveMoodlesChanged;
 
         public MoodlesApi(Plugin plugin)
         {
             this.plugin = plugin;
-            SubscribeToMoodleStatusChanges();
+
+            _ = Plugin.Framework.RunOnFrameworkThread(() =>
+            {
+                SubscribeToMoodleStatusChanges();
+            });
         }
+
+        // ----------------------------
+        // Safe public async entry points
+        // ----------------------------
+
+        public Task<bool> IsStatusActiveAsync(string statusId)
+        {
+            return Plugin.Framework.RunOnFrameworkThread(() => IsStatusActive(statusId));
+        }
+
+        public Task<bool> IsStatusActiveAsync(Guid statusId)
+        {
+            return Plugin.Framework.RunOnFrameworkThread(() => IsStatusActive(statusId));
+        }
+
+        public Task<Dictionary<Guid, string>> GetAllMoodlesAsync()
+        {
+            return Plugin.Framework.RunOnFrameworkThread(GetAllMoodles);
+        }
+
+        public Task<Dictionary<Guid, string>> GetAllActiveMoodlesAsync()
+        {
+            return Plugin.Framework.RunOnFrameworkThread(GetAllActiveMoodles);
+        }
+
+        public Task<bool> ApplyMoodleAsync(string statusId)
+        {
+            return Plugin.Framework.RunOnFrameworkThread(() => ApplyMoodle(statusId));
+        }
+
+        public Task<bool> ApplyMoodleAsync(Guid statusId)
+        {
+            return Plugin.Framework.RunOnFrameworkThread(() => ApplyMoodle(statusId));
+        }
+
+        public Task<bool> ApplyMoodleAndCaptureAsync(string statusId)
+        {
+            // Kept for compatibility with existing callers.
+            // This used to snapshot/restore Moodles state; now it is just a normal apply.
+            return ApplyMoodleAsync(statusId);
+        }
+
+        public Task<bool> ApplyMoodleAndCaptureAsync(Guid statusId)
+        {
+            // Kept for compatibility with existing callers.
+            // This used to snapshot/restore Moodles state; now it is just a normal apply.
+            return ApplyMoodleAsync(statusId);
+        }
+
+        public Task<bool> RemoveMoodleAsync(string statusId)
+        {
+            return Plugin.Framework.RunOnFrameworkThread(() => RemoveMoodle(statusId));
+        }
+
+        public Task<bool> RemoveMoodleAsync(Guid statusId)
+        {
+            return Plugin.Framework.RunOnFrameworkThread(() => RemoveMoodle(statusId));
+        }
+
+        public Task<bool> RestoreLastKnownStatusManagerAsync()
+        {
+            // Snapshot restore intentionally removed.
+            return Task.FromResult(false);
+        }
+
+        public Task RestoreAfterZoneDelayAsync(int delayMs = 3000)
+        {
+            // Snapshot/restore on zone change intentionally removed.
+            // Moodles should keep self-applied moodles itself when we do not overwrite its status manager.
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> SubscribeToMoodleStatusChangesAsync()
+        {
+            return Plugin.Framework.RunOnFrameworkThread(SubscribeToMoodleStatusChanges);
+        }
+
+        // ----------------------------
+        // Sync methods below assume framework thread
+        // ----------------------------
+
         public bool IsStatusActive(string statusId)
         {
             return Guid.TryParse(statusId, out var guid) && IsStatusActive(guid);
@@ -48,7 +137,8 @@ namespace SayusGagExtender.API
         {
             try
             {
-                return GetAllActiveMoodles().ContainsKey(statusId);
+                var active = GetAllActiveMoodles();
+                return active.ContainsKey(statusId);
             }
             catch (Exception ex)
             {
@@ -85,8 +175,16 @@ namespace SayusGagExtender.API
 
         public Dictionary<Guid, string> GetAllActiveMoodles()
         {
+            return GetAllActiveMoodlesRaw();
+        }
+
+        private Dictionary<Guid, string> GetAllActiveMoodlesRaw()
+        {
             try
             {
+                if (Plugin.ObjectTable.LocalPlayer == null)
+                    return new Dictionary<Guid, string>();
+
                 if (!TryCacheReflectionWithRefresh())
                     return new Dictionary<Guid, string>();
 
@@ -117,10 +215,7 @@ namespace SayusGagExtender.API
         public bool ApplyMoodle(Guid statusId)
         {
             var localPlayer = Plugin.ObjectTable.LocalPlayer;
-            if (localPlayer == null)
-                return false;
-
-            return ApplyMoodle(statusId, localPlayer);
+            return localPlayer != null && ApplyMoodle(statusId, localPlayer);
         }
 
         public bool ApplyMoodle(string statusId, IPlayerCharacter player)
@@ -157,10 +252,7 @@ namespace SayusGagExtender.API
         public bool RemoveMoodle(Guid statusId)
         {
             var localPlayer = Plugin.ObjectTable.LocalPlayer;
-            if (localPlayer == null)
-                return false;
-
-            return RemoveMoodle(statusId, localPlayer);
+            return localPlayer != null && RemoveMoodle(statusId, localPlayer);
         }
 
         public bool RemoveMoodle(string statusId, IPlayerCharacter player)
@@ -189,6 +281,8 @@ namespace SayusGagExtender.API
             }
         }
 
+
+
         public bool SubscribeToMoodleStatusChanges()
         {
             try
@@ -211,18 +305,21 @@ namespace SayusGagExtender.API
 
                 statusManagerModifiedHandler = unused =>
                 {
+                    if (suppressMoodleChangeEvents)
+                        return;
+
                     _ = Plugin.Framework.RunOnFrameworkThread(CheckAndRaiseActiveMoodlesChanged);
                 };
 
-                statusUpdatedHandler = (_, _) =>
+                statusUpdatedHandler = (id, active) =>
                 {
+                    if (suppressMoodleChangeEvents)
+                        return;
+
                     _ = Plugin.Framework.RunOnFrameworkThread(CheckAndRaiseActiveMoodlesChanged);
                 };
 
-
-
-                AddDelegateToField(ipcProcessor, statusManagerModifiedField, statusManagerModifiedHandler);
-                AddDelegateToField(ipcProcessor, statusUpdatedField, statusUpdatedHandler);
+                AttachMoodleEventHandlers(ipcProcessor);
 
                 return true;
             }
@@ -231,6 +328,7 @@ namespace SayusGagExtender.API
                 Plugin.ChatGui.PrintError($"Failed to subscribe to Moodles changes {ex}");
                 statusManagerModifiedHandler = null;
                 statusUpdatedHandler = null;
+                moodleEventHandlersAttached = false;
                 return false;
             }
         }
@@ -250,11 +348,7 @@ namespace SayusGagExtender.API
                 if (ipcProcessor == null)
                     return;
 
-                if (statusManagerModifiedHandler != null)
-                    RemoveDelegateFromField(ipcProcessor, statusManagerModifiedField, statusManagerModifiedHandler);
-
-                if (statusUpdatedHandler != null)
-                    RemoveDelegateFromField(ipcProcessor, statusUpdatedField, statusUpdatedHandler);
+                DetachMoodleEventHandlers(ipcProcessor);
             }
             catch (Exception ex)
             {
@@ -264,14 +358,20 @@ namespace SayusGagExtender.API
             {
                 statusManagerModifiedHandler = null;
                 statusUpdatedHandler = null;
+                moodleEventHandlersAttached = false;
             }
         }
 
         public void Dispose()
         {
+            disposed = true;
             UnsubscribeFromMoodleStatusChanges();
             ClearCache();
         }
+
+
+
+
 
         private bool TryApplyMoodle(Guid statusId, IPlayerCharacter player)
         {
@@ -286,9 +386,21 @@ namespace SayusGagExtender.API
             if (addOrUpdateMoodleByPlayerMethod == null)
                 return false;
 
-            addOrUpdateMoodleByPlayerMethod.Invoke(
+            InvokeMoodlesIpcWithoutChangeCallbacks(
                 ipcProcessor,
-                new object[] { statusId, player });
+                () =>
+                {
+                    addOrUpdateMoodleByPlayerMethod.Invoke(
+                        ipcProcessor,
+                        new object[] { statusId, player });
+
+                    // Moodles' IPC path marks the player's MyStatusManager as WasTouchedByIPC.
+                    // Moodles deletes IPC-touched managers when the character unloads, which is
+                    // why zoning/doors wipe both plugin-applied and self-applied moodles.
+                    // Clear that flag immediately for the local/self manager so Moodles treats it
+                    // like a normal self-managed status manager again.
+                    ClearWasTouchedByIpcForPlayer(moodlesPlugin, player);
+                });
 
             return true;
         }
@@ -306,11 +418,204 @@ namespace SayusGagExtender.API
             if (removeMoodleByPlayerMethod == null)
                 return false;
 
-            removeMoodleByPlayerMethod.Invoke(
+            InvokeMoodlesIpcWithoutChangeCallbacks(
                 ipcProcessor,
-                new object[] { statusId, player });
+                () =>
+                {
+                    removeMoodleByPlayerMethod.Invoke(
+                        ipcProcessor,
+                        new object[] { statusId, player });
+
+                    // Remove uses the same IPC path and also calls MarkSynced.
+                    ClearWasTouchedByIpcForPlayer(moodlesPlugin, player);
+                });
 
             return true;
+        }
+
+        private void InvokeMoodlesIpcWithoutChangeCallbacks(object ipcProcessor, Action invoke)
+        {
+            var generation = ++ipcEventSuppressionGeneration;
+
+            suppressMoodleChangeEvents = true;
+            DetachMoodleEventHandlers(ipcProcessor);
+
+            try
+            {
+                invoke();
+            }
+            finally
+            {
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(250);
+
+                    await Plugin.Framework.RunOnFrameworkThread(() =>
+                    {
+                        if (disposed || generation != ipcEventSuppressionGeneration)
+                            return;
+
+                        try
+                        {
+                            if (!TryCacheReflectionWithRefresh())
+                                return;
+
+                            var moodlesPlugin = pluginInstanceField!.GetValue(null);
+                            if (moodlesPlugin == null)
+                                return;
+
+                            var currentIpcProcessor = ipcProcessorField!.GetValue(moodlesPlugin);
+                            if (currentIpcProcessor == null)
+                                return;
+
+                            AttachMoodleEventHandlers(currentIpcProcessor);
+                        }
+                        finally
+                        {
+                            suppressMoodleChangeEvents = false;
+                            lastActiveMoodles = GetAllActiveMoodlesRaw();
+                        }
+                    });
+                });
+            }
+        }
+
+        private void ClearWasTouchedByIpcForPlayer(object moodlesPlugin, IPlayerCharacter player)
+        {
+            try
+            {
+                var configField = moodlesPlugin.GetType().GetField(
+                    "Config",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+                var config = configField?.GetValue(moodlesPlugin);
+                if (config == null)
+                    return;
+
+                var managersField = config.GetType().GetField(
+                    "StatusManagers",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+                if (managersField?.GetValue(config) is not IDictionary managers)
+                    return;
+
+                var playerName = GetPlayerNameText(player);
+                var playerAddress = player.Address;
+
+                foreach (DictionaryEntry entry in managers)
+                {
+                    if (entry.Value == null)
+                        continue;
+
+                    if (!LooksLikePlayersStatusManager(entry.Key, entry.Value, playerName, playerAddress))
+                        continue;
+
+                    var managerType = entry.Value.GetType();
+                    var wasTouchedField = managerType.GetField(
+                        "WasTouchedByIPC",
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+                    if (wasTouchedField != null && wasTouchedField.FieldType == typeof(bool))
+                        wasTouchedField.SetValue(entry.Value, false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.ChatGui.PrintError($"Failed to clear Moodles IPC touched flag: {ex}");
+            }
+        }
+
+        private static bool LooksLikePlayersStatusManager(object? key, object manager, string? playerName, nint playerAddress)
+        {
+            var keyString = key?.ToString();
+
+            if (!string.IsNullOrWhiteSpace(playerName) && !string.IsNullOrWhiteSpace(keyString))
+            {
+                if (string.Equals(keyString, playerName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+
+                if (keyString.StartsWith(playerName + "@", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            // Best-effort fallback: if reflection can read Owner as a pointer-like value,
+            // match it to the player address. Some runtimes expose unsafe pointer fields
+            // as System.Reflection.Pointer, so this intentionally stays conservative.
+            var ownerField = manager.GetType().GetField(
+                "Owner",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+            if (ownerField == null)
+                return false;
+
+            try
+            {
+                var owner = ownerField.GetValue(manager);
+                if (owner is nint ownerPtr)
+                    return ownerPtr == playerAddress;
+
+                if (owner is IntPtr intPtr)
+                    return intPtr == playerAddress;
+            }
+            catch
+            {
+                // Ignore pointer reflection failures; key matching above is the reliable path.
+            }
+
+            return false;
+        }
+
+        private static string? GetPlayerNameText(IPlayerCharacter player)
+        {
+            try
+            {
+                var nameObject = player.GetType().GetProperty("Name")?.GetValue(player);
+                if (nameObject == null)
+                    return null;
+
+                var textValue = nameObject.GetType().GetProperty("TextValue")?.GetValue(nameObject) as string;
+                if (!string.IsNullOrWhiteSpace(textValue))
+                    return textValue;
+
+                var extractedText = nameObject.GetType().GetMethod("ExtractText", Type.EmptyTypes)?.Invoke(nameObject, null) as string;
+                if (!string.IsNullOrWhiteSpace(extractedText))
+                    return extractedText;
+
+                var fallback = nameObject.ToString();
+                return string.IsNullOrWhiteSpace(fallback) ? null : fallback;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void AttachMoodleEventHandlers(object ipcProcessor)
+        {
+            if (moodleEventHandlersAttached)
+                return;
+
+            if (statusManagerModifiedHandler != null)
+                AddDelegateToField(ipcProcessor, statusManagerModifiedField, statusManagerModifiedHandler);
+
+            if (statusUpdatedHandler != null)
+                AddDelegateToField(ipcProcessor, statusUpdatedField, statusUpdatedHandler);
+
+            moodleEventHandlersAttached = true;
+        }
+
+        private void DetachMoodleEventHandlers(object ipcProcessor)
+        {
+            if (!moodleEventHandlersAttached)
+                return;
+
+            if (statusManagerModifiedHandler != null)
+                RemoveDelegateFromField(ipcProcessor, statusManagerModifiedField, statusManagerModifiedHandler);
+
+            if (statusUpdatedHandler != null)
+                RemoveDelegateFromField(ipcProcessor, statusUpdatedField, statusUpdatedHandler);
+
+            moodleEventHandlersAttached = false;
         }
 
         private void CheckAndRaiseActiveMoodlesChanged()
@@ -383,7 +688,10 @@ namespace SayusGagExtender.API
             if (ipcProcessor == null)
                 return false;
 
-            var activeStatuses = getClientStatusManagerInfoMethod!.Invoke(ipcProcessor, null);
+            if (getClientStatusManagerInfoMethod == null)
+                return false;
+
+            var activeStatuses = getClientStatusManagerInfoMethod.Invoke(ipcProcessor, null);
 
             if (activeStatuses is not IEnumerable statuses)
                 return false;
@@ -625,7 +933,6 @@ namespace SayusGagExtender.API
             return null;
         }
 
-
         private static string? ExtractStatusName(object statusInfo)
         {
             var type = statusInfo.GetType();
@@ -654,6 +961,7 @@ namespace SayusGagExtender.API
 
             return null;
         }
+
         private static string? ExtractRegisteredMoodleName(object registeredMoodleInfo)
         {
             var type = registeredMoodleInfo.GetType();
@@ -669,16 +977,10 @@ namespace SayusGagExtender.API
                     return propValue;
             }
 
-            // GetRegisteredMoodlesV2 tuple:
-            // Item1 = GUID
-            // Item2 = IconID
-            // Item3 = FullPath
-            // Item4 = Title
             var item3 = type.GetField("Item3", BindingFlags.Public | BindingFlags.Instance);
             if (item3?.GetValue(registeredMoodleInfo) is string item3FullPath && !string.IsNullOrWhiteSpace(item3FullPath))
                 return item3FullPath;
 
-            // Fallback to Title only if path/full path was not available.
             foreach (var name in new[] { "Title", "Name", "StatusName" })
             {
                 var field = type.GetField(name, BindingFlags.Public | BindingFlags.Instance);

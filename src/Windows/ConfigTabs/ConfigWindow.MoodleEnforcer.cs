@@ -50,10 +50,12 @@ namespace SayusGagExtender.Windows
 
                 ImGui.PushID($"moodle-enforcer-{moodleId}");
 
-
-
-                var moodleIsActive = plugin.MoodlesApi.IsStatusActive(moodleId);
-                //var moodleIsActive = moodleConfig.IsMoodleEnabled;
+                bool moodleIsActive = false;
+                if (Plugin.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.NormalConditions])
+                {
+                    moodleIsActive = plugin.MoodlesApi.IsStatusActive(moodleId);
+                }
+                
 
                 if (moodleIsActive)
                     ImGui.PushStyleColor(ImGuiCol.Text, new System.Numerics.Vector4(0.2f, 1.0f, 0.2f, 1.0f));
