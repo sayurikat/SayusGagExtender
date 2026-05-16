@@ -61,6 +61,7 @@ public sealed class Plugin : IDalamudPlugin
     public PenumbraEnforcer PenumbraEnforcer { get; set; }
     public EmoteEnforcer EmoteEnforcer { get; set; }
     public CustomizePlusEnforcer CustomizePlusEnforcer { get; set; }
+    public MovementBlocker MovementBlocker { get; set; }
 
     private const string CommandName = "/sge";
 
@@ -140,6 +141,7 @@ public sealed class Plugin : IDalamudPlugin
         PenumbraEnforcer = new PenumbraEnforcer(Instance);
         EmoteEnforcer = new EmoteEnforcer(Instance);
         CustomizePlusEnforcer = new CustomizePlusEnforcer(Instance);
+        MovementBlocker = new MovementBlocker(Instance);
 
 
     }
@@ -180,6 +182,7 @@ public sealed class Plugin : IDalamudPlugin
         PenumbraEnforcer?.Dispose();
         EmoteEnforcer?.Dispose();
         CustomizePlusEnforcer?.Dispose();
+        MovementBlocker?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);

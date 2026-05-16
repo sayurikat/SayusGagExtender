@@ -1,4 +1,5 @@
 using Dalamud.Plugin.Services;
+using SayusGagExtender.API;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,15 +11,15 @@ namespace SayusGagExtender
     {
         private readonly Plugin plugin;
 
-        private readonly HashSet<uint> enforcerStartedEmotes = new();
-        private readonly Dictionary<uint, bool> lastWantedEmoteStates = new();
+        private uint? currentEnforcedEmoteId = null;
 
         private DateTime onUpdateNextUTC = DateTime.MinValue;
         private readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(1);
 
         private DateTime nextEmoteCommandUTC = DateTime.MinValue;
-        private readonly TimeSpan EmoteCommandCooldown = TimeSpan.FromSeconds(2);
+        private readonly TimeSpan EmoteCommandCooldown = TimeSpan.FromSeconds(1);
         public bool IsEnforcing = false;
+        public bool ShouldBlockUserEmotes => plugin.Configuration.EmoteEnforcerEnabled && IsEnforcing;
 
         public class EmoteEnforcerEmoteConfig
         {
@@ -92,19 +93,20 @@ namespace SayusGagExtender
 
             if (!plugin.Configuration.EmoteEnforcerEnabled)
             {
-                CancelAllEnforcerStartedEmotesOnce();
+                CancelCurrentEnforcedEmoteOnce();
                 return;
             }
 
             if (plugin.Configuration.EmoteEnforcerEmotes.Count == 0)
             {
-                CancelAllEnforcerStartedEmotesOnce();
+                CancelCurrentEnforcedEmoteOnce();
                 return;
             }
-            
+
             var activeState = GetActiveState();
 
-            
+            EmoteEnforcerEmoteConfig? wantedEmoteConfig = null;
+
             foreach (var emoteConfig in plugin.Configuration.EmoteEnforcerEmotes)
             {
                 if (emoteConfig.EmoteId == 0)
@@ -113,22 +115,34 @@ namespace SayusGagExtender
                 if (emoteConfig.Restrictions.Count + emoteConfig.Gags.Count + emoteConfig.RestraintSets.Count <= 0)
                     continue;
 
-                var shouldBeActive = ShouldEmoteBeActive(emoteConfig, activeState);
-                lastWantedEmoteStates[emoteConfig.EmoteId] = shouldBeActive;
-                
-                if (shouldBeActive)
+                if (ShouldEmoteBeActive(emoteConfig, activeState))
                 {
-                    IsEnforcing = true;
-                    EnsureEmoteState(emoteConfig, shouldBeActive);
-
-                    //only one emote!
-                    break;
+                    wantedEmoteConfig = emoteConfig;
+                    break; // only enforce the first matching emote
                 }
-                
             }
 
-            
-            CleanupNoLongerConfiguredTrackedEmotes();
+            if (wantedEmoteConfig == null)
+            {
+                CancelCurrentEnforcedEmoteOnce();
+                return;
+            }
+
+            IsEnforcing = true;
+
+            // If the enforced emote changed, cancel the old one first.
+            if (currentEnforcedEmoteId.HasValue &&
+                currentEnforcedEmoteId.Value != wantedEmoteConfig.EmoteId)
+            {
+                CancelCurrentEnforcedEmoteOnce();
+
+                // Respect cooldown. Next update will start the new emote.
+                if (!CanSendEmoteCommand())
+                    return;
+            }
+            plugin.MovementBlocker.Enabled = IsEnforcing;
+
+            EnsureCurrentEmote(wantedEmoteConfig);
         }
 
         private EmoteEnforcerActiveState GetActiveState()
@@ -203,37 +217,44 @@ namespace SayusGagExtender
             return false;
         }
 
-        private void EnsureEmoteState(
-            EmoteEnforcerEmoteConfig emoteConfig,
-            bool shouldBeActive)
+        private void EnsureCurrentEmote(EmoteEnforcerEmoteConfig emoteConfig)
         {
             var emoteId = emoteConfig.EmoteId;
             var currentEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
 
-            if (shouldBeActive)
+            if (currentEmoteId == emoteId)
             {
-                if (currentEmoteId == emoteId)
-                {
-                    enforcerStartedEmotes.Add(emoteId);
-                    return;
-                }
-                
-                if (!CanSendEmoteCommand())
-                    return;
-
-                if (plugin.EmoteApi.ExecuteEmote(emoteId))
-                {
-                    enforcerStartedEmotes.Add(emoteId);
-                    nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
-                }
-
+                currentEnforcedEmoteId = emoteId;
                 return;
             }
 
-            if (!enforcerStartedEmotes.Contains(emoteId))
+            if (!CanSendEmoteCommand())
                 return;
 
-            enforcerStartedEmotes.Remove(emoteId);
+            if (plugin.EmoteApi.ExecuteEmote(emoteId))
+            {
+                currentEnforcedEmoteId = emoteId;
+                nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
+            }
+            plugin.PenumbraApi.RedrawSelf();
+        }
+
+        private bool CanSendEmoteCommand()
+        {
+            return DateTime.UtcNow >= nextEmoteCommandUTC;
+        }
+
+        private void CancelCurrentEnforcedEmoteOnce()
+        {
+            plugin.MovementBlocker.Enabled = false;
+
+            if (!currentEnforcedEmoteId.HasValue)
+                return;
+
+            var emoteId = currentEnforcedEmoteId.Value;
+            var currentEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
+
+            currentEnforcedEmoteId = null;
 
             if (currentEmoteId != emoteId)
                 return;
@@ -245,40 +266,6 @@ namespace SayusGagExtender
             nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
         }
 
-        private bool CanSendEmoteCommand()
-        {
-            return DateTime.UtcNow >= nextEmoteCommandUTC;
-        }
-
-        private void CancelAllEnforcerStartedEmotesOnce()
-        {
-            if (enforcerStartedEmotes.Count == 0)
-                return;
-
-            var currentEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
-
-            if (currentEmoteId != 0 && enforcerStartedEmotes.Contains(currentEmoteId) && CanSendEmoteCommand())
-            {
-                plugin.EmoteApi.CancelEmote();
-                nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
-            }
-
-            enforcerStartedEmotes.Clear();
-            lastWantedEmoteStates.Clear();
-        }
-
-        private void CleanupNoLongerConfiguredTrackedEmotes()
-        {
-            if (enforcerStartedEmotes.Count == 0)
-                return;
-
-            var configuredIds = plugin.Configuration.EmoteEnforcerEmotes
-                .Where(x => x.EmoteId != 0)
-                .Select(x => x.EmoteId)
-                .ToHashSet();
-
-            enforcerStartedEmotes.RemoveWhere(x => !configuredIds.Contains(x));
-        }
 
         private static bool ContainsAnyByIdOrName(
             List<GagSpeakItem> configuredItems,

@@ -1,3 +1,4 @@
+using Dalamud.Game.ClientState.JobGauge.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
@@ -20,6 +21,7 @@ namespace SayusGagExtender.API
             (int Ec, (bool Enabled, int Priority, Dictionary<string, List<string>> Settings, bool Inherited)? Settings)>? getCurrentModSettings;
 
         private ICallGateSubscriber<Guid, string, string, bool, int>? trySetMod;
+        private ICallGateSubscriber<int, int, object?>? redrawObject;
 
         public PenumbraApi(Plugin plugin)
         {
@@ -43,9 +45,10 @@ namespace SayusGagExtender.API
                 CacheIpcSubscribers();
 
                 return getModList != null
-                    && getCollectionForObject != null
-                    && getCurrentModSettings != null
-                    && trySetMod != null;
+                 && getCollectionForObject != null
+                 && getCurrentModSettings != null
+                 && trySetMod != null
+                 && redrawObject != null;
             }
             catch
             {
@@ -205,7 +208,28 @@ namespace SayusGagExtender.API
         {
             return SetModEnabledOnPlayerCollection(modDirectory, false, modName);
         }
+        public bool RedrawSelf()
+        {
+            try
+            {
+                CacheIpcSubscribers();
 
+                if (redrawObject == null)
+                    return false;
+
+                var localPlayer = Plugin.ObjectTable.LocalPlayer;
+                if (localPlayer == null)
+                    return false;
+
+                redrawObject.InvokeAction(localPlayer.ObjectIndex, 0);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Plugin.ChatGui.PrintError($"Failed to redraw self through Penumbra: {ex}");
+                return false;
+            }
+        }
         private void CacheIpcSubscribers()
         {
             getModList ??=
@@ -225,6 +249,10 @@ namespace SayusGagExtender.API
             trySetMod ??=
                 pluginInterface.GetIpcSubscriber<Guid, string, string, bool, int>(
                     "Penumbra.TrySetMod.V5");
+
+            redrawObject ??=
+                pluginInterface.GetIpcSubscriber<int, int, object?>(
+                    "Penumbra.RedrawObject.V5");
         }
 
         private void ClearCache()
@@ -233,8 +261,13 @@ namespace SayusGagExtender.API
             getCollectionForObject = null;
             getCurrentModSettings = null;
             trySetMod = null;
+            redrawObject = null;
         }
-
+        private enum PenumbraRedrawType
+        {
+            Redraw = 0,
+            AfterGPose = 1,
+        }
         private enum PenumbraApiEc
         {
             Success = 0,

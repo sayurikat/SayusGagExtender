@@ -111,7 +111,7 @@ namespace SayusGagExtender.API
             // /sit is the common safe-ish way to break most looping emotes.
             // If the player is already sitting, this can stand them up, so only call it
             // when you know the enforcer started the currently active emote.
-
+            Plugin.ChatGui.Print("CancelEmote.");
             //plugin commands
             //Plugin.CommandManager.ProcessCommand(plugin.Configuration.EmoteEnforcerCancelCommand);
 

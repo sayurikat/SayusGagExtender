@@ -96,6 +96,12 @@ namespace SayusGagExtender
 
         private static readonly TimeSpan CombatAfterEmoteSuppressDuration = TimeSpan.FromSeconds(3);
 
+        private readonly HashSet<string> expressionEmoteCommands = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<uint> expressionEmoteIds = new();
+
+        private DateTime nextEnforcerBlockWarningAt = DateTime.MinValue;
+        private static readonly TimeSpan EnforcerBlockWarningCooldown = TimeSpan.FromSeconds(3);
+
         private const int VK_LBUTTON = 0x01;
         private const int VK_RBUTTON = 0x02;
         private const int VK_MBUTTON = 0x04;
@@ -204,6 +210,9 @@ namespace SayusGagExtender
             emoteCommandAllowsMount.Clear();
             emoteIdAllowsMount.Clear();
 
+            expressionEmoteCommands.Clear();
+            expressionEmoteIds.Clear();
+
             // Manual aliases / fallbacks / special cases.
             AddEmoteCommand("sit", false);
             AddEmoteCommand("groundsit", false);
@@ -222,10 +231,21 @@ namespace SayusGagExtender
                     var textCommand = emote.TextCommand.Value;
                     var canUseMounted = EmoteCanBeUsedMounted(emote);
 
-                    AddEmoteCommand(textCommand.Command.ToString(), canUseMounted);
-                    AddEmoteCommand(textCommand.ShortCommand.ToString(), canUseMounted);
+                    var command = textCommand.Command.ToString();
+                    var shortCommand = textCommand.ShortCommand.ToString();
+
+                    AddEmoteCommand(command, canUseMounted);
+                    AddEmoteCommand(shortCommand, canUseMounted);
 
                     emoteIdAllowsMount[emote.RowId] = canUseMounted;
+
+                    if (IsExpressionEmoteFromExcel(emote, command, shortCommand))
+                    {
+                        expressionEmoteIds.Add(emote.RowId);
+                        AddExpressionEmoteCommand(command);
+                        AddExpressionEmoteCommand(shortCommand);
+                    }
+
                 }
             }
             catch (Exception ex)
@@ -258,6 +278,165 @@ namespace SayusGagExtender
 
             emoteCommands.Add(command);
             emoteCommandAllowsMount[command] = canUseMounted;
+        }
+        private void AddExpressionEmoteCommand(string? command)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+                return;
+
+            command = command.Trim();
+
+            if (command.StartsWith('/'))
+                command = command[1..];
+
+            var firstSpace = command.IndexOf(' ');
+            if (firstSpace >= 0)
+                command = command[..firstSpace];
+
+            if (string.IsNullOrWhiteSpace(command))
+                return;
+
+            expressionEmoteCommands.Add(command);
+        }
+        private static bool IsExpressionEmoteFromExcel(
+    Emote emote,
+    string? command,
+    string? shortCommand)
+        {
+            // Preferred: detect from Excel category/mode/name if your generated Lumina sheet exposes it.
+            // This is intentionally reflection-based so minor generated field-name changes do not break compilation.
+            try
+            {
+                var emoteType = emote.GetType();
+
+                foreach (var propertyName in new[]
+                         {
+                     "EmoteMode",
+                     "EmoteCategory",
+                     "Category",
+                     "Mode"
+                 })
+                {
+                    var property = emoteType.GetProperty(propertyName);
+                    if (property == null)
+                        continue;
+
+                    var value = property.GetValue(emote);
+                    if (ValueLooksLikeExpression(value))
+                        return true;
+
+                    var innerValue = value?.GetType().GetProperty("Value")?.GetValue(value);
+                    if (ValueLooksLikeExpression(innerValue))
+                        return true;
+                }
+            }
+            catch
+            {
+                // Fall through to command fallback below.
+            }
+
+            // Fallback: resolve known expression slash commands through Excel,
+            // so IDs/aliases still come from the sheet instead of hardcoded RowIds.
+            return CommandLooksLikeExpression(command)
+                   || CommandLooksLikeExpression(shortCommand);
+        }
+
+        private static bool ValueLooksLikeExpression(object? value)
+        {
+            if (value == null)
+                return false;
+
+            var text = value.ToString();
+
+            if (!string.IsNullOrWhiteSpace(text)
+                && text.Contains("Expression", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            foreach (var propertyName in new[] { "Name", "Text", "Description" })
+            {
+                var property = value.GetType().GetProperty(propertyName);
+                if (property == null)
+                    continue;
+
+                var propertyText = property.GetValue(value)?.ToString();
+
+                if (!string.IsNullOrWhiteSpace(propertyText)
+                    && propertyText.Contains("Expression", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool CommandLooksLikeExpression(string? command)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+                return false;
+
+            command = command.Trim();
+
+            if (command.StartsWith('/'))
+                command = command[1..];
+
+            var firstSpace = command.IndexOf(' ');
+            if (firstSpace >= 0)
+                command = command[..firstSpace];
+
+            return ExpressionCommandFallbacks.Contains(command);
+        }
+
+        private static readonly HashSet<string> ExpressionCommandFallbacks =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+        "straightface",
+        "smile",
+        "grin",
+        "smirk",
+        "taunt",
+        "shuteyes",
+        "sad",
+        "scared",
+        "amazed",
+        "ouch",
+        "annoyed",
+        "alert",
+        "worried",
+            };
+
+        private bool ShouldBlockEmoteForEnforcer(uint emoteId)
+        {
+            if (!plugin.EmoteEnforcer.ShouldBlockUserEmotes)
+                return false;
+
+            return !expressionEmoteIds.Contains(emoteId);
+        }
+
+        private bool ShouldBlockEmoteForEnforcer(string normalizedCommand)
+        {
+            if (!plugin.EmoteEnforcer.ShouldBlockUserEmotes)
+                return false;
+
+            if (!TryGetCommandName(normalizedCommand, out var commandName))
+                return false;
+
+            return !expressionEmoteCommands.Contains(commandName);
+        }
+
+        private void MaybePrintEnforcerBlockedWarning()
+        {
+            var now = DateTime.UtcNow;
+
+            if (now < nextEnforcerBlockWarningAt)
+                return;
+
+            nextEnforcerBlockWarningAt = now + EnforcerBlockWarningCooldown;
+
+            Plugin.ChatGui.PrintError(
+                "EmoteEnforcer: Emote blocked while an enforced emote is active.");
         }
         private static bool EmoteCanBeUsedMounted(Emote emote)
         {
@@ -314,9 +493,6 @@ namespace SayusGagExtender
             if (hotbarModule == null || hotbarSlot == null)
                 return executeSlotHook.Original(hotbarModule, hotbarSlot);
 
-            if (!plugin.Configuration.EmoteGuardEnabled)
-                return executeSlotHook.Original(hotbarModule, hotbarSlot);
-
             if (replaying)
                 return executeSlotHook.Original(hotbarModule, hotbarSlot);
 
@@ -326,24 +502,27 @@ namespace SayusGagExtender
             if (type != HotbarSlotType.Emote)
                 return executeSlotHook.Original(hotbarModule, hotbarSlot);
 
+            // This is independent from EmoteGuardEnabled.
+            if (ShouldBlockEmoteForEnforcer(id))
+            {
+                MaybePrintEnforcerBlockedWarning();
+                return 0;
+            }
+
+            if (!plugin.Configuration.EmoteGuardEnabled)
+                return executeSlotHook.Original(hotbarModule, hotbarSlot);
+
             QueueReplay(QueuedEmote.FromHotbar(id));
 
-            // Swallow original. We replay after movement has been suppressed briefly.
             return 0;
         }
 
         private void ProcessChatBoxDetour(
-            IntPtr uiModule,
-            IntPtr message,
-            IntPtr unused,
-            byte a4)
+    IntPtr uiModule,
+    IntPtr message,
+    IntPtr unused,
+    byte a4)
         {
-            if (!plugin.Configuration.EmoteGuardEnabled)
-            {
-                processChatBoxHook.Original(uiModule, message, unused, a4);
-                return;
-            }
-
             if (replaying)
             {
                 processChatBoxHook.Original(uiModule, message, unused, a4);
@@ -353,6 +532,19 @@ namespace SayusGagExtender
             var text = TryReadProcessChatBoxMessage(message);
 
             if (text == null || !TryNormalizeEmoteCommand(text, out var normalized))
+            {
+                processChatBoxHook.Original(uiModule, message, unused, a4);
+                return;
+            }
+
+            // This is independent from EmoteGuardEnabled.
+            if (ShouldBlockEmoteForEnforcer(normalized))
+            {
+                MaybePrintEnforcerBlockedWarning();
+                return;
+            }
+
+            if (!plugin.Configuration.EmoteGuardEnabled)
             {
                 processChatBoxHook.Original(uiModule, message, unused, a4);
                 return;
