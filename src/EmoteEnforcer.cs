@@ -19,6 +19,7 @@ namespace SayusGagExtender
         private DateTime nextEmoteCommandUTC = DateTime.MinValue;
         private readonly TimeSpan EmoteCommandCooldown = TimeSpan.FromSeconds(1);
         public bool IsEnforcing = false;
+        private bool RequestedBlockState = false;
         public bool ShouldBlockUserEmotes => plugin.Configuration.EmoteEnforcerEnabled && IsEnforcing;
 
         public class EmoteEnforcerEmoteConfig
@@ -140,7 +141,19 @@ namespace SayusGagExtender
                 if (!CanSendEmoteCommand())
                     return;
             }
-            plugin.MovementBlocker.Enabled = IsEnforcing;
+
+            if (IsEnforcing != RequestedBlockState)
+            {
+                if (IsEnforcing)
+                {
+                    plugin.MovementBlocker.RequestBlock(nameof(EmoteEnforcer));
+                }
+                else
+                {
+                    plugin.MovementBlocker.ClearBlock(nameof(EmoteEnforcer));
+                }
+            }
+            
 
             EnsureCurrentEmote(wantedEmoteConfig);
         }
@@ -246,7 +259,7 @@ namespace SayusGagExtender
 
         private void CancelCurrentEnforcedEmoteOnce()
         {
-            plugin.MovementBlocker.Enabled = false;
+            plugin.MovementBlocker.ClearBlock(nameof(EmoteEnforcer));
 
             if (!currentEnforcedEmoteId.HasValue)
                 return;

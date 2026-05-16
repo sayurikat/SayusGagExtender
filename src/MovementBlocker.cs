@@ -3,6 +3,7 @@ using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.System.Input;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace SayusGagExtender;
@@ -10,25 +11,10 @@ namespace SayusGagExtender;
 public sealed unsafe class MovementBlocker : IDisposable
 {
     private readonly Plugin plugin;
+    private readonly HashSet<string> blockSources = [];
+    public bool Enabled => blockSources.Count > 0;
+    public IReadOnlyCollection<string> BlockSources => blockSources;
 
-    private bool enabled;
-
-    public bool Enabled
-    {
-        get => enabled;
-        set
-        {
-            if (enabled == value)
-                return;
-
-            enabled = value;
-
-            if (enabled)
-                EnableFullMovementLock();
-            else
-                DisableFullMovementLock();
-        }
-    }
 
     private static readonly InputId[] BlockedInputs =
     [
@@ -44,9 +30,13 @@ public sealed unsafe class MovementBlocker : IDisposable
         InputId.MOVE_STRIFE_R,
         InputId.MOVE_FORE,
         InputId.MOVE_BACK,
-
+        
         // Jump
         InputId.JUMP,
+
+        // Jump
+        InputId.AUTORUN_KEY,
+        InputId.AUTORUN_PAD,
 
         // Camera / turn inputs
         InputId.CAMERA_LEFT,
@@ -66,7 +56,7 @@ public sealed unsafe class MovementBlocker : IDisposable
         this.plugin = plugin;
 
         Plugin.GameInterop.InitializeFromAttributes(this);
-
+        
         IsInputIdPressedHook.Enable();
         IsInputIdDownHook.Enable();
         IsInputIdHeldHook.Enable();
@@ -80,7 +70,7 @@ public sealed unsafe class MovementBlocker : IDisposable
 
     public void Dispose()
     {
-        Enabled = false;
+        ClearAllBlocks();
 
         IsInputIdPressedHook.Dispose();
         IsInputIdDownHook.Dispose();
@@ -89,7 +79,59 @@ public sealed unsafe class MovementBlocker : IDisposable
         MouseMoveBlockHook.Dispose();
         RMIWalkHook.Dispose();
 
-        //log.Information("EmoteMovementBlocker disposed.");
+    }
+    /// <summary>
+    /// Request movement blocking from a named owner/source.
+    /// Movement will remain blocked until every source has called ClearBlock.
+    /// </summary>
+    public void RequestBlock(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            source = "unknown";
+
+        var wasEnabled = Enabled;
+
+        blockSources.Add(source);
+
+        if (!wasEnabled && Enabled)
+        {
+            Plugin.ChatGui.Print("Movement Block Enabled");
+            plugin.Utils.ExecuteNativeCommand("/automove off");
+            EnableFullMovementLock();
+        }
+    }
+
+    /// <summary>
+    /// Clear movement blocking for a named owner/source.
+    /// Movement only unlocks once all sources have cleared.
+    /// </summary>
+    public void ClearBlock(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            source = "unknown";
+
+        var wasEnabled = Enabled;
+
+        blockSources.Remove(source);
+
+        if (wasEnabled && !Enabled)
+        {
+            Plugin.ChatGui.Print("Movement Block Disabled");
+            DisableFullMovementLock();
+        }
+    }
+
+    /// <summary>
+    /// Emergency clear, useful on plugin shutdown.
+    /// </summary>
+    public void ClearAllBlocks()
+    {
+        var wasEnabled = Enabled;
+
+        blockSources.Clear();
+
+        if (wasEnabled)
+            DisableFullMovementLock();
     }
 
     private bool ShouldBlock(InputId inputId)
@@ -160,7 +202,7 @@ public sealed unsafe class MovementBlocker : IDisposable
 
     [Signature(Signatures.MouseMoveBlock, DetourName = nameof(MouseMoveBlockDetour), Fallibility = Fallibility.Auto)]
     private Hook<MouseMoveBlockDelegate> MouseMoveBlockHook = null!;
-
+    
     private void MouseMoveBlockDetour(
         void* thisPtr,
         float* wishDirH,
@@ -181,6 +223,7 @@ public sealed unsafe class MovementBlocker : IDisposable
 
         if (!Enabled)
             return;
+
 
         // Block mouse-driven movement and right-click turning.
         if (wishDirH != null)
@@ -222,6 +265,7 @@ public sealed unsafe class MovementBlocker : IDisposable
     "E8 ?? ?? ?? ?? 80 7B 3E 00 48 8D 3D";
         public const string ForceDisableMovement =
     "F3 0F 10 05 ?? ?? ?? ?? 0F 2E C7";
+
     }
 
     private delegate void RMIWalkDelegate(
@@ -286,7 +330,6 @@ public sealed unsafe class MovementBlocker : IDisposable
 
     private unsafe void EnableFullMovementLock()
     {
-        // If something else already locked movement, don't claim ownership.
         if (ForceDisableMovement > 0)
             return;
 
