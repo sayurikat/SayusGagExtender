@@ -47,9 +47,10 @@ public unsafe sealed class EmoteGuard : IDisposable
     private DateTime nextEnforcerBlockWarningAt = DateTime.MinValue;
 
     private DateTime combatSuppressUntil = DateTime.MinValue;
-    private DateTime combatKeySuppressUntil = DateTime.MinValue;
+    private DateTime combatActionBlockUntil = DateTime.MinValue;
     private bool combatSuppressStarted;
     private bool currentQueueHadCombatDelay;
+    private bool combatActionBlockRequested;
 
     private bool replaying;
     private bool disposed;
@@ -71,71 +72,6 @@ public unsafe sealed class EmoteGuard : IDisposable
     private static readonly TimeSpan CombatAfterEmoteSuppressDuration = TimeSpan.FromSeconds(3);
 
     public bool IsActive = false;
-
-    private const int VK_RBUTTON = 0x02;
-    private const int VK_MBUTTON = 0x04;
-
-    private const int VK_0 = 0x30;
-    private const int VK_1 = 0x31;
-    private const int VK_2 = 0x32;
-    private const int VK_3 = 0x33;
-    private const int VK_4 = 0x34;
-    private const int VK_5 = 0x35;
-    private const int VK_6 = 0x36;
-    private const int VK_7 = 0x37;
-    private const int VK_8 = 0x38;
-    private const int VK_9 = 0x39;
-
-    private const int VK_A = 0x41;
-    private const int VK_B = 0x42;
-    private const int VK_C = 0x43;
-    private const int VK_D = 0x44;
-    private const int VK_E = 0x45;
-    private const int VK_F = 0x46;
-    private const int VK_G = 0x47;
-    private const int VK_H = 0x48;
-    private const int VK_I = 0x49;
-    private const int VK_J = 0x4A;
-    private const int VK_K = 0x4B;
-    private const int VK_L = 0x4C;
-    private const int VK_M = 0x4D;
-    private const int VK_N = 0x4E;
-    private const int VK_O = 0x4F;
-    private const int VK_P = 0x50;
-    private const int VK_Q = 0x51;
-    private const int VK_R = 0x52;
-    private const int VK_S = 0x53;
-    private const int VK_T = 0x54;
-    private const int VK_U = 0x55;
-    private const int VK_V = 0x56;
-    private const int VK_W = 0x57;
-    private const int VK_X = 0x58;
-    private const int VK_Y = 0x59;
-    private const int VK_Z = 0x5A;
-
-    private const int VK_LEFT = 0x25;
-    private const int VK_UP = 0x26;
-    private const int VK_RIGHT = 0x27;
-    private const int VK_DOWN = 0x28;
-    private const int VK_SPACE = 0x20;
-
-    private static readonly int[] MovementKeys =
-    {
-        VK_W, VK_A, VK_S, VK_D,
-        VK_UP, VK_LEFT, VK_DOWN, VK_RIGHT,
-        VK_SPACE,
-        VK_RBUTTON, VK_MBUTTON,
-    };
-
-    private static readonly int[] CombatKeys =
-    {
-        VK_A, VK_B, VK_C, VK_D, VK_E, VK_F, VK_G, VK_H, VK_I, VK_J, VK_K, VK_L, VK_M,
-        VK_N, VK_O, VK_P, VK_Q, VK_R, VK_S, VK_T, VK_U, VK_V, VK_W, VK_X, VK_Y, VK_Z,
-        VK_0, VK_1, VK_2, VK_3, VK_4, VK_5, VK_6, VK_7, VK_8, VK_9,
-        VK_UP, VK_LEFT, VK_DOWN, VK_RIGHT,
-        VK_SPACE,
-        VK_RBUTTON, VK_MBUTTON,
-    };
 
     public EmoteGuard(Plugin instance)
     {
@@ -174,6 +110,7 @@ public unsafe sealed class EmoteGuard : IDisposable
 
         Plugin.Framework.Update -= OnFrameworkUpdate;
         ClearMovementBlock();
+        ClearCombatActionBlock();
 
         executeSlotHook.Disable();
         executeSlotHook.Dispose();
@@ -303,8 +240,7 @@ public unsafe sealed class EmoteGuard : IDisposable
         var now = DateTime.UtcNow;
         IsActive = true;
 
-        if (combatKeySuppressUntil > now)
-            SuppressInputs(CombatKeys);
+        UpdateCombatActionBlock(now);
 
         if (queued is not { } current)
         {
@@ -344,7 +280,7 @@ public unsafe sealed class EmoteGuard : IDisposable
         if (!Plugin.Condition[ConditionFlag.InCombat])
             return false;
 
-        SuppressInputs(CombatKeys);
+        RequestCombatActionBlock();
 
         if (!combatSuppressStarted)
         {
@@ -353,7 +289,7 @@ public unsafe sealed class EmoteGuard : IDisposable
             combatSuppressUntil = now + CombatPostDelay;
 
             Plugin.ChatGui.PrintError(
-                "EmoteGuard: Emote queued during combat. Suppressing inputs briefly, then emote will play.");
+                "EmoteGuard: Emote queued during combat. Suppressing combat actions briefly, then emote will play.");
         }
 
         return now < combatSuppressUntil;
@@ -394,8 +330,10 @@ public unsafe sealed class EmoteGuard : IDisposable
     {
         nextDismountAttemptAt = DateTime.MinValue;
         combatSuppressUntil = DateTime.MinValue;
+        combatActionBlockUntil = DateTime.MinValue;
         combatSuppressStarted = false;
         currentQueueHadCombatDelay = false;
+        ClearCombatActionBlock();
         suppressedStopDetector.Reset();
     }
 
@@ -403,8 +341,10 @@ public unsafe sealed class EmoteGuard : IDisposable
     {
         queued = null;
         combatSuppressUntil = DateTime.MinValue;
+        combatActionBlockUntil = DateTime.MinValue;
         combatSuppressStarted = false;
         currentQueueHadCombatDelay = false;
+        ClearCombatActionBlock();
         suppressedStopDetector.Reset();
     }
 
@@ -415,7 +355,7 @@ public unsafe sealed class EmoteGuard : IDisposable
             RequestMovementBlock();
             return;
         }
-        
+
         IsActive = false;
         ClearMovementBlock();
     }
@@ -459,6 +399,41 @@ public unsafe sealed class EmoteGuard : IDisposable
         plugin.MovementBlocker.ClearBlock(nameof(EmoteGuard));
     }
 
+    private void UpdateCombatActionBlock(DateTime now)
+    {
+        if (combatActionBlockUntil > now)
+        {
+            RequestCombatActionBlock();
+            return;
+        }
+
+        if (queued != null && combatSuppressStarted && Plugin.Condition[ConditionFlag.InCombat])
+        {
+            RequestCombatActionBlock();
+            return;
+        }
+
+        ClearCombatActionBlock();
+    }
+
+    private void RequestCombatActionBlock()
+    {
+        if (combatActionBlockRequested || plugin.ActionBlocker == null)
+            return;
+
+        combatActionBlockRequested = true;
+        plugin.ActionBlocker.RequestBlock(nameof(EmoteGuard));
+    }
+
+    private void ClearCombatActionBlock()
+    {
+        if (!combatActionBlockRequested || plugin.ActionBlocker == null)
+            return;
+
+        combatActionBlockRequested = false;
+        plugin.ActionBlocker.ClearBlock(nameof(EmoteGuard));
+    }
+
     private bool HasStoppedWhileSuppressed(DateTime now)
     {
         var player = Plugin.ObjectTable.LocalPlayer;
@@ -485,7 +460,10 @@ public unsafe sealed class EmoteGuard : IDisposable
         StartMovementLock(DateTime.UtcNow);
 
         if (hadCombatDelay)
-            combatKeySuppressUntil = DateTime.UtcNow + CombatAfterEmoteSuppressDuration;
+        {
+            combatActionBlockUntil = DateTime.UtcNow + CombatAfterEmoteSuppressDuration;
+            RequestCombatActionBlock();
+        }
 
         replaying = true;
         try
@@ -779,15 +757,6 @@ public unsafe sealed class EmoteGuard : IDisposable
         finally
         {
             cmd.Dtor(true);
-        }
-    }
-
-    private static void SuppressInputs(IEnumerable<int> keys)
-    {
-        foreach (var key in keys)
-        {
-            if (Plugin.KeyState.IsVirtualKeyValid(key))
-                Plugin.KeyState[key] = false;
         }
     }
 

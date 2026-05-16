@@ -50,6 +50,7 @@ namespace SayusGagExtender
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= this.OnAnyChanged;
             plugin.GagSpeakGagsApi.OnGagsChanged -= this.OnAnyChanged;
             plugin.GagSpeakRestraintSetApi.OnRestraintSetChanged -= this.OnAnyChanged;
+
         }
 
         private void OnAnyChanged(object obj)
@@ -147,10 +148,12 @@ namespace SayusGagExtender
                 if (IsActive)
                 {
                     plugin.MovementBlocker.RequestBlock(nameof(EmoteEnforcer));
+                    plugin.ActionBlocker.RequestBlock(nameof(EmoteEnforcer));
                 }
                 else
                 {
                     plugin.MovementBlocker.ClearBlock(nameof(EmoteEnforcer));
+                    plugin.ActionBlocker.ClearBlock(nameof(EmoteEnforcer));
                 }
             }
             
@@ -260,6 +263,8 @@ namespace SayusGagExtender
         private void CancelCurrentEnforcedEmoteOnce()
         {
             plugin.MovementBlocker.ClearBlock(nameof(EmoteEnforcer));
+            plugin.ActionBlocker.ClearBlock(nameof(EmoteEnforcer));
+            RequestedBlockState = false;
 
             if (!currentEnforcedEmoteId.HasValue)
                 return;

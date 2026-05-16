@@ -62,6 +62,7 @@ public sealed class Plugin : IDalamudPlugin
     public EmoteEnforcer EmoteEnforcer { get; set; }
     public CustomizePlusEnforcer CustomizePlusEnforcer { get; set; }
     public MovementBlocker MovementBlocker { get; set; }
+    public ActionBlocker ActionBlocker { get; set; }
 
     private const string CommandName = "/sge";
     public Configuration Configuration { get; init; }
@@ -141,6 +142,7 @@ public sealed class Plugin : IDalamudPlugin
         EmoteEnforcer = new EmoteEnforcer(Instance);
         CustomizePlusEnforcer = new CustomizePlusEnforcer(Instance);
         MovementBlocker = new MovementBlocker(Instance);
+        ActionBlocker = new ActionBlocker(Instance);
 
 
     }
