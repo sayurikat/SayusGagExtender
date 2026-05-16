@@ -23,6 +23,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
     private readonly Hook<UseActionDelegate> useActionHook;
 
     public bool Enabled => plugin.Configuration.TeleportBlockFeature;
+    public bool IsActive => IsBlockMoodleActiveCached();
     private bool cachedMoodleActive = false;
     private long nextMoodleRefreshMs;
 

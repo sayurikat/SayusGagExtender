@@ -18,6 +18,7 @@ namespace SayusGagExtender
         private readonly List<DateTime> triggerTimes = new();
         private int nextTriggerIndex = 0;
         public bool wearsRestrictedItems { get; private set; } = false;
+        public bool IsActive => wearsRestrictedItems;
         private DateTime lastItemChekUtc = DateTime.MinValue;
         public class WeightedZapCommand
         {

@@ -29,6 +29,7 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
     private bool wasBlockingActive;
 
     public bool Enabled => plugin.Configuration.JobSwitchBlockFeature;
+    public bool IsActive => IsBlockMoodleActiveCached();
 
     public JobSwitchBlocker(Plugin plugin)
     {

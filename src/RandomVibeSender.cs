@@ -15,6 +15,7 @@ namespace SayusGagExtender
         private int nextTriggerIndex = 0;
 
         public bool wearsRestrictedItems { get; private set; } = false;
+        public bool IsActive => wearsRestrictedItems;
 
         private DateTime lastItemCheckUtc = DateTime.MinValue;
 

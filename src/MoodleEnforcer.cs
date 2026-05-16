@@ -17,7 +17,7 @@ namespace SayusGagExtender
         private TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
         private DateTime betweenAreasNextUTC = DateTime.MinValue;
         private TimeSpan betweenAreasCooldown = TimeSpan.FromSeconds(10);
-        public bool IsEnforcing = false;
+        public bool IsActive = false;
         public class MoodleEnforcerMoodleConfig
         {
             public Guid MoodleId { get; set; } = Guid.Empty;
@@ -82,7 +82,7 @@ namespace SayusGagExtender
 
         public void Enforce()
         {
-            IsEnforcing = false;
+            IsActive = false;
 
             var now = DateTime.UtcNow;
             if (Plugin.Condition[ConditionFlag.BetweenAreas])
@@ -122,7 +122,7 @@ namespace SayusGagExtender
                 //lastWantedMoodleStates[moodleConfig.MoodleId] = shouldBeActive;
 
                 if (shouldBeActive)
-                    IsEnforcing = true;
+                    IsActive = true;
 
                 EnsureMoodleState(moodleConfig, shouldBeActive);
             }

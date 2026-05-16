@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
+using static FFXIVClientStructs.FFXIV.Client.Game.InstanceContent.DynamicEvent.Delegates;
 using static FFXIVClientStructs.FFXIV.Client.UI.Misc.RaptureHotbarModule;
 
 namespace SayusGagExtender;
@@ -68,6 +69,8 @@ public unsafe sealed class EmoteGuard : IDisposable
 
     private static readonly TimeSpan CombatPostDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan CombatAfterEmoteSuppressDuration = TimeSpan.FromSeconds(3);
+
+    public bool IsActive = false;
 
     private const int VK_RBUTTON = 0x02;
     private const int VK_MBUTTON = 0x04;
@@ -298,13 +301,14 @@ public unsafe sealed class EmoteGuard : IDisposable
     private void OnFrameworkUpdateInner()
     {
         var now = DateTime.UtcNow;
+        IsActive = true;
 
         if (combatKeySuppressUntil > now)
             SuppressInputs(CombatKeys);
 
         if (queued is not { } current)
         {
-            MaintainMovementBlock(now);
+            PostEmoteQueue(now);
             return;
         }
 
@@ -404,14 +408,15 @@ public unsafe sealed class EmoteGuard : IDisposable
         suppressedStopDetector.Reset();
     }
 
-    private void MaintainMovementBlock(DateTime now)
+    private void PostEmoteQueue(DateTime now)
     {
         if (movementLockedUntil > now)
         {
             RequestMovementBlock();
             return;
         }
-
+        
+        IsActive = false;
         ClearMovementBlock();
     }
 

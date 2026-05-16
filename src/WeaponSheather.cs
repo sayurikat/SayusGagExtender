@@ -12,6 +12,7 @@ namespace SayusGagExtender
         private readonly Plugin plugin;
 
         public bool wearsRestrictedItems { get; private set; } = false;
+        public bool IsActive => wearsRestrictedItems;
 
         private DateTime lastSheatheAttemptUtc = DateTime.MinValue;
         private DateTime lastItemCheckUtc = DateTime.MinValue;

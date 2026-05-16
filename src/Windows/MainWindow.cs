@@ -91,26 +91,27 @@ public class MainWindow : Window, IDisposable
     {
         ImGui.Text("Features");
 
-        using (ImRaii.Table("FeatureStatusTable", 2, ImGuiTableFlags.SizingStretchProp))
+        using (ImRaii.Table("FeatureStatusTable", 3, ImGuiTableFlags.SizingStretchProp))
         {
             ImGui.TableSetupColumn("Feature", ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthFixed, 90);
+            ImGui.TableSetupColumn("Active", ImGuiTableColumnFlags.WidthFixed, 90);
 
-            DrawFeaturesRow("Emote Guard", configuration.EmoteGuardEnabled);
-            DrawFeaturesRow("Hand Guard", configuration.HandGuardEnabled);
-            DrawFeaturesRow("Teleport Block", configuration.TeleportBlockFeature);
-            DrawFeaturesRow("Mount Block", configuration.MountBlockFeature);
-            DrawFeaturesRow("Job Switch Block", configuration.JobSwitchBlockFeature);
-            DrawFeaturesRow("Moodle Enforcer", configuration.MoodleEnforcerEnabled);
-            DrawFeaturesRow("Penumbra Enforcer", configuration.PenumbraEnforcerEnabled);
-            DrawFeaturesRow("C+ Enforcer", configuration.CustomizePlusEnforcerEnabled);
-            DrawFeaturesRow("Emote Enforcer", configuration.EmoteEnforcerEnabled);
-            DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled);
-            DrawFeaturesRow("Auto Vibe", configuration.AutoVibeEnabled);
+            DrawFeaturesRow("Emote Guard", configuration.EmoteGuardEnabled, plugin.EmoteGuard.IsActive);
+            DrawFeaturesRow("Hand Guard", configuration.HandGuardEnabled, plugin.WeaponSheather.IsActive);
+            DrawFeaturesRow("Teleport Block", configuration.TeleportBlockFeature, plugin.TeleportBlocker.IsActive);
+            DrawFeaturesRow("Mount Block", configuration.MountBlockFeature, plugin.MountBlocker.IsActive);
+            DrawFeaturesRow("Job Switch Block", configuration.JobSwitchBlockFeature, plugin.JobSwitchBlocker.IsActive);
+            DrawFeaturesRow("Moodle Enforcer", configuration.MoodleEnforcerEnabled, plugin.MoodleEnforcer.IsActive);
+            DrawFeaturesRow("Penumbra Enforcer", configuration.PenumbraEnforcerEnabled, plugin.PenumbraEnforcer.IsActive);
+            DrawFeaturesRow("C+ Enforcer", configuration.CustomizePlusEnforcerEnabled, plugin.CustomizePlusEnforcer.IsActive);
+            DrawFeaturesRow("Emote Enforcer", configuration.EmoteEnforcerEnabled, plugin.EmoteEnforcer.IsActive);
+            DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled, plugin.RandomZapSender.IsActive);
+            DrawFeaturesRow("Auto Vibe", configuration.AutoVibeEnabled, plugin.RandomVibeSender.IsActive);
         }
     }
 
-    private static void DrawFeaturesRow(string label, bool enabled)
+    private static void DrawFeaturesRow(string label, bool enabled, bool active)
     {
         ImGui.TableNextRow();
 
@@ -119,11 +120,19 @@ public class MainWindow : Window, IDisposable
 
         ImGui.TableSetColumnIndex(1);
 
-        var color = enabled
+        var colorEnable = enabled
             ? new Vector4(0.2f, 1.0f, 0.2f, 1.0f)
             : new Vector4(1.0f, 0.25f, 0.25f, 1.0f);
 
-        ImGui.TextColored(color, enabled ? "Enabled" : "Disabled");
+        ImGui.TextColored(colorEnable, enabled ? "Enabled" : "Disabled");
+
+        ImGui.TableSetColumnIndex(2);
+
+        var colorActive = active
+            ? new Vector4(0.2f, 1.0f, 0.2f, 1.0f)
+            : new Vector4(1.0f, 0.25f, 0.25f, 1.0f);
+
+        ImGui.TextColored(colorActive, active ? "Active" : "Inactive");
     }
     private void DrawRuntimeStatus()
     {
@@ -134,20 +143,7 @@ public class MainWindow : Window, IDisposable
             ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthStretch);
             ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 120);
 
-            DrawStatusRow("Hand Restraints", plugin.WeaponSheather.wearsRestrictedItems);
 
-            DrawStatusRow("Teleport block Moodle", plugin.TeleportBlocker.IsBlockMoodleActiveCached());
-            DrawStatusRow("Mount block Moodle", plugin.MountBlocker.IsBlockMoodleActiveCached());
-            DrawStatusRow("Job switch block Moodle", plugin.JobSwitchBlocker.IsBlockMoodleActiveCached());
-
-
-            DrawStatusRow("Moodle Enforcing", plugin.MoodleEnforcer.IsEnforcing);
-            DrawStatusRow("Penumbra Enforcing", plugin.PenumbraEnforcer.IsEnforcing);
-            DrawStatusRow("C+ Enforcing", plugin.CustomizePlusEnforcer.IsEnforcing);
-            DrawStatusRow("Emote Enforcing", plugin.EmoteEnforcer.IsEnforcing);
-
-
-            DrawStatusRow("Shock Collar", plugin.RandomZapSender.wearsRestrictedItems);
             DrawTextStatusRow(
                 "Zap Controller",
                 string.IsNullOrWhiteSpace(plugin.Configuration.ZapControllerName)
@@ -155,7 +151,6 @@ public class MainWindow : Window, IDisposable
                     : plugin.Configuration.ZapControllerName,
                 !string.IsNullOrWhiteSpace(plugin.Configuration.ZapControllerName));
 
-            DrawStatusRow("Vibrator", plugin.RandomVibeSender.wearsRestrictedItems);
             DrawTextStatusRow(
                 "Vibe Controller",
                 string.IsNullOrWhiteSpace(plugin.Configuration.VibeControllerName)

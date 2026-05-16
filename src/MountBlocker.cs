@@ -10,6 +10,7 @@ namespace SayusGagExtender;
 public unsafe sealed class MountBlocker : IDisposable
 {
     private readonly Plugin plugin;
+    public bool IsActive => IsBlockMoodleActiveCached();
 
     private delegate bool UseActionDelegate(
         ActionManager* actionManager,

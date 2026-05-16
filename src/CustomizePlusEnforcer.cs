@@ -13,7 +13,7 @@ namespace SayusGagExtender
         private readonly Dictionary<Guid, bool> lastWantedProfileStates = new();
         private DateTime onUpdateNextUTC = DateTime.MinValue;
         private readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
-        public bool IsEnforcing = false;
+        public bool IsActive = false;
         public sealed class CustomizePlusEnforcerConfig
         {
             public Guid ProfileId { get; set; } = Guid.Empty;
@@ -88,7 +88,7 @@ namespace SayusGagExtender
 
         public void Enforce()
         {
-            IsEnforcing = false;
+            IsActive = false;
 
             if (!plugin.Configuration.CustomizePlusEnforcerEnabled)
                 return;
@@ -114,7 +114,7 @@ namespace SayusGagExtender
 
                 if (shouldBeActive)
                 {
-                    IsEnforcing = true;
+                    IsActive = true;
                     anyLinkedProfileShouldBeActive = true;
                 }
 
