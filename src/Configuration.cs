@@ -54,8 +54,11 @@ public class Configuration : IPluginConfiguration
     public bool EmoteEnforcerEnabled { get; set; } = false;
     public List<EmoteEnforcer.EmoteEnforcerEmoteConfig> EmoteEnforcerEmotes { get; set; } = new();
     public string EmoteEnforcerCancelCommand { get; set; } = "/quack eval /sit \"/wait 0.5\" /sit";
-
-
+    public bool CustomizePlusEnforcerEnabled { get; set; }
+    public List<CustomizePlusEnforcer.CustomizePlusEnforcerConfig> CustomizePlusEnforcerProfiles { get; set; } = new();
+    public Guid CustomizePlusDefaultProfileId { get; set; } = Guid.Empty;
+    public string CustomizePlusDefaultProfileName { get; set; } = string.Empty;
+    public string CustomizePlusDefaultProfileVirtualPath { get; set; } = string.Empty;
 
 
 

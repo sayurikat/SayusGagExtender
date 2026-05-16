@@ -18,6 +18,7 @@ namespace SayusGagExtender
 
         private DateTime nextEmoteCommandUTC = DateTime.MinValue;
         private readonly TimeSpan EmoteCommandCooldown = TimeSpan.FromSeconds(2);
+        public bool IsEnforcing = false;
 
         public class EmoteEnforcerEmoteConfig
         {
@@ -87,8 +88,8 @@ namespace SayusGagExtender
 
         public void Enforce()
         {
+            IsEnforcing = false;
 
-            
             if (!plugin.Configuration.EmoteEnforcerEnabled)
             {
                 CancelAllEnforcerStartedEmotesOnce();
@@ -103,6 +104,7 @@ namespace SayusGagExtender
             
             var activeState = GetActiveState();
 
+            
             foreach (var emoteConfig in plugin.Configuration.EmoteEnforcerEmotes)
             {
                 if (emoteConfig.EmoteId == 0)
@@ -113,10 +115,19 @@ namespace SayusGagExtender
 
                 var shouldBeActive = ShouldEmoteBeActive(emoteConfig, activeState);
                 lastWantedEmoteStates[emoteConfig.EmoteId] = shouldBeActive;
+                
+                if (shouldBeActive)
+                {
+                    IsEnforcing = true;
+                    EnsureEmoteState(emoteConfig, shouldBeActive);
 
-                EnsureEmoteState(emoteConfig, shouldBeActive);
+                    //only one emote!
+                    break;
+                }
+                
             }
 
+            
             CleanupNoLongerConfiguredTrackedEmotes();
         }
 

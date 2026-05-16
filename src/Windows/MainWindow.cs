@@ -98,11 +98,15 @@ public class MainWindow : Window, IDisposable
 
             DrawFeaturesRow("Emote Guard", configuration.EmoteGuardEnabled);
             DrawFeaturesRow("Hand Guard", configuration.HandGuardEnabled);
-            DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled);
-            DrawFeaturesRow("Auto Vibe", configuration.AutoVibeEnabled);
             DrawFeaturesRow("Teleport Block", configuration.TeleportBlockFeature);
             DrawFeaturesRow("Mount Block", configuration.MountBlockFeature);
             DrawFeaturesRow("Job Switch Block", configuration.JobSwitchBlockFeature);
+            DrawFeaturesRow("Moodle Enforcer", configuration.MoodleEnforcerEnabled);
+            DrawFeaturesRow("Penumbra Enforcer", configuration.PenumbraEnforcerEnabled);
+            DrawFeaturesRow("C+ Enforcer", configuration.CustomizePlusEnforcerEnabled);
+            DrawFeaturesRow("Emote Enforcer", configuration.EmoteEnforcerEnabled);
+            DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled);
+            DrawFeaturesRow("Auto Vibe", configuration.AutoVibeEnabled);
         }
     }
 
@@ -131,6 +135,18 @@ public class MainWindow : Window, IDisposable
             ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 120);
 
             DrawStatusRow("Hand Restraints", plugin.WeaponSheather.wearsRestrictedItems);
+
+            DrawStatusRow("Teleport block Moodle", plugin.TeleportBlocker.IsBlockMoodleActiveCached());
+            DrawStatusRow("Mount block Moodle", plugin.MountBlocker.IsBlockMoodleActiveCached());
+            DrawStatusRow("Job switch block Moodle", plugin.JobSwitchBlocker.IsBlockMoodleActiveCached());
+
+
+            DrawStatusRow("Moodle Enforcing", plugin.MoodleEnforcer.IsEnforcing);
+            DrawStatusRow("Penumbra Enforcing", plugin.PenumbraEnforcer.IsEnforcing);
+            DrawStatusRow("C+ Enforcing", plugin.CustomizePlusEnforcer.IsEnforcing);
+            DrawStatusRow("Emote Enforcing", plugin.EmoteEnforcer.IsEnforcing);
+
+
             DrawStatusRow("Shock Collar", plugin.RandomZapSender.wearsRestrictedItems);
             DrawTextStatusRow(
                 "Zap Controller",
@@ -147,15 +163,10 @@ public class MainWindow : Window, IDisposable
                     : plugin.Configuration.VibeControllerName,
                 !string.IsNullOrWhiteSpace(plugin.Configuration.VibeControllerName));
 
-            DrawStatusRow("Mount block Moodle", plugin.MountBlocker.IsBlockMoodleActiveCached());
-            DrawStatusRow("Job switch block Moodle", plugin.JobSwitchBlocker.IsBlockMoodleActiveCached());
-            DrawStatusRow("Teleport block Moodle", plugin.TeleportBlocker.IsBlockMoodleActiveCached());
-
+            DrawStatusRow("Blindfolded", plugin.BlindfoldMonitor.blindfolded);
             DrawStatusRow("Chatbox hidden", plugin.ChatMonitor.chatboxHidden);
             DrawStatusRow("Chatbox input hidden", plugin.ChatMonitor.chatboxInputHidden);
             DrawStatusRow("Chatbox input disabled", plugin.ChatMonitor.chatboxInputDisabled);
-
-            DrawStatusRow("Blindfolded", plugin.BlindfoldMonitor.blindfolded);
         }
     }
     private static void DrawStatusRow(string label, bool enabled)

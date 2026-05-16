@@ -16,7 +16,7 @@ namespace SayusGagExtender
         private readonly Dictionary<string, bool> lastWantedModStates = new(StringComparer.OrdinalIgnoreCase);
         private DateTime onUpdateNextUTC = DateTime.MinValue;
         private readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
-
+        public bool IsEnforcing = false;
         public sealed class PenumbraEnforcerConfig
         {
             public string ModDirectory { get; set; } = string.Empty;
@@ -86,7 +86,7 @@ namespace SayusGagExtender
 
         public void Enforce()
         {
-            //Plugin.ChatGui.Print("GagSpeak Enforce.");
+            IsEnforcing = false;
 
             if (!plugin.Configuration.PenumbraEnforcerEnabled)
                 return;
@@ -114,6 +114,9 @@ namespace SayusGagExtender
                 // {
                 //     continue;
                 // }
+
+                if (shouldBeActive)
+                    IsEnforcing = true;
 
                 lastWantedModStates[modConfig.ModDirectory] = shouldBeActive;
 

@@ -68,6 +68,12 @@ public partial class ConfigWindow : Window, IDisposable
             ImGui.EndTabItem();
         }
 
+        if (ImGui.BeginTabItem("C+ Enforcer"))
+        {
+            DrawCustomizePlusEnforcerTab();
+            ImGui.EndTabItem();
+        }
+        
         if (ImGui.BeginTabItem("Emote Enforcer"))
         {
             DrawEmoteEnforcerTab();

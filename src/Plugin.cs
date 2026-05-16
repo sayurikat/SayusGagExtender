@@ -38,7 +38,8 @@ public sealed class Plugin : IDalamudPlugin
     public API.MoodlesApi MoodlesApi { get; private set; }
     public API.PenumbraApi PenumbraApi { get; private set; }
     public API.Chat2Api Chat2Api { get; private set; }
-    public EmoteApi EmoteApi { get; private set; }
+    public API.EmoteApi EmoteApi { get; private set; }
+    public API.CustomizePlusApi CustomizePlusApi { get; private set; }
     public API.GagSpeak.GagSpeakReflectionContext GagSpeakContext { get; private set; }
     public API.GagSpeak.GagSpeakRestraintSetApi GagSpeakRestraintSetApi { get; private set; }
     public API.GagSpeak.GagSpeakRestrictionsApi GagSpeakRestrictionsApi { get; private set; }
@@ -59,6 +60,7 @@ public sealed class Plugin : IDalamudPlugin
     public MoodleEnforcer MoodleEnforcer { get; set; }
     public PenumbraEnforcer PenumbraEnforcer { get; set; }
     public EmoteEnforcer EmoteEnforcer { get; set; }
+    public CustomizePlusEnforcer CustomizePlusEnforcer { get; set; }
 
     private const string CommandName = "/sge";
 
@@ -113,6 +115,7 @@ public sealed class Plugin : IDalamudPlugin
         this.MoodlesApi = new API.MoodlesApi(this);
         this.PenumbraApi = new API.PenumbraApi(this);
         this.EmoteApi = new API.EmoteApi(this);
+        this.CustomizePlusApi = new API.CustomizePlusApi(this);
         this.GagSpeakContext = new GagSpeakReflectionContext(this);
         this.GagSpeakRestraintSetApi = new GagSpeakRestraintSetApi(this, GagSpeakContext);
         this.GagSpeakRestrictionsApi = new GagSpeakRestrictionsApi(this, GagSpeakContext);
@@ -136,6 +139,7 @@ public sealed class Plugin : IDalamudPlugin
         MoodleEnforcer = new MoodleEnforcer(Instance);
         PenumbraEnforcer = new PenumbraEnforcer(Instance);
         EmoteEnforcer = new EmoteEnforcer(Instance);
+        CustomizePlusEnforcer = new CustomizePlusEnforcer(Instance);
 
 
     }
@@ -168,12 +172,14 @@ public sealed class Plugin : IDalamudPlugin
         GagSpeakGagsApi?.Dispose();
         MoodlesApi?.Dispose();
         PenumbraApi?.Dispose();
+        CustomizePlusApi.Dispose();
         ChatMonitor?.Dispose();
         BlindfoldMonitor?.Dispose();
         MirrorGagSpeak?.Dispose();
         MoodleEnforcer?.Dispose();
         PenumbraEnforcer?.Dispose();
         EmoteEnforcer?.Dispose();
+        CustomizePlusEnforcer?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);

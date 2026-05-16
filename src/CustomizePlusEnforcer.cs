@@ -1,6 +1,4 @@
-using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
-using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,75 +6,83 @@ using static SayusGagExtender.API.GagSpeak.GagSpeakReflectionContext;
 
 namespace SayusGagExtender
 {
-    public sealed class MoodleEnforcer : IDisposable
+    public sealed class CustomizePlusEnforcer : IDisposable
     {
         private readonly Plugin plugin;
 
-        //private readonly Dictionary<Guid, bool> lastWantedMoodleStates = new();
+        private readonly Dictionary<Guid, bool> lastWantedProfileStates = new();
         private DateTime onUpdateNextUTC = DateTime.MinValue;
-        private TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
-        private DateTime betweenAreasNextUTC = DateTime.MinValue;
-        private TimeSpan betweenAreasCooldown = TimeSpan.FromSeconds(10);
+        private readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
         public bool IsEnforcing = false;
-        public class MoodleEnforcerMoodleConfig
+        public sealed class CustomizePlusEnforcerConfig
         {
-            public Guid MoodleId { get; set; } = Guid.Empty;
-            public string MoodleName { get; set; } = string.Empty;
-            public bool IsMoodleEnabled { get; set; } = false;
+            public Guid ProfileId { get; set; } = Guid.Empty;
+            public string ProfileName { get; set; } = string.Empty;
+            public string VirtualPath { get; set; } = string.Empty;
+
             public List<GagSpeakItem> RestraintSets { get; set; } = new();
             public List<GagSpeakItem> Restrictions { get; set; } = new();
             public List<GagSpeakItem> Gags { get; set; } = new();
         }
 
-        
-
-        public MoodleEnforcer(Plugin plugin)
+        public CustomizePlusEnforcer(Plugin plugin)
         {
             this.plugin = plugin;
 
             Plugin.Framework.Update += this.OnFrameworkUpdate;
+
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnAnyChanged;
             plugin.GagSpeakGagsApi.OnGagsChanged += this.OnAnyChanged;
             plugin.GagSpeakRestraintSetApi.OnRestraintSetChanged += this.OnAnyChanged;
-            plugin.MoodlesApi.ActiveMoodlesChanged += this.OnAnyChanged;
         }
+
         public void Dispose()
         {
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
+
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= this.OnAnyChanged;
             plugin.GagSpeakGagsApi.OnGagsChanged -= this.OnAnyChanged;
             plugin.GagSpeakRestraintSetApi.OnRestraintSetChanged -= this.OnAnyChanged;
-            plugin.MoodlesApi.ActiveMoodlesChanged -= this.OnAnyChanged;
         }
+
         private void OnAnyChanged(object obj)
         {
             Enforce();
         }
+
         private void OnFrameworkUpdate(IFramework framework)
         {
             if (onUpdateNextUTC > DateTime.UtcNow)
                 return;
+
             onUpdateNextUTC = DateTime.UtcNow + OnUpdateCooldown;
-            
+
             Enforce();
         }
 
-        public MoodleEnforcerMoodleConfig GetOrCreateMoodleEnforcerConfig(Guid moodleId, string moodleName)
+        public CustomizePlusEnforcerConfig GetOrCreateCustomizePlusEnforcerConfig(
+            Guid profileId,
+            string profileName,
+            string virtualPath = "")
         {
-            var existing = plugin.Configuration.MoodleEnforcerMoodles.FirstOrDefault(x => x.MoodleId == moodleId);
+            var existing = plugin.Configuration.CustomizePlusEnforcerProfiles
+                .FirstOrDefault(x => x.ProfileId == profileId);
+
             if (existing != null)
             {
-                existing.MoodleName = moodleName;
+                existing.ProfileName = profileName;
+                existing.VirtualPath = virtualPath;
                 return existing;
             }
 
-            var created = new MoodleEnforcerMoodleConfig
+            var created = new CustomizePlusEnforcerConfig
             {
-                MoodleId = moodleId,
-                MoodleName = moodleName,
+                ProfileId = profileId,
+                ProfileName = profileName,
+                VirtualPath = virtualPath,
             };
 
-            plugin.Configuration.MoodleEnforcerMoodles.Add(created);
+            plugin.Configuration.CustomizePlusEnforcerProfiles.Add(created);
             return created;
         }
 
@@ -84,51 +90,70 @@ namespace SayusGagExtender
         {
             IsEnforcing = false;
 
-            var now = DateTime.UtcNow;
-            if (Plugin.Condition[ConditionFlag.BetweenAreas])
-                betweenAreasNextUTC = now + betweenAreasCooldown;
-
-            if (now < betweenAreasNextUTC)
+            if (!plugin.Configuration.CustomizePlusEnforcerEnabled)
                 return;
 
-            //Plugin.ChatGui.Print("GagSpeak Enforce.");
-
-            if (!plugin.Configuration.MoodleEnforcerEnabled)
+            if (plugin.Configuration.CustomizePlusEnforcerProfiles.Count == 0)
+            {
+                EnsureDefaultProfileState(true);
                 return;
-
-            if (plugin.Configuration.MoodleEnforcerMoodles.Count == 0)
-                return;
-            //Plugin.ChatGui.Print("GagSpeak Enforce..");
+            }
 
             var activeState = GetActiveState();
+            var anyLinkedProfileShouldBeActive = false;
 
-            foreach (var moodleConfig in plugin.Configuration.MoodleEnforcerMoodles)
+            foreach (var profileConfig in plugin.Configuration.CustomizePlusEnforcerProfiles)
             {
-                if (moodleConfig.MoodleId == Guid.Empty)
+                if (profileConfig.ProfileId == Guid.Empty)
                     continue;
 
-                if (moodleConfig.Restrictions.Count + moodleConfig.Gags.Count + moodleConfig.RestraintSets.Count <= 0)
-                //if (!moodleConfig.IsMoodleEnabled)
+                if (profileConfig.Restrictions.Count + profileConfig.Gags.Count + profileConfig.RestraintSets.Count <= 0)
                     continue;
 
-                var shouldBeActive = ShouldMoodleBeActive(moodleConfig, activeState);
-
-                //if (lastWantedMoodleStates.TryGetValue(moodleConfig.MoodleId, out var lastState) &&
-                //    lastState == shouldBeActive)
-                //{
-                //    continue;
-                //}
-
-                //lastWantedMoodleStates[moodleConfig.MoodleId] = shouldBeActive;
+                var shouldBeActive = ShouldProfileBeActive(profileConfig, activeState);
 
                 if (shouldBeActive)
+                {
                     IsEnforcing = true;
+                    anyLinkedProfileShouldBeActive = true;
+                }
 
-                EnsureMoodleState(moodleConfig, shouldBeActive);
+                lastWantedProfileStates[profileConfig.ProfileId] = shouldBeActive;
+
+                EnsureProfileState(profileConfig, shouldBeActive);
+            }
+
+            EnsureDefaultProfileState(!anyLinkedProfileShouldBeActive);
+        }
+        private void EnsureDefaultProfileState(bool shouldBeActive)
+        {
+            var defaultProfileId = plugin.Configuration.CustomizePlusDefaultProfileId;
+
+            if (defaultProfileId == Guid.Empty)
+                return;
+
+            // If the same profile is also configured as a linked profile, do not fight
+            // the linked-profile logic. Linked config wins.
+            var isAlsoLinkedProfile = plugin.Configuration.CustomizePlusEnforcerProfiles
+                .Any(x => x.ProfileId == defaultProfileId);
+
+            if (isAlsoLinkedProfile)
+                return;
+
+            var isActive = plugin.CustomizePlusApi.IsProfileEnabled(defaultProfileId);
+
+            if (isActive == shouldBeActive)
+                return;
+
+            var ok = plugin.CustomizePlusApi.SetProfileEnabled(defaultProfileId, shouldBeActive);
+
+            if (!ok)
+            {
+                Plugin.ChatGui.PrintError(
+                    $"Failed to set default Customize+ profile '{plugin.Configuration.CustomizePlusDefaultProfileName}' ({defaultProfileId}) to {shouldBeActive}.");
             }
         }
-
-        private MoodleEnforcerActiveState GetActiveState()
+        private CustomizePlusEnforcerActiveState GetActiveState()
         {
             var activeGags = plugin.GagSpeakGagsApi
                 .GetActiveGags()
@@ -160,7 +185,7 @@ namespace SayusGagExtender
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            return new MoodleEnforcerActiveState
+            return new CustomizePlusEnforcerActiveState
             {
                 ActiveGagNames = activeGags,
                 ActiveRestraintSetIds = activeRestraintSetIds,
@@ -170,44 +195,36 @@ namespace SayusGagExtender
             };
         }
 
-        private bool ShouldMoodleBeActive(MoodleEnforcerMoodleConfig moodleConfig, MoodleEnforcerActiveState activeState)
+        private bool ShouldProfileBeActive(
+            CustomizePlusEnforcerConfig profileConfig,
+            CustomizePlusEnforcerActiveState activeState)
         {
-            if (ContainsAnyById(moodleConfig.RestraintSets, activeState.ActiveRestraintSetIds))
+            if (ContainsAnyByIdOrName(
+                    profileConfig.RestraintSets,
+                    activeState.ActiveRestraintSetIds,
+                    activeState.ActiveRestraintSetNames))
             {
                 return true;
             }
 
-            if (ContainsAnyById(moodleConfig.Restrictions, activeState.ActiveRestrictionIds))
+            if (ContainsAnyByIdOrName(
+                    profileConfig.Restrictions,
+                    activeState.ActiveRestrictionIds,
+                    activeState.ActiveRestrictionNames))
             {
-                //Plugin.ChatGui.Print("ActiveRestrictionIds");
-                //Plugin.ChatGui.Print($"ActiveRestrictions {moodleConfig.MoodleName}");
                 return true;
             }
 
-            if (ContainsAnyByName(moodleConfig.Gags, activeState.ActiveGagNames))
+            if (ContainsAnyByName(
+                    profileConfig.Gags,
+                    activeState.ActiveGagNames))
             {
-                //Plugin.ChatGui.Print($"ActiveGags {moodleConfig.MoodleName}");
                 return true;
             }
 
             return false;
         }
 
-        private static bool ContainsAnyById(
-            List<GagSpeakItem> configuredItems,
-            HashSet<Guid> activeIds)
-        {
-            foreach (var item in configuredItems)
-            {
-                if (item.Id != Guid.Empty && activeIds.Contains(item.Id))
-                {
-                    //Plugin.ChatGui.Print($"ActiveRestrictions {item.Name}");
-                    return true; 
-                }
-            }
-
-            return false;
-        }
         private static bool ContainsAnyByIdOrName(
             List<GagSpeakItem> configuredItems,
             HashSet<Guid> activeIds,
@@ -238,22 +255,27 @@ namespace SayusGagExtender
             return false;
         }
 
-        private void EnsureMoodleState(MoodleEnforcerMoodleConfig moodleConfig, bool shouldBeActive)
+        private void EnsureProfileState(
+            CustomizePlusEnforcerConfig profileConfig,
+            bool shouldBeActive)
         {
-            var isActive = plugin.MoodlesApi.IsStatusActive(moodleConfig.MoodleId);
+            var isActive = plugin.CustomizePlusApi.IsProfileEnabled(profileConfig.ProfileId);
 
             if (isActive == shouldBeActive)
                 return;
 
-            if (shouldBeActive)
-                plugin.MoodlesApi.ApplyMoodle(moodleConfig.MoodleId);
-            else
+            var ok = plugin.CustomizePlusApi.SetProfileEnabled(
+                profileConfig.ProfileId,
+                shouldBeActive);
+
+            if (!ok)
             {
-                plugin.MoodlesApi.RemoveMoodle(moodleConfig.MoodleId);
+                Plugin.ChatGui.PrintError(
+                    $"Failed to set Customize+ profile '{profileConfig.ProfileName}' ({profileConfig.ProfileId}) to {shouldBeActive}.");
             }
         }
 
-        private sealed class MoodleEnforcerActiveState
+        private sealed class CustomizePlusEnforcerActiveState
         {
             public HashSet<Guid> ActiveGagIds { get; init; } = new();
             public HashSet<string> ActiveGagNames { get; init; } = new(StringComparer.OrdinalIgnoreCase);
