@@ -10,62 +10,98 @@ namespace SayusGagExtender
     public unsafe sealed class WeaponSheather : IDisposable
     {
         private readonly Plugin plugin;
-        public bool wearsRestrictedItems { get; private set;  } = false;
+
+        public bool wearsRestrictedItems { get; private set; } = false;
 
         private DateTime lastSheatheAttemptUtc = DateTime.MinValue;
-        private DateTime lastItemChekUtc = DateTime.MinValue;
+        private DateTime lastItemCheckUtc = DateTime.MinValue;
+        private DateTime lastSheatheErrorUtc = DateTime.MinValue;
+
+        private const int RestrictionCheckMs = 5000;
+        private const int SheatheAttemptMs = 125;
+        private const int ErrorThrottleMs = 3000;
 
         public WeaponSheather(Plugin plugin)
         {
             this.plugin = plugin;
             Plugin.Framework.Update += this.OnFrameworkUpdate;
+
+            this.CheckIfWearingRestrictiveItems();
         }
 
         public void Dispose()
         {
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
         }
+
         public void Enable()
         {
             plugin.Configuration.HandGuardEnabled = true;
+            this.CheckIfWearingRestrictiveItems();
         }
+
+        public void ForceRefreshRestrictions()
+        {
+            this.CheckIfWearingRestrictiveItems();
+            this.lastItemCheckUtc = DateTime.UtcNow;
+        }
+
+        public void ForceSheatheNow()
+        {
+            if (!plugin.Configuration.HandGuardEnabled)
+                return;
+
+            this.ForceRefreshRestrictions();
+
+            if (!this.wearsRestrictedItems)
+                return;
+
+            this.SheatheWeapon();
+            this.lastSheatheAttemptUtc = DateTime.UtcNow;
+        }
+
         private void CheckIfWearingRestrictiveItems()
         {
-            wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(plugin.Configuration.HandGuardBlockedItems);
+            try
+            {
+                this.wearsRestrictedItems =
+                    plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(
+                        plugin.Configuration.HandGuardBlockedItems);
+            }
+            catch
+            {
+                this.wearsRestrictedItems = false;
+            }
         }
+
         private void OnFrameworkUpdate(IFramework framework)
         {
             if (!plugin.Configuration.HandGuardEnabled)
                 return;
 
-
             var now = DateTime.UtcNow;
 
-            if ((now - this.lastItemChekUtc).TotalMilliseconds > 5000)
+            if ((now - this.lastItemCheckUtc).TotalMilliseconds >= RestrictionCheckMs)
             {
-                CheckIfWearingRestrictiveItems();
-                this.lastItemChekUtc = now;
+                this.CheckIfWearingRestrictiveItems();
+                this.lastItemCheckUtc = now;
             }
 
-            if (!wearsRestrictedItems)
+            if (!this.wearsRestrictedItems)
                 return;
-            
-
 
             var localPlayer = Plugin.ObjectTable.LocalPlayer;
             if (localPlayer == null)
                 return;
 
             var weaponDrawn = localPlayer.StatusFlags.HasFlag(StatusFlags.WeaponOut);
-
             if (!weaponDrawn)
                 return;
 
-            if ((now - this.lastSheatheAttemptUtc).TotalMilliseconds < 500)
+            if ((now - this.lastSheatheAttemptUtc).TotalMilliseconds < SheatheAttemptMs)
                 return;
-            Plugin.ChatGui.Print($"Weapon drawn");
-            this.lastSheatheAttemptUtc = now;
 
+            this.lastSheatheAttemptUtc = now;
             this.SheatheWeapon();
         }
 
@@ -73,59 +109,30 @@ namespace SayusGagExtender
         {
             try
             {
-                //Plugin.CommandManager.ProcessCommand("/bm");
-                //ExecuteNativeCommand("/bm");
                 plugin.EmoteGuard?.QueueGuardedEmote("/bm");
-                Plugin.ChatGui.Print($"Sending /bm");
+
+                // If you later decide guarded queue is too slow, test this instead:
+                // Plugin.CommandManager.ProcessCommand("/bm");
+                //
+                // Or this native path:
+                // ExecuteNativeCommand("/bm");
             }
             catch (Exception ex)
             {
-                Plugin.ChatGui.PrintError($"Failed to sheathe weapon: {ex.Message}");
+                this.PrintSheatheErrorThrottled(ex);
             }
         }
-        private static void ExecuteNativeCommand(string command)
+
+        private void PrintSheatheErrorThrottled(Exception ex)
         {
-            if (string.IsNullOrWhiteSpace(command))
+            var now = DateTime.UtcNow;
+
+            if ((now - this.lastSheatheErrorUtc).TotalMilliseconds < ErrorThrottleMs)
                 return;
 
-            command = command.Trim();
+            this.lastSheatheErrorUtc = now;
 
-            if (!command.StartsWith('/'))
-                return;
-
-            var shellModule = RaptureShellModule.Instance();
-            var uiModule = UIModule.Instance();
-
-            if (shellModule == null || uiModule == null)
-                return;
-
-            Utf8String cmd = default;
-
-            try
-            {
-                cmd.SetString(command);
-
-                cmd.SanitizeString(
-                    AllowedEntities.Unknown9 |
-                    AllowedEntities.Payloads |
-                    AllowedEntities.OtherCharacters |
-                    AllowedEntities.SpecialCharacters |
-                    AllowedEntities.Numbers |
-                    AllowedEntities.LowercaseLetters |
-                    AllowedEntities.UppercaseLetters);
-
-                if (cmd.Length > 500)
-                    return;
-
-                shellModule->ExecuteCommandInner(&cmd, uiModule);
-
-                // If your ClientStructs build uses the overload with a bool:
-                // shellModule->ExecuteCommandInner(&cmd, uiModule, false);
-            }
-            finally
-            {
-                cmd.Dtor(true);
-            }
+            Plugin.ChatGui.PrintError($"Failed to sheathe weapon: {ex.Message}");
         }
     }
 }

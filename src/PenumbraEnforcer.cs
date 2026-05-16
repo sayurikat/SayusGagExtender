@@ -15,7 +15,7 @@ namespace SayusGagExtender
 
         private readonly Dictionary<string, bool> lastWantedModStates = new(StringComparer.OrdinalIgnoreCase);
         private DateTime onUpdateNextUTC = DateTime.MinValue;
-        private readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(10);
+        private readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(1);
         public bool IsEnforcing = false;
         public sealed class PenumbraEnforcerConfig
         {

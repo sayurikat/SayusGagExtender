@@ -64,7 +64,6 @@ public sealed class Plugin : IDalamudPlugin
     public MovementBlocker MovementBlocker { get; set; }
 
     private const string CommandName = "/sge";
-
     public Configuration Configuration { get; init; }
 
     public readonly WindowSystem WindowSystem = new("Sayus Gag Extender");
