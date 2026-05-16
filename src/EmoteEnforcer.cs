@@ -236,7 +236,7 @@ namespace SayusGagExtender
                 currentEnforcedEmoteId = emoteId;
                 nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
             }
-            plugin.PenumbraApi.RedrawSelf();
+            //plugin.PenumbraApi.RedrawSelf();
         }
 
         private bool CanSendEmoteCommand()

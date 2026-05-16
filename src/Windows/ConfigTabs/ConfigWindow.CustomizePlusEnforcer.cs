@@ -87,37 +87,38 @@ namespace SayusGagExtender.Windows
                 if (profileEnabled)
                     ImGui.PopStyleColor();
 
-                ImGui.SameLine();
 
-                var ctrlHeld = ImGui.GetIO().KeyCtrl;
-
-                if (!ctrlHeld)
-                    ImGui.BeginDisabled();
-
-                if (ImGui.SmallButton("Remove"))
-                {
-                    if (ctrlHeld)
-                    {
-                        configuration.CustomizePlusEnforcerProfiles.RemoveAt(i);
-                        configuration.Save();
-                        ImGui.PopID();
-                        continue;
-                    }
-                }
-
-                if (!ctrlHeld)
-                    ImGui.EndDisabled();
-
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                {
-                    ImGui.SetTooltip(ctrlHeld
-                        ? "Remove this Customize+ profile from the enforcer."
-                        : "Hold CTRL to remove this Customize+ profile from the enforcer.");
-                }
+                
 
                 if (headerOpen)
                 {
                     ImGui.Indent();
+
+                    var ctrlHeld = ImGui.GetIO().KeyCtrl;
+
+                    if (!ctrlHeld)
+                        ImGui.BeginDisabled();
+
+                    if (ImGui.SmallButton("Remove"))
+                    {
+                        if (ctrlHeld)
+                        {
+                            configuration.CustomizePlusEnforcerProfiles.RemoveAt(i);
+                            configuration.Save();
+                            ImGui.PopID();
+                            continue;
+                        }
+                    }
+
+                    if (!ctrlHeld)
+                        ImGui.EndDisabled();
+
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    {
+                        ImGui.SetTooltip(ctrlHeld
+                            ? "Remove this Customize+ profile from the enforcer."
+                            : "Hold CTRL to remove this Customize+ profile from the enforcer.");
+                    }
 
                     ImGui.TextDisabled($"Profile ID: {profileConfig.ProfileId}");
 

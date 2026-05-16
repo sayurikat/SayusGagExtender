@@ -69,17 +69,13 @@ public unsafe sealed class TeleportBlocker : IDisposable
         //Plugin.ChatGui.Print($"Use Action");
         if (this.Enabled && IsTeleportOrReturn(actionType, actionId))
         {
-            //Plugin.ChatGui.Print($"this.Enabled && IsTeleportOrReturn");
-            if (!string.IsNullOrEmpty(plugin.Configuration.TeleportBlockMoodle))
+            //Plugin.ChatGui.Print($"!string.IsNullOrEmpty");
+            if (IsBlockMoodleActiveCached(forceRefresh: true))
             {
-                //Plugin.ChatGui.Print($"!string.IsNullOrEmpty");
-                if (IsBlockMoodleActiveCached(forceRefresh: true))
-                {
-                    //Plugin.ChatGui.Print($"Blocked teleport / return action due to active moodle: Type ={ actionType}, Id ={ actionId}, Moodle = {plugin.Configuration.TeleportBlockMoodle}");
-                    Plugin.ChatGui.Print($"Blocked teleport / return action");
-                    return false;
-                }
-            } 
+                //Plugin.ChatGui.Print($"Blocked teleport / return action due to active moodle: Type ={ actionType}, Id ={ actionId}, Moodle = {plugin.Configuration.TeleportBlockMoodle}");
+                Plugin.ChatGui.Print($"Blocked teleport / return action");
+                return false;
+            }
             //Plugin.ChatGui.Print($"Blocked teleport /return action: Type ={ actionType}, Id ={ actionId}");
             //return false;
         }
@@ -96,23 +92,24 @@ public unsafe sealed class TeleportBlocker : IDisposable
     }
     public bool IsBlockMoodleActiveCached(bool forceRefresh = false)
     {
-        var moodleId = plugin.Configuration.TeleportBlockMoodle;
-
-        if (string.IsNullOrEmpty(moodleId))
-        {
-            this.cachedMoodleActive = false;
+        var moodles = plugin.Configuration.TeleportBlockMoodles;
+        if (moodles == null || moodles.Count == 0)
             return false;
-        }
 
         var now = Environment.TickCount64;
-
-        // Moodle polling throttled to every 5 seconds.
         if (!forceRefresh && now < this.nextMoodleRefreshMs)
             return this.cachedMoodleActive;
 
-        this.nextMoodleRefreshMs = now + 5000;
+        foreach (var moodle in moodles)
+        {
+            var id = moodle.Key;
+            if (id == null || id == Guid.Empty)
+                continue;
 
-        this.cachedMoodleActive = plugin.MoodlesApi.IsStatusActive(moodleId);
+            this.cachedMoodleActive = plugin.MoodlesApi.IsStatusActive(id);
+        }
+
+        this.nextMoodleRefreshMs = now + 5000;
         return this.cachedMoodleActive;
     }
 

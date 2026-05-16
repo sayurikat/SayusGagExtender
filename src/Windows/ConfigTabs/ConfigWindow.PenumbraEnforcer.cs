@@ -72,37 +72,38 @@ namespace SayusGagExtender.Windows
                 if (modEnabled)
                     ImGui.PopStyleColor();
 
-                ImGui.SameLine();
 
-                var ctrlHeld = ImGui.GetIO().KeyCtrl;
-
-                if (!ctrlHeld)
-                    ImGui.BeginDisabled();
-
-                if (ImGui.SmallButton("Remove"))
-                {
-                    if (ctrlHeld)
-                    {
-                        configuration.PenumbraEnforcerMods.RemoveAt(i);
-                        configuration.Save();
-                        ImGui.PopID();
-                        continue;
-                    }
-                }
-
-                if (!ctrlHeld)
-                    ImGui.EndDisabled();
-
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                {
-                    ImGui.SetTooltip(ctrlHeld
-                        ? "Remove this Penumbra mod from the enforcer."
-                        : "Hold CTRL to remove this Penumbra mod from the enforcer.");
-                }
+                
 
                 if (headerOpen)
                 {
                     ImGui.Indent();
+
+                    var ctrlHeld = ImGui.GetIO().KeyCtrl;
+
+                    if (!ctrlHeld)
+                        ImGui.BeginDisabled();
+
+                    if (ImGui.SmallButton("Remove"))
+                    {
+                        if (ctrlHeld)
+                        {
+                            configuration.PenumbraEnforcerMods.RemoveAt(i);
+                            configuration.Save();
+                            ImGui.PopID();
+                            continue;
+                        }
+                    }
+
+                    if (!ctrlHeld)
+                        ImGui.EndDisabled();
+
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    {
+                        ImGui.SetTooltip(ctrlHeld
+                            ? "Remove this Penumbra mod from the enforcer."
+                            : "Hold CTRL to remove this Penumbra mod from the enforcer.");
+                    }
 
                     ImGui.TextDisabled($"Directory: {modConfig.ModDirectory}");
 

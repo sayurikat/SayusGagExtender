@@ -123,24 +123,24 @@ public unsafe sealed class MountBlocker : IDisposable
 
     public bool IsBlockMoodleActiveCached(bool forceRefresh = false)
     {
-        var moodleId = plugin.Configuration.MountBlockMoodle;
-
-        if (string.IsNullOrEmpty(moodleId))
-        {
-            this.cachedMoodleActive = false;
+        var moodles = plugin.Configuration.MountBlockMoodles;
+        if (moodles == null || moodles.Count == 0)
             return false;
-        }
 
         var now = Environment.TickCount64;
-
-        // This keeps Moodle polling throttled.
-        // UseAction can call this too, but it won't spam the API.
         if (!forceRefresh && now < this.nextMoodleRefreshMs)
             return this.cachedMoodleActive;
 
-        this.nextMoodleRefreshMs = now + 5000;
+        foreach (var moodle in moodles)
+        {
+            var id = moodle.Key;
+            if (id == null || id == Guid.Empty)
+                continue;
 
-        this.cachedMoodleActive = plugin.MoodlesApi.IsStatusActive(moodleId);
+            this.cachedMoodleActive = plugin.MoodlesApi.IsStatusActive(id);
+        }
+
+        this.nextMoodleRefreshMs = now + 5000;
         return this.cachedMoodleActive;
     }
 

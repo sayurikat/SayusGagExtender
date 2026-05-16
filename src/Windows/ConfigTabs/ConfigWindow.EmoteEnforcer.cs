@@ -75,38 +75,40 @@ namespace SayusGagExtender.Windows
 
                 var headerOpen = ImGui.CollapsingHeader($"{displayName}##{emoteConfig.EmoteId}");
 
-                ImGui.SameLine();
+                //ImGui.SameLine();
 
-                var ctrlHeld = ImGui.GetIO().KeyCtrl;
-
-                if (!ctrlHeld)
-                    ImGui.BeginDisabled();
-
-                if (ImGui.SmallButton("Remove"))
-                {
-                    if (ctrlHeld)
-                    {
-                        configuration.EmoteEnforcerEmotes.RemoveAt(i);
-                        configuration.Save();
-
-                        ImGui.PopID();
-                        continue;
-                    }
-                }
-
-                if (!ctrlHeld)
-                    ImGui.EndDisabled();
-
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                {
-                    ImGui.SetTooltip(ctrlHeld
-                        ? "Remove this emote from the enforcer."
-                        : "Hold CTRL to remove this emote from the enforcer.");
-                }
+                
 
                 if (headerOpen)
                 {
                     ImGui.Indent();
+
+                    var ctrlHeld = ImGui.GetIO().KeyCtrl;
+
+                    if (!ctrlHeld)
+                        ImGui.BeginDisabled();
+
+                    if (ImGui.SmallButton("Remove"))
+                    {
+                        if (ctrlHeld)
+                        {
+                            configuration.EmoteEnforcerEmotes.RemoveAt(i);
+                            configuration.Save();
+
+                            ImGui.PopID();
+                            continue;
+                        }
+                    }
+
+                    if (!ctrlHeld)
+                        ImGui.EndDisabled();
+
+                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    {
+                        ImGui.SetTooltip(ctrlHeld
+                            ? "Remove this emote from the enforcer."
+                            : "Hold CTRL to remove this emote from the enforcer.");
+                    }
 
                     ImGui.TextDisabled($"Emote ID: {emoteConfig.EmoteId}");
 

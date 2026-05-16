@@ -33,11 +33,11 @@ public class Configuration : IPluginConfiguration
     public bool AutoVibeEnabled { get; set; } = true;
     public int AutoVibeCount { get; set; } = 8;
     public bool TeleportBlockFeature { get; set; } = true;
-    public string TeleportBlockMoodle { get; set; }
     public bool MountBlockFeature { get; set; } = true;
-    public string MountBlockMoodle { get; set; }
     public bool JobSwitchBlockFeature { get; set; } = true;
-    public string JobSwitchBlockMoodle { get; set; }
+    public Dictionary<Guid, string> TeleportBlockMoodles { get; set; } = new();
+    public Dictionary<Guid, string> MountBlockMoodles { get; set; } = new();
+    public Dictionary<Guid, string> JobSwitchBlockMoodles { get; set; } = new();
     public API.Chat2Api.Chat2Bounds Chat2Bounds { get; set; } = new API.Chat2Api.Chat2Bounds();
     public string Chat2HiddenTabName { get; set; }
     public string ActiveRestraintSet { get; set; }
