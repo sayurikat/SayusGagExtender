@@ -30,17 +30,18 @@ namespace SayusGagExtender.Windows
                 }
             }
 
+            if (ImGui.Button("Apply Chat2 position for Blindfold"))
+            {
+                plugin.Chat2Api.SetPositionAndSize(configuration.Chat2Bounds);
+            }
+
+
             var locked = configuration.Chat2BlindfoldLocked;
             if (ImGui.Checkbox("Locked (prevents moving while blindfold is active)", ref locked))
             {
                 configuration.Chat2BlindfoldLocked = locked;
                 configuration.Save();
 
-            }
-
-            if (ImGui.Button("Apply Chat2 position for Blindfold"))
-            {
-                plugin.Chat2Api.SetPositionAndSize(configuration.Chat2Bounds);
             }
 
 

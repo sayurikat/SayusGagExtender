@@ -15,8 +15,9 @@ namespace SayusGagExtender
         private readonly Plugin plugin;
         private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(2);
         private DateTime onUpdateNextUTC = DateTime.MinValue;
-        private bool forceGagSpeakState = false;
+        private bool forceGagSpeakState => plugin.Configuration.GagSpeakRestraintCloner;
         private bool appliedAfterReload = false;
+        public bool IsActive = false;
         private TimeSpan waitAfterReload = TimeSpan.FromSeconds(10);
         private DateTime waitUntilAfterReload = DateTime.MaxValue;
         private TimeSpan mirrorCooldown = TimeSpan.FromSeconds(5);
@@ -191,8 +192,10 @@ namespace SayusGagExtender
             if (name == plugin.Configuration.GagSpeakMasterName &&
                 world == plugin.Configuration.GagSpeakMasterWorld)
             {
+                IsActive = false;
                 return true;
             }
+            IsActive = true;
             return false;
         }
 

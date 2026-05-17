@@ -44,6 +44,7 @@ public class Configuration : IPluginConfiguration
     public Dictionary<int, string> ActiveRestrictions { get; set; } = new Dictionary<int, string>();
     public Dictionary<int, string> ActiveGags { get; set; } = new Dictionary<int, string>();
     public bool GagSpeakRestraintCloner { get; set; }
+    public bool GagSpeakEnforcedRestraintCloner { get; set; }
     public string GagSpeakMasterName { get; set; }
     public string GagSpeakMasterWorld { get; set; }
     public Dictionary<Guid, string> HandGuardBlockedItems { get; set; } = new Dictionary<Guid, string>();

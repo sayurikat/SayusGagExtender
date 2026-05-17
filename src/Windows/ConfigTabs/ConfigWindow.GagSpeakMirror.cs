@@ -10,9 +10,18 @@ namespace SayusGagExtender.Windows
         private void DrawGagSpeakMirrorTab()
         {
             var restraintCloner = configuration.GagSpeakRestraintCloner;
-            if (ImGui.Checkbox("Clone restraints to alt characters", ref restraintCloner))
+            if (ImGui.Checkbox("Mirror restriants to alt characters", ref restraintCloner))
             {
                 configuration.GagSpeakRestraintCloner = restraintCloner;
+                configuration.Save();
+            }
+
+            ImGui.Spacing();
+
+            var enforced = configuration.GagSpeakEnforcedRestraintCloner;
+            if (ImGui.Checkbox("Locked mirroring (Prevents from changing restraints on alt characters)", ref enforced))
+            {
+                configuration.GagSpeakEnforcedRestraintCloner = enforced;
                 configuration.Save();
             }
 

@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using ECommons;
 using System;
 using System.IO;
 using System.Numerics;
@@ -108,6 +109,8 @@ public class MainWindow : Window, IDisposable
             DrawFeaturesRow("Emote Enforcer", configuration.EmoteEnforcerEnabled, plugin.EmoteEnforcer.IsActive);
             DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled, plugin.RandomZapSender.IsActive);
             DrawFeaturesRow("Auto Vibe", configuration.AutoVibeEnabled, plugin.RandomVibeSender.IsActive);
+            DrawFeaturesRow("Chat2 Blindfold Feature", configuration.Chat2BlindfoldFeatureEnable, plugin.BlindfoldMonitor.IsActive);
+            DrawFeaturesRow("GagSpeak Mirror", configuration.GagSpeakRestraintCloner, plugin.MirrorGagSpeak.IsActive);
         }
     }
 

@@ -10,6 +10,7 @@ namespace SayusGagExtender
         public bool blindfolded { get; private set; } = false;
         private long nextRefreshMs;
         private bool forcePosition => plugin.Configuration.Chat2BlindfoldLocked;
+        public bool IsActive => plugin.Configuration.Chat2BlindfoldFeatureEnable && forcePosition && blindfolded;
 
         public BlindfoldMonitor(Plugin plugin)
         {
