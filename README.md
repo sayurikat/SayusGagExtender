@@ -1,3 +1,17 @@
+## Installation
+
+1. Open Dalamud Settings.
+2. Go to the **Experimental** tab.
+3. Add this custom plugin repository:
+
+   ```text
+   https://raw.githubusercontent.com/sayurikat/PartyPulse/refs/heads/master/repo/pluginmaster.json
+
+4. Open the Dalamud Plugin Installer.
+5. Search for Sayu's Gag Extender.
+6. Install the plugin.
+
+
 # Sayu's Gag Extender
 
 A Dalamud plugin for Final Fantasy XIV that extends the functionality of **GagSpeak** with extra automation, enforcement, and quality-of-life tools.
