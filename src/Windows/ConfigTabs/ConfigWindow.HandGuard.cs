@@ -46,37 +46,27 @@ namespace SayusGagExtender.Windows
             }
 
             var ctrlHeld = ImGui.GetIO().KeyCtrl;
+            var selectedRowWidth = 300f;
+
+            ImGui.Indent();
 
             foreach (var (guid, name) in blockedItems)
             {
-                ImGui.TextUnformatted(name);
 
-                ImGui.SameLine();
+                ImGui.PushID($"HandGuardBlocked-{guid}");
 
-                var buttonWidth = ImGui.CalcTextSize("X").X + ImGui.GetStyle().FramePadding.X * 2;
-                var availableWidth = ImGui.GetContentRegionAvail().X;
-
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + availableWidth - buttonWidth);
-
-                if (!ctrlHeld)
-                    ImGui.BeginDisabled();
-
-                if (ImGui.Button($"X##DeleteHandGuardItem{guid}"))
+                if (DrawGagSpeakItem(string.IsNullOrWhiteSpace(name) ? guid.ToString() : name, selectedRowWidth, ctrlHeld))
                 {
                     configuration.HandGuardBlockedItems.Remove(guid);
                     configuration.Save();
                 }
 
-                if (!ctrlHeld)
-                    ImGui.EndDisabled();
+                ImGui.PopID();
 
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                {
-                    ImGui.SetTooltip(ctrlHeld
-                        ? "Remove this restriction"
-                        : "Hold Ctrl to remove this restriction");
-                }
             }
+
+            ImGui.Unindent();
+
         }
 
         private List<KeyValuePair<Guid, String>> availableHandGuardItems = new();

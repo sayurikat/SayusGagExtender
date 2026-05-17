@@ -1,8 +1,11 @@
 using Dalamud.Bindings.ImGui;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using SayusGagExtender.API.GagSpeak;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Channels;
+using static ECommons.UIHelpers.AddonMasterImplementations.AddonMaster;
 using static SayusGagExtender.API.GagSpeak.GagSpeakReflectionContext;
 using static SayusGagExtender.MoodleEnforcer;
 
@@ -68,13 +71,6 @@ namespace SayusGagExtender.Windows
                 if (headerOpen)
                 {
                     ImGui.Indent();
-
-                    //var isMoodleEnabled = moodleConfig.IsMoodleEnabled;
-                    //if (ImGui.Checkbox($"Enable Moodle Enforcer for {moodleName}##enabled-{moodleId}", ref isMoodleEnabled))
-                    //{
-                    //    moodleConfig.IsMoodleEnabled = isMoodleEnabled;
-                    //    configuration.Save();
-                    //}
 
                     ImGui.Spacing();
 
@@ -206,7 +202,11 @@ namespace SayusGagExtender.Windows
 
             ImGui.Indent();
 
+            
+
+
             var ctrlHeld = ImGui.GetIO().KeyCtrl;
+            var selectedRowWidth = 300f;
 
             for (var i = configuredItems.Count - 1; i >= 0; i--)
             {
@@ -214,104 +214,59 @@ namespace SayusGagExtender.Windows
 
                 ImGui.PushID($"{selectorKey}-{i}-{item.Id}");
 
-                ImGui.BulletText(string.IsNullOrWhiteSpace(item.Name) ? item.Id.ToString() : item.Name);
-
-                ImGui.SameLine();
-
-                if (!ctrlHeld)
-                    ImGui.BeginDisabled();
-
-                if (ImGui.SmallButton("Remove"))
+                if (DrawGagSpeakItem(string.IsNullOrWhiteSpace(item.Name) ? item.Id.ToString() : item.Name, selectedRowWidth, ctrlHeld))
                 {
-                    if (ctrlHeld)
-                    {
-                        configuredItems.RemoveAt(i);
-                        configuration.Save();
-                    }
+                    configuredItems.RemoveAt(i);
+                    configuration.Save();
                 }
-
-                if (!ctrlHeld)
-                    ImGui.EndDisabled();
-
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                {
-                    ImGui.SetTooltip(ctrlHeld
-                        ? "Remove this entry."
-                        : "Hold CTRL to remove this entry.");
-                }
-
 
                 ImGui.PopID();
+
             }
 
             ImGui.Unindent();
         }
-
-        private void DrawSearchableMoodleEnforcerCombo(
-        string selectorKey,
-        string selectedName,
-        List<KeyValuePair<Guid, string>> orderedAvailable,
-        int selectedIndex)
+        
+        private static bool DrawGagSpeakItem(string text, float width, bool removeEnabled)
         {
-            ImGui.SetNextItemWidth(300);
+            var style = ImGui.GetStyle();
 
-            if (!moodleEnforcerSearchTexts.ContainsKey(selectorKey))
-                moodleEnforcerSearchTexts[selectorKey] = string.Empty;
+            const string removeLabel = "X";
 
-            if (ImGui.BeginCombo($"##add-{selectorKey}", selectedName))
-            {
-                var searchText = moodleEnforcerSearchTexts[selectorKey];
+            var rowHeight = ImGui.GetFrameHeight();
 
-                ImGui.SetNextItemWidth(-1);
+            var removeWidth =
+                ImGui.CalcTextSize(removeLabel).X +
+                style.FramePadding.X * 2f;
 
-                var searchInputId = $"##search-{selectorKey}";
+            var selectableWidth =
+                width -
+                removeWidth -
+                style.ItemSpacing.X;
 
-                if (ImGui.IsWindowAppearing())
-                {
-                    ImGui.SetKeyboardFocusHere();
-                }
+            selectableWidth = Math.Max(selectableWidth, 1f);
 
-                if (ImGui.InputTextWithHint(searchInputId, "Search...", ref searchText, 128))
-                {
-                    moodleEnforcerSearchTexts[selectorKey] = searchText;
-                }
+            ImGui.Selectable(
+                $"{text}##selected-row",
+                true,
+                ImGuiSelectableFlags.None,
+                new System.Numerics.Vector2(selectableWidth, rowHeight)
+            );
 
-                ImGui.Separator();
+            ImGui.SameLine();
 
-                var filteredItems = string.IsNullOrWhiteSpace(searchText)
-                    ? orderedAvailable
-                    : orderedAvailable
-                        .Where(x => x.Value.Contains(searchText, StringComparison.OrdinalIgnoreCase))
-                        .ToList();
+            if (!removeEnabled)
+                ImGui.BeginDisabled();
 
-                if (filteredItems.Count == 0)
-                {
-                    ImGui.TextDisabled("No matches.");
-                }
-                else
-                {
-                    foreach (var item in filteredItems)
-                    {
-                        var originalIndex = orderedAvailable.FindIndex(x => x.Key == item.Key);
-                        var isSelected = originalIndex == selectedIndex;
+            var clicked = ImGui.SmallButton(removeLabel);
 
-                        if (ImGui.Selectable($"{item.Value}##{selectorKey}-{item.Key}", isSelected))
-                        {
-                            moodleEnforcerSelectedAddIndices[selectorKey] = originalIndex;
+            if (!removeEnabled)
+                ImGui.EndDisabled();
 
-                            // Optional: clear search after picking something.
-                            moodleEnforcerSearchTexts[selectorKey] = string.Empty;
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(removeEnabled ? "Remove Item" : "Hold CTRL to enable remove");
 
-                            ImGui.CloseCurrentPopup();
-                        }
-                        
-                        if (isSelected)
-                            ImGui.SetItemDefaultFocus();
-                    }
-                }
-
-                ImGui.EndCombo();
-            }
+            return clicked;
         }
     }
 }

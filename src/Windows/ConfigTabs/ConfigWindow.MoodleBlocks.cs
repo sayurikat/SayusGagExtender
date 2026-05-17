@@ -186,34 +186,19 @@ namespace SayusGagExtender.Windows
 
             if (selected.Count > 0)
             {
+                ImGui.TextDisabled("Selected Moodles");
+
                 var ctrlHeld = ImGui.GetIO().KeyCtrl;
-                var buttonWidth = ImGui.CalcTextSize("X").X + ImGui.GetStyle().FramePadding.X * 2f;
 
                 foreach (var moodle in selected.OrderBy(x => x.Value, StringComparer.OrdinalIgnoreCase).ToArray())
                 {
                     ImGui.PushID($"{controlId}-{moodle.Key}");
 
-                    var rowStartX = ImGui.GetCursorPosX();
-                    ImGui.TextUnformatted(moodle.Value);
-                    ImGui.SameLine();
-
-                    // Align remove controls to the right edge of the local selector area, not the whole window.
-                    ImGui.SetCursorPosX(rowStartX + selectedRowWidth - buttonWidth);
-
-                    if (!ctrlHeld)
-                        ImGui.BeginDisabled();
-
-                    if (ImGui.SmallButton("X"))
+                    if (DrawSelectedMoodleRow(moodle.Value, selectedRowWidth, ctrlHeld))
                     {
                         selected.Remove(moodle.Key);
                         changed = true;
                     }
-
-                    if (!ctrlHeld)
-                        ImGui.EndDisabled();
-
-                    if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                        ImGui.SetTooltip(ctrlHeld ? "Remove Moodle" : "Hold CTRL to enable remove");
 
                     ImGui.PopID();
                 }
@@ -226,7 +211,47 @@ namespace SayusGagExtender.Windows
             if (changed)
                 onMoodlesChanged(selected);
         }
+        private static bool DrawSelectedMoodleRow(string text, float width, bool removeEnabled)
+        {
+            var style = ImGui.GetStyle();
 
+            const string removeLabel = "X";
+
+            var rowHeight = ImGui.GetFrameHeight();
+
+            var removeWidth =
+                ImGui.CalcTextSize(removeLabel).X +
+                style.FramePadding.X * 2f;
+
+            var selectableWidth =
+                width -
+                removeWidth -
+                style.ItemSpacing.X;
+
+            selectableWidth = Math.Max(selectableWidth, 1f);
+
+            ImGui.Selectable(
+                $"{text}##selected-row",
+                true,
+                ImGuiSelectableFlags.None,
+                new System.Numerics.Vector2(selectableWidth, rowHeight)
+            );
+
+            ImGui.SameLine();
+
+            if (!removeEnabled)
+                ImGui.BeginDisabled();
+
+            var clicked = ImGui.SmallButton(removeLabel);
+
+            if (!removeEnabled)
+                ImGui.EndDisabled();
+
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip(removeEnabled ? "Remove Moodle" : "Hold CTRL to enable remove");
+
+            return clicked;
+        }
         private void RefreshMoodleBlockOptionsIfNeeded()
         {
             if (moodleBlockOptionsLoading)

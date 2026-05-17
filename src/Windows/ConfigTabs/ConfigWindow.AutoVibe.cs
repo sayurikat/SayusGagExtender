@@ -81,37 +81,27 @@ namespace SayusGagExtender.Windows
             }
 
             var ctrlHeld = ImGui.GetIO().KeyCtrl;
+            var selectedRowWidth = 300f;
+
+            ImGui.Indent();
 
             foreach (var (guid, name) in requiredRestraints)
             {
-                ImGui.TextUnformatted(name);
 
-                ImGui.SameLine();
+                ImGui.PushID($"HandGuardBlocked-{guid}");
 
-                var buttonWidth = ImGui.CalcTextSize("X").X + ImGui.GetStyle().FramePadding.X * 2;
-                var availableWidth = ImGui.GetContentRegionAvail().X;
-
-                ImGui.SetCursorPosX(ImGui.GetCursorPosX() + availableWidth - buttonWidth);
-
-                if (!ctrlHeld)
-                    ImGui.BeginDisabled();
-
-                if (ImGui.Button($"X##DeleteAutoVibeRequiredRestraint{guid}"))
+                if (DrawGagSpeakItem(string.IsNullOrWhiteSpace(name) ? guid.ToString() : name, selectedRowWidth, ctrlHeld))
                 {
                     configuration.AutoVibeRequiredRestrictions.Remove(guid);
                     configuration.Save();
                 }
 
-                if (!ctrlHeld)
-                    ImGui.EndDisabled();
+                ImGui.PopID();
 
-                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                {
-                    ImGui.SetTooltip(ctrlHeld
-                        ? "Remove this required restraint"
-                        : "Hold Ctrl to remove this required restraint");
-                }
             }
+
+            ImGui.Unindent();
+
         }
 
         private void RefreshAutoVibeAvailableRestraints()
