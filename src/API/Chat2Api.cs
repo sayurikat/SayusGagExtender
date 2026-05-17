@@ -8,11 +8,15 @@ using System.Threading.Tasks;
 
 namespace SayusGagExtender.API
 {
-    
-
     public sealed class Chat2Api
     {
         private readonly Plugin plugin;
+
+        private const BindingFlags AllInstance =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
+        private const BindingFlags AllStatic =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
 
         private Type? chatTwoPluginType;
         private Type? chatLogWindowType;
@@ -23,8 +27,8 @@ namespace SayusGagExtender.API
         private object? chatLogWindow;
         private object? config;
 
-        private PropertyInfo? chatLogWindowProperty;
-        private FieldInfo? configField;
+        private MemberInfo? chatLogWindowMember;
+        private MemberInfo? configMember;
         private PropertyInfo? lastTabProperty;
         private PropertyInfo? wantedTabProperty;
         private MethodInfo? saveConfigMethod;
@@ -37,9 +41,12 @@ namespace SayusGagExtender.API
         private PropertyInfo? positionConditionProperty;
         private PropertyInfo? sizeConditionProperty;
 
-        private FieldInfo? tabsField;
-        private FieldInfo? inputDisabledField;
-        private FieldInfo? tabNameField;
+        private MemberInfo? tabsMember;
+        private MemberInfo? inputDisabledMember;
+        private MemberInfo? tabNameMember;
+
+        private string? lastFailure;
+
         public sealed class Chat2Bounds
         {
             public float X { get; set; }
@@ -62,6 +69,9 @@ namespace SayusGagExtender.API
                 Width = width;
                 Height = height;
             }
+
+            public override string ToString()
+                => $"{X}, {Y}, {Width}, {Height}";
         }
 
         public Chat2Api(Plugin plugin)
@@ -77,10 +87,13 @@ namespace SayusGagExtender.API
             {
                 Chat2Bounds? localBounds = null;
 
-                var success = WithRefresh(() =>
+                var success = WithRefresh("TryGetPositionAndSize", () =>
                 {
                     if (chatLogWindow == null)
+                    {
+                        lastFailure = "ChatLog window object was not found.";
                         return false;
+                    }
 
                     var pos = ReadVector2(lastWindowPosProperty, chatLogWindow)
                               ?? ReadVector2(positionProperty, chatLogWindow)
@@ -91,7 +104,14 @@ namespace SayusGagExtender.API
                                ?? Vector2.Zero;
 
                     localBounds = new Chat2Bounds(pos.X, pos.Y, size.X, size.Y);
-                    return IsValidBounds(localBounds);
+
+                    if (!IsValidBounds(localBounds))
+                    {
+                        lastFailure = $"Read invalid Chat2 bounds: {localBounds}";
+                        return false;
+                    }
+
+                    return true;
                 });
 
                 if (success)
@@ -117,16 +137,13 @@ namespace SayusGagExtender.API
 
             if (!IsValidBounds(bounds))
             {
-                Plugin.ChatGui.PrintError(
-                    $"Chat2Api: Refusing invalid Chat2 bounds: " +
-                    $"{bounds.X}, {bounds.Y}, {bounds.Width}, {bounds.Height}");
-
+                Plugin.ChatGui.PrintError($"Chat2Api: Refusing invalid Chat2 bounds: {bounds}");
                 return false;
             }
 
             if (bounds.X == 0f && bounds.Y == 0f && bounds.Width == 0f && bounds.Height == 0f)
             {
-                Plugin.ChatGui.PrintError("No Chat2 bounds saved yet.");
+                Plugin.ChatGui.PrintError("Chat2Api: No Chat2 bounds saved yet.");
                 return false;
             }
 
@@ -139,27 +156,45 @@ namespace SayusGagExtender.API
 
             if (!IsValidBounds(bounds))
             {
-                Plugin.ChatGui.PrintError(
-                    $"Chat2Api: Refusing invalid Chat2 bounds: " +
-                    $"{x}, {y}, {width}, {height}");
-
+                Plugin.ChatGui.PrintError($"Chat2Api: Refusing invalid Chat2 bounds: {bounds}");
                 return false;
             }
 
             try
             {
-                return WithRefresh(() =>
+                return WithRefresh("SetPositionAndSize", () =>
                 {
-                    if (positionProperty == null ||
-                        sizeProperty == null ||
-                        chatLogWindow == null)
+                    if (chatLogWindow == null)
+                    {
+                        lastFailure = "ChatLog window object was not found.";
                         return false;
+                    }
 
-                    WriteVector2(positionProperty, chatLogWindow, new Vector2(x, y));
-                    WriteVector2(sizeProperty, chatLogWindow, new Vector2(width, height));
+                    if (positionProperty == null)
+                    {
+                        lastFailure = "ChatLog Position property was not found.";
+                        return false;
+                    }
 
-                    // Force Chat2/Dalamud to apply it once.
-                    // Important: do NOT leave these as Always, or the window becomes locked.
+                    if (sizeProperty == null)
+                    {
+                        lastFailure = "ChatLog Size property was not found.";
+                        return false;
+                    }
+
+                    if (!WriteVector2(positionProperty, chatLogWindow, new Vector2(x, y)))
+                    {
+                        lastFailure = $"Could not write Position. Property type: {positionProperty.PropertyType.FullName}";
+                        return false;
+                    }
+
+                    if (!WriteVector2(sizeProperty, chatLogWindow, new Vector2(width, height)))
+                    {
+                        lastFailure = $"Could not write Size. Property type: {sizeProperty.PropertyType.FullName}";
+                        return false;
+                    }
+
+                    // Force ChatTwo/Dalamud to apply these on the next draw.
                     SetImGuiCond(positionConditionProperty, chatLogWindow, "Always");
                     SetImGuiCond(sizeConditionProperty, chatLogWindow, "Always");
 
@@ -187,7 +222,10 @@ namespace SayusGagExtender.API
             try
             {
                 if (!RefreshReflection())
+                {
+                    PrintLastFailure("GetActiveTab");
                     return -1;
+                }
 
                 return lastTabProperty?.GetValue(chatTwoPlugin) is int index ? index : -1;
             }
@@ -204,7 +242,10 @@ namespace SayusGagExtender.API
             try
             {
                 if (!RefreshReflection())
+                {
+                    PrintLastFailure("GetActiveTabName");
                     return null;
+                }
 
                 var index = GetActiveTab();
                 var tabs = GetTabs();
@@ -212,7 +253,7 @@ namespace SayusGagExtender.API
                 if (index < 0 || index >= tabs.Count)
                     return null;
 
-                return tabNameField?.GetValue(tabs[index]) as string;
+                return GetMemberValue(tabNameMember, tabs[index]) as string;
             }
             catch (Exception ex)
             {
@@ -226,12 +267,15 @@ namespace SayusGagExtender.API
         {
             try
             {
-                return WithRefresh(() =>
+                return WithRefresh("SetActiveTab", () =>
                 {
                     var tabs = GetTabs();
 
                     if (index < 0 || index >= tabs.Count)
+                    {
+                        lastFailure = $"Tab index {index} is out of range. Tab count: {tabs.Count}";
                         return false;
+                    }
 
                     if (changeTabMethod != null && chatLogWindow != null)
                     {
@@ -239,8 +283,14 @@ namespace SayusGagExtender.API
                         return true;
                     }
 
-                    wantedTabProperty?.SetValue(chatTwoPlugin, index);
-                    return true;
+                    if (wantedTabProperty != null && chatTwoPlugin != null)
+                    {
+                        wantedTabProperty.SetValue(chatTwoPlugin, index);
+                        return true;
+                    }
+
+                    lastFailure = "Neither ChatLog.ChangeTab nor Plugin.WantedTab was available.";
+                    return false;
                 });
             }
             catch (Exception ex)
@@ -256,18 +306,22 @@ namespace SayusGagExtender.API
             try
             {
                 if (!RefreshReflection())
+                {
+                    PrintLastFailure("SetActiveTab(name)");
                     return false;
+                }
 
                 var tabs = GetTabs();
 
                 for (var i = 0; i < tabs.Count; i++)
                 {
-                    var tabName = tabNameField?.GetValue(tabs[i]) as string;
+                    var tabName = GetMemberValue(tabNameMember, tabs[i]) as string;
 
                     if (string.Equals(tabName, name, StringComparison.OrdinalIgnoreCase))
                         return SetActiveTab(i);
                 }
 
+                Plugin.ChatGui.PrintError($"Chat2Api.SetActiveTab: No Chat2 tab named \"{name}\" was found.");
                 return false;
             }
             catch (Exception ex)
@@ -282,15 +336,18 @@ namespace SayusGagExtender.API
         {
             try
             {
-                return WithRefresh(() =>
+                return WithRefresh("SetInputDisabledForAllTabs", () =>
                 {
                     var tabs = GetTabs();
 
-                    if (inputDisabledField == null)
+                    if (inputDisabledMember == null)
+                    {
+                        lastFailure = "Tab.InputDisabled member was not found.";
                         return false;
+                    }
 
                     foreach (var tab in tabs)
-                        inputDisabledField.SetValue(tab, disabled);
+                        SetMemberValue(inputDisabledMember, tab, disabled);
 
                     saveConfigMethod?.Invoke(chatTwoPlugin, null);
                     return true;
@@ -298,7 +355,7 @@ namespace SayusGagExtender.API
             }
             catch (Exception ex)
             {
-                //Plugin.ChatGui.PrintError($"Chat2Api.SetInputDisabledForAllTabs failed: {ex}");
+                Plugin.ChatGui.PrintError($"Chat2Api.SetInputDisabledForAllTabs failed: {ex}");
                 ClearCache();
                 return false;
             }
@@ -308,7 +365,7 @@ namespace SayusGagExtender.API
         {
             _ = Task.Run(async () =>
             {
-                // Give Chat2/Dalamud time to draw once with the forced position/size.
+                // Let ChatTwo/Dalamud draw once with the forced position/size.
                 await Task.Delay(250);
 
                 try
@@ -323,15 +380,11 @@ namespace SayusGagExtender.API
                             if (!ReferenceEquals(chatLogWindow, targetWindow))
                                 return;
 
-                            // Critical part:
-                            // Clearing the condition alone is not enough.
-                            // ImGuiCond.None still means "apply unconditionally".
-                            // We must clear the actual nullable Position/Size values.
+                            // ChatTwo currently clears Position itself during DrawChatLog,
+                            // but doing this here too keeps the API safe across versions.
                             ClearVector2Property(positionProperty, chatLogWindow);
                             ClearVector2Property(sizeProperty, chatLogWindow);
 
-                            // Optional cleanup. These do not matter once Position/Size are null,
-                            // but reset them to Once instead of None to avoid accidental hard-locking.
                             SetImGuiCond(positionConditionProperty, chatLogWindow, "Once");
                             SetImGuiCond(sizeConditionProperty, chatLogWindow, "Once");
                         }
@@ -347,47 +400,42 @@ namespace SayusGagExtender.API
                 }
             });
         }
-        private static void ClearVector2Property(PropertyInfo? property, object instance)
+
+        private bool WithRefresh(string operation, Func<bool> action)
         {
-            if (property == null)
-                return;
+            lastFailure = null;
 
-            var type = property.PropertyType;
-            var nullableType = Nullable.GetUnderlyingType(type);
-
-            try
-            {
-                if (nullableType == typeof(Vector2))
-                {
-                    property.SetValue(instance, null);
-                    return;
-                }
-
-                // If Dalamud ever exposes these as non-nullable Vector2,
-                // we cannot safely clear them. Setting Vector2.Zero would be worse.
-            }
-            catch
-            {
-                // ignored
-            }
-        }
-
-        private bool WithRefresh(Func<bool> action)
-        {
-            // Always refresh first.
-            // Chat2 can restart independently from us, and old cached objects may still look "valid".
             if (!RefreshReflection())
+            {
+                PrintLastFailure(operation);
                 return false;
+            }
 
             if (action())
                 return true;
 
-            // Retry once in case Chat2 restarted mid-call.
-            if (!RefreshReflection())
-                return false;
+            var firstFailure = lastFailure;
 
-            return action();
+            // Retry once in case ChatTwo restarted mid-call.
+            if (!RefreshReflection())
+            {
+                if (lastFailure == null)
+                    lastFailure = firstFailure;
+
+                PrintLastFailure(operation);
+                return false;
+            }
+
+            if (action())
+                return true;
+
+            if (lastFailure == null)
+                lastFailure = firstFailure ?? "Action returned false.";
+
+            PrintLastFailure(operation);
+            return false;
         }
+
         private bool RefreshReflection()
         {
             ClearCache();
@@ -401,61 +449,99 @@ namespace SayusGagExtender.API
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 var candidatePluginType = asm.GetType("ChatTwo.Plugin", throwOnError: false);
-
                 if (candidatePluginType == null)
                     continue;
 
-                var candidateChatLogType = asm.GetType("ChatTwo.Ui.ChatLogWindow", throwOnError: false);
+                var candidateChatLogType =
+                    asm.GetType("ChatTwo.Ui.ChatLog.ChatLog", throwOnError: false)
+                    ?? asm.GetType("ChatTwo.Ui.ChatLogWindow", throwOnError: false);
+
                 var candidateConfigType = asm.GetType("ChatTwo.Configuration", throwOnError: false);
                 var candidateTabType = asm.GetType("ChatTwo.Tab", throwOnError: false);
 
-                if (candidateChatLogType == null ||
-                    candidateConfigType == null ||
-                    candidateTabType == null)
+                if (candidateChatLogType == null)
+                {
+                    lastFailure = "Found ChatTwo.Plugin, but could not find ChatTwo.Ui.ChatLog.ChatLog or old ChatTwo.Ui.ChatLogWindow.";
                     continue;
+                }
 
-                var candidateConfigField = candidatePluginType.GetField(
-                    "Config",
-                    BindingFlags.Public | BindingFlags.Static);
-
-                if (candidateConfigField == null)
+                if (candidateConfigType == null)
+                {
+                    lastFailure = "Found ChatTwo.Plugin, but could not find ChatTwo.Configuration.";
                     continue;
+                }
 
-                var candidateConfig = candidateConfigField.GetValue(null);
+                if (candidateTabType == null)
+                {
+                    lastFailure = "Found ChatTwo.Plugin, but could not find ChatTwo.Tab.";
+                    continue;
+                }
 
+                var candidateConfigMember =
+                    FindMember(candidatePluginType, "Config", AllStatic)
+                    ?? FindMember(candidatePluginType, "Configuration", AllStatic);
+
+                if (candidateConfigMember == null)
+                {
+                    lastFailure = "Found ChatTwo.Plugin, but could not find static Config member.";
+                    continue;
+                }
+
+                var candidateConfig = GetMemberValue(candidateConfigMember, null);
                 if (candidateConfig == null)
+                {
+                    lastFailure = "Found ChatTwo.Config member, but its value was null.";
                     continue;
+                }
 
                 var candidatePlugin = TryFindLiveChatTwoPlugin(candidatePluginType);
+                var candidateChatLogMember =
+                    FindMember(candidatePluginType, "ChatLog", AllInstance)
+                    ?? FindMember(candidatePluginType, "ChatLogWindow", AllInstance);
 
-                if (candidatePlugin == null)
-                    continue;
+                object? candidateChatLog = null;
 
-                var candidateChatLogProperty = candidatePluginType.GetProperty(
-                    "ChatLogWindow",
-                    BindingFlags.Public | BindingFlags.Instance);
+                if (candidatePlugin != null && candidateChatLogMember != null)
+                    candidateChatLog = GetMemberValue(candidateChatLogMember, candidatePlugin);
 
-                var candidateChatLog = candidateChatLogProperty?.GetValue(candidatePlugin);
+                // Fallback: if the plugin instance cannot be found, try to find the live
+                // ChatLog object directly inside Dalamud's installed plugin entry graph.
+                candidateChatLog ??= TryFindLiveObjectFromInstalledPlugins(
+                    candidateChatLogType,
+                    installedPluginEntry => IsProbablyChatTwoPluginEntry(installedPluginEntry));
 
                 if (candidateChatLog == null)
+                {
+                    lastFailure = "Found ChatTwo types and config, but could not find the live ChatLog object.";
                     continue;
+                }
 
-                var candidateTabsField = candidateConfigType.GetField(
-                    "Tabs",
-                    BindingFlags.Public | BindingFlags.Instance);
+                var candidateTabsMember =
+                    FindMember(candidateConfigType, "Tabs", AllInstance);
 
-                var candidateInputDisabledField = candidateTabType.GetField(
-                    "InputDisabled",
-                    BindingFlags.Public | BindingFlags.Instance);
+                var candidateInputDisabledMember =
+                    FindMember(candidateTabType, "InputDisabled", AllInstance);
 
-                var candidateTabNameField = candidateTabType.GetField(
-                    "Name",
-                    BindingFlags.Public | BindingFlags.Instance);
+                var candidateTabNameMember =
+                    FindMember(candidateTabType, "Name", AllInstance);
 
-                if (candidateTabsField == null ||
-                    candidateInputDisabledField == null ||
-                    candidateTabNameField == null)
+                if (candidateTabsMember == null)
+                {
+                    lastFailure = "Found ChatTwo config, but could not find Config.Tabs.";
                     continue;
+                }
+
+                if (candidateInputDisabledMember == null)
+                {
+                    lastFailure = "Found ChatTwo.Tab, but could not find InputDisabled.";
+                    continue;
+                }
+
+                if (candidateTabNameMember == null)
+                {
+                    lastFailure = "Found ChatTwo.Tab, but could not find Name.";
+                    continue;
+                }
 
                 chatTwoPluginType = candidatePluginType;
                 chatLogWindowType = candidateChatLogType;
@@ -466,60 +552,35 @@ namespace SayusGagExtender.API
                 chatLogWindow = candidateChatLog;
                 config = candidateConfig;
 
-                chatLogWindowProperty = candidateChatLogProperty;
-                configField = candidateConfigField;
+                chatLogWindowMember = candidateChatLogMember;
+                configMember = candidateConfigMember;
 
-                lastTabProperty = candidatePluginType.GetProperty(
-                    "LastTab",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
+                lastTabProperty = candidatePluginType.GetProperty("LastTab", AllInstance);
+                wantedTabProperty = candidatePluginType.GetProperty("WantedTab", AllInstance);
 
-                wantedTabProperty = candidatePluginType.GetProperty(
-                    "WantedTab",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
+                saveConfigMethod = candidatePluginType.GetMethod("SaveConfig", AllInstance);
+                changeTabMethod = candidateChatLogType.GetMethod("ChangeTab", AllInstance);
 
-                saveConfigMethod = candidatePluginType.GetMethod(
-                    "SaveConfig",
-                    BindingFlags.Public | BindingFlags.Instance);
+                lastWindowPosProperty = candidateChatLogType.GetProperty("LastWindowPos", AllInstance);
+                lastWindowSizeProperty = candidateChatLogType.GetProperty("LastWindowSize", AllInstance);
 
-                changeTabMethod = candidateChatLogType.GetMethod(
-                    "ChangeTab",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
+                positionProperty = candidateChatLogType.GetProperty("Position", AllInstance);
+                sizeProperty = candidateChatLogType.GetProperty("Size", AllInstance);
 
-                lastWindowPosProperty = candidateChatLogType.GetProperty(
-                    "LastWindowPos",
-                    BindingFlags.Public | BindingFlags.Instance);
+                positionConditionProperty = candidateChatLogType.GetProperty("PositionCondition", AllInstance);
+                sizeConditionProperty = candidateChatLogType.GetProperty("SizeCondition", AllInstance);
 
-                lastWindowSizeProperty = candidateChatLogType.GetProperty(
-                    "LastWindowSize",
-                    BindingFlags.Public | BindingFlags.Instance);
+                tabsMember = candidateTabsMember;
+                inputDisabledMember = candidateInputDisabledMember;
+                tabNameMember = candidateTabNameMember;
 
-                positionProperty = candidateChatLogType.GetProperty(
-                    "Position",
-                    BindingFlags.Public | BindingFlags.Instance);
-
-                sizeProperty = candidateChatLogType.GetProperty(
-                    "Size",
-                    BindingFlags.Public | BindingFlags.Instance);
-
-                positionConditionProperty = candidateChatLogType.GetProperty(
-                    "PositionCondition",
-                    BindingFlags.Public | BindingFlags.Instance);
-
-                sizeConditionProperty = candidateChatLogType.GetProperty(
-                    "SizeCondition",
-                    BindingFlags.Public | BindingFlags.Instance);
-
-                tabsField = candidateTabsField;
-                inputDisabledField = candidateInputDisabledField;
-                tabNameField = candidateTabNameField;
-
+                lastFailure = null;
                 return true;
             }
 
-            //Plugin.ChatGui.PrintError("Chat2Api: No live Chat2 instance found.");
+            lastFailure ??= "No ChatTwo assembly with ChatTwo.Plugin was found.";
             return false;
         }
-
 
         private void ClearCache()
         {
@@ -532,8 +593,8 @@ namespace SayusGagExtender.API
             chatLogWindow = null;
             config = null;
 
-            chatLogWindowProperty = null;
-            configField = null;
+            chatLogWindowMember = null;
+            configMember = null;
             lastTabProperty = null;
             wantedTabProperty = null;
             saveConfigMethod = null;
@@ -546,14 +607,14 @@ namespace SayusGagExtender.API
             positionConditionProperty = null;
             sizeConditionProperty = null;
 
-            tabsField = null;
-            inputDisabledField = null;
-            tabNameField = null;
+            tabsMember = null;
+            inputDisabledMember = null;
+            tabNameMember = null;
         }
 
         private IList GetTabs()
         {
-            if (tabsField?.GetValue(config) is IList tabs)
+            if (GetMemberValue(tabsMember, config) is IList tabs)
                 return tabs;
 
             throw new InvalidOperationException("Could not read Chat2 Config.Tabs.");
@@ -561,7 +622,7 @@ namespace SayusGagExtender.API
 
         private object? TryFindLiveChatTwoPlugin(Type candidatePluginType)
         {
-            foreach (var field in candidatePluginType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
+            foreach (var field in candidatePluginType.GetFields(AllStatic))
             {
                 if (!candidatePluginType.IsAssignableFrom(field.FieldType))
                     continue;
@@ -572,7 +633,7 @@ namespace SayusGagExtender.API
                     return value;
             }
 
-            foreach (var property in candidatePluginType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
+            foreach (var property in candidatePluginType.GetProperties(AllStatic))
             {
                 if (property.GetIndexParameters().Length != 0)
                     continue;
@@ -586,11 +647,20 @@ namespace SayusGagExtender.API
                     return value;
             }
 
+            return TryFindLiveObjectFromInstalledPlugins(
+                candidatePluginType,
+                installedPluginEntry => IsProbablyChatTwoPluginEntry(installedPluginEntry));
+        }
+
+        private object? TryFindLiveObjectFromInstalledPlugins(
+            Type wantedType,
+            Func<object, bool>? entryFilter = null)
+        {
             var pluginInterface = GetDalamudPluginInterfaceFromYourPlugin();
 
             if (pluginInterface == null)
             {
-                Plugin.ChatGui.PrintError("Chat2Api: Could not find IDalamudPluginInterface on your Plugin.");
+                lastFailure = "Could not find IDalamudPluginInterface on your Plugin.";
                 return null;
             }
 
@@ -600,21 +670,25 @@ namespace SayusGagExtender.API
 
             if (installedPluginsProperty?.GetValue(pluginInterface) is not IEnumerable installedPlugins)
             {
-                Plugin.ChatGui.PrintError("Chat2Api: Could not read PluginInterface.InstalledPlugins.");
+                lastFailure = "Could not read PluginInterface.InstalledPlugins.";
                 return null;
             }
 
             foreach (var installedPluginEntry in installedPlugins)
             {
-                if (!IsProbablyChatTwoPluginEntry(installedPluginEntry))
+                if (entryFilter != null && !entryFilter(installedPluginEntry))
                     continue;
 
-                var instance = TryGetPluginInstanceFromInstalledPluginEntry(installedPluginEntry, candidatePluginType);
+                if (wantedType.IsInstanceOfType(installedPluginEntry))
+                    return installedPluginEntry;
 
-                if (instance != null)
-                    return instance;
+                var direct = TryGetDirectInstance(installedPluginEntry, wantedType);
+                if (direct != null)
+                    return direct;
 
-                //Plugin.ChatGui.PrintError($"Chat2Api: Found Chat2 entry, but could not read live instance. Entry type: {installedPluginEntry.GetType().FullName}");
+                var nested = FieldOnlyFindInstance(installedPluginEntry, wantedType, maxDepth: 10, maxNodes: 4096);
+                if (nested != null)
+                    return nested;
             }
 
             return null;
@@ -624,7 +698,7 @@ namespace SayusGagExtender.API
         {
             var pluginType = plugin.GetType();
 
-            foreach (var field in pluginType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            foreach (var field in pluginType.GetFields(AllInstance))
             {
                 var value = SafeGetField(field, plugin);
 
@@ -632,7 +706,7 @@ namespace SayusGagExtender.API
                     return value;
             }
 
-            foreach (var property in pluginType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            foreach (var property in pluginType.GetProperties(AllInstance))
             {
                 if (property.GetIndexParameters().Length != 0)
                     continue;
@@ -643,7 +717,7 @@ namespace SayusGagExtender.API
                     return value;
             }
 
-            foreach (var field in pluginType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
+            foreach (var field in pluginType.GetFields(AllStatic))
             {
                 var value = SafeGetField(field, null);
 
@@ -651,7 +725,7 @@ namespace SayusGagExtender.API
                     return value;
             }
 
-            foreach (var property in pluginType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
+            foreach (var property in pluginType.GetProperties(AllStatic))
             {
                 if (property.GetIndexParameters().Length != 0)
                     continue;
@@ -715,9 +789,7 @@ namespace SayusGagExtender.API
                    || value.Contains("ChatTwo", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static object? TryGetPluginInstanceFromInstalledPluginEntry(
-            object installedPluginEntry,
-            Type wantedPluginType)
+        private static object? TryGetDirectInstance(object wrapper, Type wantedType)
         {
             foreach (var name in new[]
             {
@@ -729,34 +801,63 @@ namespace SayusGagExtender.API
                 "PluginObject",
                 "DalamudPlugin",
                 "PluginBase",
-                "Loader"
+                "Loader",
+                "ChatLog",
+                "ChatLogWindow"
             })
             {
-                var value = GetNamedMemberValue(installedPluginEntry, name);
+                var value = GetNamedMemberValue(wrapper, name);
 
                 if (value == null)
                     continue;
 
-                if (wantedPluginType.IsInstanceOfType(value))
+                if (wantedType.IsInstanceOfType(value))
                     return value;
 
-                var nested = TryGetDirectPluginInstance(value, wantedPluginType);
+                var nested = TryGetDirectInstanceOneLevel(value, wantedType);
 
                 if (nested != null)
                     return nested;
             }
 
-            var direct = TryGetDirectPluginInstance(installedPluginEntry, wantedPluginType);
+            return TryGetDirectInstanceOneLevel(wrapper, wantedType);
+        }
 
-            if (direct != null)
-                return direct;
+        private static object? TryGetDirectInstanceOneLevel(object wrapper, Type wantedType)
+        {
+            var type = wrapper.GetType();
 
-            return FieldOnlyFindInstance(installedPluginEntry, wantedPluginType, maxDepth: 8, maxNodes: 2048);
+            foreach (var property in type.GetProperties(AllInstance))
+            {
+                if (property.GetIndexParameters().Length != 0)
+                    continue;
+
+                if (!wantedType.IsAssignableFrom(property.PropertyType))
+                    continue;
+
+                var value = SafeGetProperty(property, wrapper);
+
+                if (value != null)
+                    return value;
+            }
+
+            foreach (var field in type.GetFields(AllInstance))
+            {
+                if (!wantedType.IsAssignableFrom(field.FieldType))
+                    continue;
+
+                var value = SafeGetField(field, wrapper);
+
+                if (value != null)
+                    return value;
+            }
+
+            return null;
         }
 
         private static object? FieldOnlyFindInstance(
             object root,
-            Type wantedPluginType,
+            Type wantedType,
             int maxDepth,
             int maxNodes)
         {
@@ -774,7 +875,7 @@ namespace SayusGagExtender.API
 
                 var (current, depth) = queue.Dequeue();
 
-                if (wantedPluginType.IsInstanceOfType(current))
+                if (wantedType.IsInstanceOfType(current))
                     return current;
 
                 if (depth >= maxDepth)
@@ -792,7 +893,7 @@ namespace SayusGagExtender.API
 
                 try
                 {
-                    fields = currentType.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    fields = currentType.GetFields(AllInstance);
                 }
                 catch
                 {
@@ -818,7 +919,7 @@ namespace SayusGagExtender.API
                     if (value == null)
                         continue;
 
-                    if (wantedPluginType.IsInstanceOfType(value))
+                    if (wantedType.IsInstanceOfType(value))
                         return value;
 
                     var valueType = value.GetType();
@@ -860,9 +961,6 @@ namespace SayusGagExtender.API
             if (typeof(Type).IsAssignableFrom(type))
                 return true;
 
-            if (typeof(IEnumerable).IsAssignableFrom(type) && type != typeof(byte[]))
-                return true;
-
             return false;
         }
 
@@ -881,50 +979,17 @@ namespace SayusGagExtender.API
                 => RuntimeHelpers.GetHashCode(obj);
         }
 
-        private static object? TryGetDirectPluginInstance(object wrapper, Type wantedPluginType)
+        private static MemberInfo? FindMember(Type type, string name, BindingFlags flags)
         {
-            var type = wrapper.GetType();
+            var property = type.GetProperty(name, flags);
 
-            foreach (var name in new[]
-            {
-                "Instance",
-                "Plugin",
-                "PluginInstance",
-                "LoadedPlugin",
-                "PluginObject",
-                "DalamudPlugin"
-            })
-            {
-                var value = GetNamedMemberValue(wrapper, name);
+            if (property != null && property.GetIndexParameters().Length == 0)
+                return property;
 
-                if (value != null && wantedPluginType.IsInstanceOfType(value))
-                    return value;
-            }
+            var field = type.GetField(name, flags);
 
-            foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
-            {
-                if (property.GetIndexParameters().Length != 0)
-                    continue;
-
-                if (!wantedPluginType.IsAssignableFrom(property.PropertyType))
-                    continue;
-
-                var value = SafeGetProperty(property, wrapper);
-
-                if (value != null)
-                    return value;
-            }
-
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
-            {
-                if (!wantedPluginType.IsAssignableFrom(field.FieldType))
-                    continue;
-
-                var value = SafeGetField(field, wrapper);
-
-                if (value != null)
-                    return value;
-            }
+            if (field != null)
+                return field;
 
             return null;
         }
@@ -933,21 +998,58 @@ namespace SayusGagExtender.API
         {
             var type = instance.GetType();
 
-            var property = type.GetProperty(
-                name,
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var property = type.GetProperty(name, AllInstance);
 
             if (property != null && property.GetIndexParameters().Length == 0)
                 return SafeGetProperty(property, instance);
 
-            var field = type.GetField(
-                name,
-                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            var field = type.GetField(name, AllInstance);
 
             if (field != null)
                 return SafeGetField(field, instance);
 
             return null;
+        }
+
+        private static object? GetMemberValue(MemberInfo? member, object? instance)
+        {
+            try
+            {
+                return member switch
+                {
+                    FieldInfo field => field.GetValue(instance),
+                    PropertyInfo property when property.GetIndexParameters().Length == 0 => property.GetValue(instance),
+                    _ => null,
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool SetMemberValue(MemberInfo? member, object? instance, object? value)
+        {
+            try
+            {
+                switch (member)
+                {
+                    case FieldInfo field:
+                        field.SetValue(instance, value);
+                        return true;
+
+                    case PropertyInfo property when property.GetIndexParameters().Length == 0 && property.CanWrite:
+                        property.SetValue(instance, value);
+                        return true;
+
+                    default:
+                        return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool IsValidBounds(Chat2Bounds? bounds)
@@ -975,22 +1077,60 @@ namespace SayusGagExtender.API
             if (property == null || instance == null)
                 return null;
 
-            var value = property.GetValue(instance);
-
-            return value switch
+            try
             {
-                Vector2 vec => vec,
-                _ => null,
-            };
+                var value = property.GetValue(instance);
+
+                return value switch
+                {
+                    Vector2 vec => vec,
+                    _ => null,
+                };
+            }
+            catch
+            {
+                return null;
+            }
         }
 
-        private static void WriteVector2(PropertyInfo property, object instance, Vector2 value)
+        private static bool WriteVector2(PropertyInfo property, object instance, Vector2 value)
         {
+            try
+            {
+                var type = property.PropertyType;
+                var nullableType = Nullable.GetUnderlyingType(type);
+
+                if (type == typeof(Vector2) || nullableType == typeof(Vector2))
+                {
+                    property.SetValue(instance, value);
+                    return true;
+                }
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void ClearVector2Property(PropertyInfo? property, object instance)
+        {
+            if (property == null)
+                return;
+
             var type = property.PropertyType;
             var nullableType = Nullable.GetUnderlyingType(type);
 
-            if (type == typeof(Vector2) || nullableType == typeof(Vector2))
-                property.SetValue(instance, value);
+            try
+            {
+                if (nullableType == typeof(Vector2))
+                    property.SetValue(instance, null);
+            }
+            catch
+            {
+                // ignored
+            }
         }
 
         private static void SetImGuiCond(PropertyInfo? property, object instance, string valueName)
@@ -1050,6 +1190,11 @@ namespace SayusGagExtender.API
             {
                 return null;
             }
+        }
+
+        private void PrintLastFailure(string operation)
+        {
+            Plugin.ChatGui.PrintError($"Chat2Api.{operation} failed: {lastFailure ?? "Unknown reflection failure."}");
         }
     }
 }

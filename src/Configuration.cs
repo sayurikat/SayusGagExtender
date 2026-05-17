@@ -59,6 +59,8 @@ public class Configuration : IPluginConfiguration
     public Guid CustomizePlusDefaultProfileId { get; set; } = Guid.Empty;
     public string CustomizePlusDefaultProfileName { get; set; } = string.Empty;
     public string CustomizePlusDefaultProfileVirtualPath { get; set; } = string.Empty;
+    public bool Chat2BlindfoldFeatureEnable { get; set; } = false;
+    public bool Chat2BlindfoldLocked { get; set; } = false;
 
 
 

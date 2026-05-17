@@ -9,7 +9,16 @@ namespace SayusGagExtender.Windows
     {
         private void DrawChat2Tab()
         {
-            if (ImGui.Button("Save Chat2 position for Blindfold"))
+            var enabled = configuration.Chat2BlindfoldFeatureEnable;
+            if (ImGui.Checkbox("Blindfold feature", ref enabled))
+            {
+                configuration.Chat2BlindfoldFeatureEnable = enabled;
+                configuration.Save();
+
+            }
+            ImGui.TextWrapped("Moves chatbox to specific position while any blindfold is active.");
+
+            if (ImGui.Button("Save Chat2 size and position for Blindfold"))
             {
                 if (plugin.Chat2Api.TryGetPositionAndSize(out var bounds))
                 {
@@ -21,24 +30,35 @@ namespace SayusGagExtender.Windows
                 }
             }
 
+            var locked = configuration.Chat2BlindfoldLocked;
+            if (ImGui.Checkbox("Locked (prevents moving while blindfold is active)", ref locked))
+            {
+                configuration.Chat2BlindfoldLocked = locked;
+                configuration.Save();
+
+            }
+
             if (ImGui.Button("Apply Chat2 position for Blindfold"))
             {
                 plugin.Chat2Api.SetPositionAndSize(configuration.Chat2Bounds);
             }
 
+
+            ImGui.Spacing();
+            ImGui.Separator();
             ImGui.Spacing();
 
-            ImGui.TextWrapped("Pick a tab Chat2 stays locked on while vanilla Chatbox is hidden by GagSpeak.");
+            ImGui.TextWrapped("For Chat2 compatibility with GagSpeaks chat restrictions, please assign an empty chat tab which will be enforced while GagSpeak Hide Chatbox is active.");
 
             ImGui.SetNextItemWidth(160);
             var chat2HiddenTabName = configuration.Chat2HiddenTabName;
-            if (ImGui.InputText("Hide Chat2 Tab Name", ref chat2HiddenTabName))
+            if (ImGui.InputText("Chat2 Tab Name", ref chat2HiddenTabName))
             {
                 configuration.Chat2HiddenTabName = chat2HiddenTabName;
                 configuration.Save();
             }
 
-            if (ImGui.Button("Set current tab as Hide Chat2 tab"))
+            if (ImGui.Button("Set current tab as enforced tab"))
             {
                 var activeTabName = plugin.Chat2Api.GetActiveTabName();
                 if (activeTabName != null)
@@ -47,6 +67,8 @@ namespace SayusGagExtender.Windows
                     configuration.Save();
                 }
             }
+            ImGui.Spacing();
+            ImGui.TextWrapped("Chat inputs in Chat2 will be disabled regular chat input are disabled by GagSpeak.");
 
             /*
             if (ImGui.Button("Enable Chat2 Inputs"))

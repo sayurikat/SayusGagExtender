@@ -9,7 +9,7 @@ namespace SayusGagExtender
         private readonly Plugin plugin;
         public bool blindfolded { get; private set; } = false;
         private long nextRefreshMs;
-        private bool forcePosition = false;
+        private bool forcePosition => plugin.Configuration.Chat2BlindfoldLocked;
 
         public BlindfoldMonitor(Plugin plugin)
         {
@@ -21,36 +21,42 @@ namespace SayusGagExtender
 
         private void OnFrameworkUpdate(IFramework framework)
         {
+            if (!plugin.Configuration.Chat2BlindfoldFeatureEnable)
+                return;
+            if (!blindfolded)
+                return;
+            if (!forcePosition)
+                return;
 
-            if (!forcePosition) return;
-
-            // Only check every 5 seconds.
             var now = Environment.TickCount64;
             if (now < this.nextRefreshMs)
                 return;
 
-            this.nextRefreshMs = now + 5000;
+            this.nextRefreshMs = now + 100;
 
-            BlindfoldStateChanged(plugin.GagSpeakRestrictionsApi.IsBlindfolded());
+            MoveChat2(blindfolded);
         }
 
         private void BlindfoldStateChanged(bool enabled)
         {
             blindfolded = enabled;
-
-            if (enabled)
+            if (!plugin.Configuration.Chat2BlindfoldFeatureEnable)
+                return;
+            MoveChat2(blindfolded);
+        }
+        private void MoveChat2(bool blindfolded)
+        {
+            if (blindfolded)
             {
-                // do things when blindfold starts
+                Plugin.ChatGui.Print("moving chat");
                 plugin.Chat2Api.SetPositionAndSize(plugin.Configuration.Chat2Bounds);
-            }
-            else
-            {
-                // do things when blindfold ends
+
             }
         }
 
         public void Dispose()
         {
+            
             Plugin.Framework.Update -= OnFrameworkUpdate;
             plugin.GagSpeakRestrictionsApi.OnBlindfoldStateChanged -= BlindfoldStateChanged;
         }
