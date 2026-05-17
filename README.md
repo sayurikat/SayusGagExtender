@@ -312,3 +312,13 @@ Features that depend on optional integrations will do nothing unless the related
 ## Disclaimer
 
 Sayu's Gag Extender is an unofficial plugin for use with Dalamud and Final Fantasy XIV. It is not affiliated with or endorsed by Square Enix, Dalamud, GagSpeak, or the authors of any optional integration plugins.
+
+---
+
+## Support / Contact
+
+Questions, bug reports, and feedback are welcome.
+
+You can contact me on Discord: `sayurikat`
+
+When reporting an issue, please include which feature you were using, what happened, and any relevant Dalamud log messages.
