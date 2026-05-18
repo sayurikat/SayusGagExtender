@@ -822,7 +822,7 @@ namespace SayusGagExtender.API
                 return true;
             }
 
-            Plugin.ChatGui.PrintError("No live Moodles instance found.");
+            //Plugin.ChatGui.PrintError("No live Moodles instance found.");
             return false;
         }
 

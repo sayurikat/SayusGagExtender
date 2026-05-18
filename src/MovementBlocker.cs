@@ -95,7 +95,7 @@ public sealed unsafe class MovementBlocker : IDisposable
 
         if (!wasEnabled && Enabled)
         {
-            Plugin.ChatGui.Print("Movement Block Enabled");
+            //Plugin.ChatGui.Print("Movement Block Enabled");
             plugin.Utils.ExecuteNativeCommand("/automove off");
             EnableFullMovementLock();
         }
@@ -116,7 +116,7 @@ public sealed unsafe class MovementBlocker : IDisposable
 
         if (wasEnabled && !Enabled)
         {
-            Plugin.ChatGui.Print("Movement Block Disabled");
+            //Plugin.ChatGui.Print("Movement Block Disabled");
             DisableFullMovementLock();
         }
     }

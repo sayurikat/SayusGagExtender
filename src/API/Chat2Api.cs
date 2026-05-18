@@ -1194,7 +1194,7 @@ namespace SayusGagExtender.API
 
         private void PrintLastFailure(string operation)
         {
-            Plugin.ChatGui.PrintError($"Chat2Api.{operation} failed: {lastFailure ?? "Unknown reflection failure."}");
+            //Plugin.ChatGui.PrintError($"Chat2Api.{operation} failed: {lastFailure ?? "Unknown reflection failure."}");
         }
     }
 }
