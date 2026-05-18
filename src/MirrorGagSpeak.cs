@@ -15,7 +15,7 @@ namespace SayusGagExtender
         private readonly Plugin plugin;
         private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(2);
         private DateTime onUpdateNextUTC = DateTime.MinValue;
-        private bool forceGagSpeakState => plugin.Configuration.GagSpeakRestraintCloner;
+        private bool forceGagSpeakState => plugin.Configuration.GagSpeakEnforcedRestraintCloner;
         private bool appliedAfterReload = false;
         public bool IsActive = false;
         private TimeSpan waitAfterReload = TimeSpan.FromSeconds(10);
@@ -35,12 +35,18 @@ namespace SayusGagExtender
 
         private void OnFrameworkUpdate(IFramework framework)
         {
+            if (!plugin.Configuration.GagSpeakRestraintCloner)
+                return;
+
+            if (!Plugin.Condition[ConditionFlag.NormalConditions])
+                return;
+
             var now = DateTime.UtcNow;
             if (onUpdateNextUTC > now)
                 return;
             onUpdateNextUTC = now + OnUpdateCooldown;
 
-            if (plugin.GagSpeakContext.EnsureReady() && Plugin.Condition[ConditionFlag.NormalConditions])
+            if (plugin.GagSpeakContext.EnsureReady())
             {
                 if (!appliedAfterReload)
                 {
@@ -77,7 +83,7 @@ namespace SayusGagExtender
                 return;
             mirrorCooldownUntil = now + mirrorCooldown;
 
-            Plugin.ChatGui.Print("Mirroring saved Gag Speak restraints.");
+            Plugin.ChatGui.Print($"Mirroring saved Gag Speak restraints. {forceGagSpeakState}");
             
             
             if (plugin.Configuration.GagSpeakMasterName == null || plugin.Configuration.GagSpeakMasterName.Length < 0 || plugin.Configuration.GagSpeakMasterWorld == null || plugin.Configuration.GagSpeakMasterWorld.Length < 0)
@@ -126,6 +132,9 @@ namespace SayusGagExtender
         }
         private void UpdateSavedRestraintSet(string newSet)
         {
+            if (!plugin.Configuration.GagSpeakRestraintCloner)
+                return;
+
             if (IsMasterCharacter())
             {
                 plugin.Configuration.ActiveRestraintSet = newSet;
@@ -142,6 +151,9 @@ namespace SayusGagExtender
         }
         private void UpdateSavedRestrictions(Dictionary<int, string> restrictions)
         {
+            if (!plugin.Configuration.GagSpeakRestraintCloner)
+                return;
+
             if (IsMasterCharacter())
             {
                 plugin.Configuration.ActiveRestrictions = restrictions;
@@ -158,6 +170,9 @@ namespace SayusGagExtender
         }
         private void UpdateSavedGags(Dictionary<int, string> gags)
         {
+            if (!plugin.Configuration.GagSpeakRestraintCloner)
+                return;
+
             if (IsMasterCharacter())
             {
                 plugin.Configuration.ActiveGags = gags;
