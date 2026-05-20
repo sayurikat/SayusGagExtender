@@ -44,6 +44,15 @@ namespace SayusGagExtender
             if (!plugin.Configuration.Chat2BlindfoldFeatureEnable)
                 return;
             MoveChat2(blindfolded);
+
+            /*
+             * Appears to be a race condition with GagSpeak when blindfold is applied.
+             * RefreshVisuals may in some cases run before the blindfold is registered fully, making it skip forced first person.
+             * It seems to happen more frequent with this plugin running, as it could add additional delays.
+             * Once blindfold state is confirmed in this plugin, we call a 2nd refresh visual to ensure 1st person gets triggered.
+             * 
+             */
+            plugin.GagSpeakContext.RefreshGagSpeakVisualsAsync(redraw: true);
         }
         private void MoveChat2(bool blindfolded)
         {

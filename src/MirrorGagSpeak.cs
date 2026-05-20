@@ -7,21 +7,29 @@ using SayusGagExtender.API.GagSpeak;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using static SayusGagExtender.CharacterHelper;
 
 namespace SayusGagExtender
 {
     public sealed class MirrorGagSpeak : IDisposable
     {
         private readonly Plugin plugin;
-        private static readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(2);
-        private DateTime onUpdateNextUTC = DateTime.MinValue;
+        private static readonly TimeSpan updateCooldown = TimeSpan.FromSeconds(2);
+        private DateTime updateOnUTC = DateTime.MinValue;
         private bool forceGagSpeakState => plugin.Configuration.GagSpeakEnforcedRestraintCloner;
+        private bool didLoginAndReady = false;
         private bool appliedAfterReload = false;
         public bool IsActive = false;
-        private TimeSpan waitAfterReload = TimeSpan.FromSeconds(10);
-        private DateTime waitUntilAfterReload = DateTime.MaxValue;
+        private TimeSpan firstApplicationDelay = TimeSpan.FromSeconds(10);
+        private DateTime firstApplicationDelayUntil = DateTime.MaxValue;
         private TimeSpan mirrorCooldown = TimeSpan.FromSeconds(5);
         private DateTime mirrorCooldownUntil = DateTime.MinValue;
+        private string currentCharacterName = "";
+        private string currentCharacterWorld = "";
+        private bool treatPluginReloadAsCharacterLogin = false;
+
+        private bool ApplyGagSpeakLoginBugOrRaceConditionFix = true;
 
         public MirrorGagSpeak(Plugin plugin)
         {
@@ -31,53 +39,82 @@ namespace SayusGagExtender
             plugin.GagSpeakRestraintSetApi.OnRestraintSetChanged += UpdateSavedRestraintSet;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += UpdateSavedRestrictions;
             plugin.GagSpeakGagsApi.OnGagsChanged += UpdateSavedGags;
+            
+            plugin.CharacterHelper.OnCharacterReady += OnCharacterReady;
+
+            if (treatPluginReloadAsCharacterLogin)
+            {
+                if (plugin.CharacterHelper.CurrentCharacter is { } character)
+                    OnCharacterReady(character);
+            }
+            
+
         }
 
         private void OnFrameworkUpdate(IFramework framework)
         {
-            if (!plugin.Configuration.GagSpeakRestraintCloner)
+            if (!plugin.Configuration.GagSpeakRestraintCloner && !ApplyGagSpeakLoginBugOrRaceConditionFix)
                 return;
 
             if (!Plugin.Condition[ConditionFlag.NormalConditions])
                 return;
 
             var now = DateTime.UtcNow;
-            if (onUpdateNextUTC > now)
+            if (updateOnUTC > now)
                 return;
-            onUpdateNextUTC = now + OnUpdateCooldown;
+            updateOnUTC = now + updateCooldown;
 
-            if (plugin.GagSpeakContext.EnsureReady())
+
+            if (didLoginAndReady && plugin.GagSpeakContext.EnsureReady())
             {
-                if (!appliedAfterReload)
+                if (firstApplicationDelayUntil == DateTime.MaxValue)
                 {
-                    if (!IsMasterCharacter())
+                    firstApplicationDelayUntil = now + firstApplicationDelay;
+                }
+                if (now > firstApplicationDelayUntil)
+                {
+                    //redundant when ApplyGagSpeakLoginBugOrRaceConditionFix == false
+                    if (plugin.Configuration.GagSpeakRestraintCloner)
                     {
-                        waitUntilAfterReload = now + waitAfterReload;
-                        //Plugin.ChatGui.Print($"time now. {now}");
-                        //Plugin.ChatGui.Print($"Mirroring timer started. {waitUntilAfterReload}");
+                        if (!IsMasterCharacter())
+                        {
+                            MirrorGagSpeakState(didRelog: true);
+                        }
                     }
-                    appliedAfterReload = true;
+                    
+                    if (ApplyGagSpeakLoginBugOrRaceConditionFix)
+                    {
+                        GagSpeakLoginBugOrRaceConditionFix();
+                    }
+                    
+                    didLoginAndReady = false;
+                    firstApplicationDelayUntil = DateTime.MaxValue;
                 }
             }
-            else
-            {
-                //gag speak not ready, likely reloading GagSpeak or relogging character. Reset applied state.
-                appliedAfterReload = false;
-            }
-
-
-            if (now > waitUntilAfterReload)
-            {
-                //Plugin.ChatGui.Print($"Mirroring timer complete. {now}");
-                waitUntilAfterReload = DateTime.MaxValue;
-                MirrorGagSpeakState();
-            }
-            
-
-
         }
-        public void MirrorGagSpeakState()
+        private void OnCharacterReady(CharacterIdentity character)
         {
+            didLoginAndReady = true;
+        }
+        private void GagSpeakLoginBugOrRaceConditionFix()
+        {
+            /*
+             * Appears to be a bug or issuen with race condition when character logging in.
+             * Seems like character state are cached before items are applied properly.
+             * Seems like it may happen more frequent with this plugin, as it may cause additional delays during the race conditions.
+             * Refreshing visuals once we know we are logged in and ready.
+             * 
+             * 
+             */
+            Plugin.Log.Info($"GagSpeakLoginBugOrRaceConditionFix: RefreshGagSpeakVisuals");
+            plugin.GagSpeakContext.RefreshGagSpeakVisualsAsync(redraw: true);
+        }
+        public void MirrorGagSpeakState(bool didRelog = false)
+        {
+
+            if (!forceGagSpeakState && !didRelog)
+                return;
+
             var now = DateTime.UtcNow;
             if (now < mirrorCooldownUntil)
                 return;
@@ -143,10 +180,10 @@ namespace SayusGagExtender
             }
             else
             {
-                if (forceGagSpeakState)
-                {
+                //if (forceGagSpeakState)
+                //{
                     MirrorGagSpeakState();
-                }
+                //}
             }
         }
         private void UpdateSavedRestrictions(Dictionary<int, string> restrictions)
@@ -162,10 +199,10 @@ namespace SayusGagExtender
             }
             else
             {
-                if (forceGagSpeakState)
-                {
+                //if (forceGagSpeakState)
+                //{
                     MirrorGagSpeakState();
-                }
+                //}
             }
         }
         private void UpdateSavedGags(Dictionary<int, string> gags)
@@ -181,10 +218,10 @@ namespace SayusGagExtender
             }
             else
             {
-                if (forceGagSpeakState)
-                {
+                //if (forceGagSpeakState)
+                //{
                     MirrorGagSpeakState();
-                }
+                //}
             }
         }
 
@@ -195,6 +232,7 @@ namespace SayusGagExtender
             plugin.GagSpeakRestraintSetApi.OnRestraintSetChanged -= UpdateSavedRestraintSet;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= UpdateSavedRestrictions;
             plugin.GagSpeakGagsApi.OnGagsChanged -= UpdateSavedGags;
+            plugin.CharacterHelper.OnCharacterReady -= OnCharacterReady;
         }
         private bool IsMasterCharacter()
         {
@@ -213,10 +251,25 @@ namespace SayusGagExtender
             IsActive = true;
             return false;
         }
+        private bool DidRelogToDifferentCharacter()
+        {
+            string name = "";
+            string world = "";
+            name = Plugin.ObjectTable.LocalPlayer?.Name.ToString() ?? "";
+            var homeWorld = Plugin.ObjectTable.LocalPlayer?.HomeWorld.RowId ?? 0u;
+            world = plugin.Utils.WorldRowIDToString(homeWorld);
 
-        public static bool HaveSameStrings(
-            Dictionary<int, string> activeRestrictions,
-            Dictionary<int, string> configurationActiveRestrictions)
+            if (name == currentCharacterName && world == currentCharacterWorld)
+            {
+                return false;
+            }
+
+            currentCharacterName = name;
+            currentCharacterWorld = world;
+            return true;
+        }
+
+        public static bool HaveSameStrings(Dictionary<int, string> activeRestrictions, Dictionary<int, string> configurationActiveRestrictions)
         {
             if (activeRestrictions == null || configurationActiveRestrictions == null)
                 return activeRestrictions == configurationActiveRestrictions;

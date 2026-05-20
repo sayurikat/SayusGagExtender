@@ -45,6 +45,7 @@ public sealed class Plugin : IDalamudPlugin
     public API.GagSpeak.GagSpeakRestrictionsApi GagSpeakRestrictionsApi { get; private set; }
     public API.GagSpeak.GagSpeakChatMonitorApi GagSpeakChatMonitorApi { get; private set; }
     public API.GagSpeak.GagSpeakGagsApi GagSpeakGagsApi { get; private set; }
+    public CharacterHelper CharacterHelper { get; set; }
     public EmoteGuard EmoteGuard { get; set; }
     public AutoAttackKiller AutoAttackKiller { get; set; }
     public WeaponSheather WeaponSheather { get; set; }
@@ -126,6 +127,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Utils = new Utils(Instance);
         FriendListHelper = new FriendListHelper(Instance);
+        CharacterHelper = new CharacterHelper(Instance);
         TeleportBlocker = new TeleportBlocker(Instance);
         MountBlocker = new MountBlocker(Instance);
         JobSwitchBlocker = new JobSwitchBlocker(Instance);
@@ -184,6 +186,7 @@ public sealed class Plugin : IDalamudPlugin
         EmoteEnforcer?.Dispose();
         CustomizePlusEnforcer?.Dispose();
         MovementBlocker?.Dispose();
+        CharacterHelper?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 namespace SayusGagExtender.API.GagSpeak
 {
@@ -856,7 +857,99 @@ namespace SayusGagExtender.API.GagSpeak
                     yield return found;
             }
         }
+        public async Task<bool> RefreshGagSpeakVisualsAsync(bool redraw = true)
+        {
+            if (!EnsureReady())
+                return false;
 
+            var cacheStateManager =
+                TryResolveServiceByTypeName("CacheStateManager") ??
+                TryResolveServiceByTypeName("Cache", "State", "Manager");
+
+            if (cacheStateManager == null)
+                return false;
+
+            var anyInvoked = false;
+
+            anyInvoked |= await TryInvokeFieldMethodAsync(cacheStateManager, "_glamourHandler", "UpdateCaches");
+            anyInvoked |= await TryInvokeFieldMethodAsync(cacheStateManager, "_modHandler", "UpdateModCache");
+            anyInvoked |= await TryInvokeFieldMethodAsync(cacheStateManager, "_lociHandler", "UpdateLociCache");
+            anyInvoked |= await TryInvokeFieldMethodAsync(cacheStateManager, "_cplusHandler", "UpdateProfileCache");
+            anyInvoked |= await TryInvokeFieldMethodAsync(cacheStateManager, "_traitsHandler", "UpdateTraitCache");
+            anyInvoked |= await TryInvokeFieldMethodAsync(cacheStateManager, "_arousalHandler", "UpdateFinalCache");
+            anyInvoked |= await TryInvokeFieldMethodAsync(cacheStateManager, "_overlayHandler", "UpdateCaches");
+
+            if (redraw)
+                TryInvokeFieldMethod(cacheStateManager, "_redrawAssist", "RedrawObject");
+
+            return anyInvoked;
+        }
+
+        private static async Task<bool> TryInvokeFieldMethodAsync(object owner, string fieldName, string methodName)
+        {
+            try
+            {
+                var field = owner.GetType().GetField(
+                    fieldName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                var target = field?.GetValue(owner);
+                if (target == null)
+                    return false;
+
+                var method = target.GetType().GetMethod(
+                    methodName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    binder: null,
+                    types: Type.EmptyTypes,
+                    modifiers: null);
+
+                if (method == null)
+                    return false;
+
+                var result = method.Invoke(target, null);
+
+                if (result is Task task)
+                    await task.ConfigureAwait(false);
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryInvokeFieldMethod(object owner, string fieldName, string methodName)
+        {
+            try
+            {
+                var field = owner.GetType().GetField(
+                    fieldName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                var target = field?.GetValue(owner);
+                if (target == null)
+                    return false;
+
+                var method = target.GetType().GetMethod(
+                    methodName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    binder: null,
+                    types: Type.EmptyTypes,
+                    modifiers: null);
+
+                if (method == null)
+                    return false;
+
+                method.Invoke(target, null);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
         public object? GetNoneRestraintLayerValue()
         {
             if (!EnsureReady())
