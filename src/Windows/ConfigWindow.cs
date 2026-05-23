@@ -56,6 +56,12 @@ public partial class ConfigWindow : Window, IDisposable
             ImGui.EndTabItem();
         }
 
+        if (ImGui.BeginTabItem("Quotas"))
+        {
+            DrawQuotasTab();
+            ImGui.EndTabItem();
+        }
+
         if (ImGui.BeginTabItem("Moodle Enforcer"))
         {
             DrawMoodleEnforcerTab();

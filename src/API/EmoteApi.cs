@@ -116,7 +116,9 @@ namespace SayusGagExtender.API
             //Plugin.CommandManager.ProcessCommand(plugin.Configuration.EmoteEnforcerCancelCommand);
 
             //game commands
-            plugin.Utils.ExecuteCommand(plugin.Configuration.EmoteEnforcerCancelCommand);
+            //plugin.Utils.ExecuteCommand(plugin.Configuration.EmoteEnforcerCancelCommand);
+
+            plugin.EmoteGuard.QueueGuardedEmote(plugin.Configuration.EmoteEnforcerCancelCommand);
 
             //plugin.EmoteGuard.QueueGuardedEmote("/sit");
             return true;// Plugin.CommandManager.ProcessCommand("/sit");

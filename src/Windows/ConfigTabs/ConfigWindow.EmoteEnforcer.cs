@@ -27,11 +27,12 @@ namespace SayusGagExtender.Windows
             ImGui.Spacing();
 
             var cancelCommand = configuration.EmoteEnforcerCancelCommand;
-            if (ImGui.InputText("Emote Cancel Command", ref cancelCommand))
+            if (ImGui.InputText("Emote Cancel Command(s)", ref cancelCommand))
             {
                 configuration.EmoteEnforcerCancelCommand = cancelCommand;
                 configuration.Save();
             }
+            ImGui.Text("Example: /sit /wait 0.5 /sit /examineself");
 
             ImGui.Spacing();
             ImGui.Separator();

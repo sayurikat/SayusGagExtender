@@ -8,6 +8,7 @@ using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -71,7 +72,30 @@ public unsafe sealed class EmoteGuard : IDisposable
     private static readonly TimeSpan CombatPostDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan CombatAfterEmoteSuppressDuration = TimeSpan.FromSeconds(3);
 
+    private readonly Queue<QueuedEmoteStep> queuedSequence = new();
+    private DateTime nextSequenceStepAt = DateTime.MinValue;
+
+    private static readonly TimeSpan DefaultSequenceDelay = TimeSpan.FromSeconds(2);
+
     public bool IsActive = false;
+
+    private enum QueuedEmoteStepKind
+    {
+        Command,
+        Wait,
+    }
+
+    private readonly record struct QueuedEmoteStep(
+        QueuedEmoteStepKind Kind,
+        string? Command,
+        TimeSpan Duration)
+    {
+        public static QueuedEmoteStep CommandStep(string command)
+            => new(QueuedEmoteStepKind.Command, command, TimeSpan.Zero);
+
+        public static QueuedEmoteStep WaitStep(TimeSpan duration)
+            => new(QueuedEmoteStepKind.Wait, null, duration);
+    }
 
     public EmoteGuard(Plugin instance)
     {
@@ -96,10 +120,18 @@ public unsafe sealed class EmoteGuard : IDisposable
         Plugin.Framework.Update += OnFrameworkUpdate;
     }
 
+    //public void QueueGuardedEmote(string emote)
+    //{
+    //    QueueReplay(QueuedEmote.FromCommand(emote.Trim().ToLowerInvariant()));
+    //}
     public void QueueGuardedEmote(string emote)
     {
-        QueueReplay(QueuedEmote.FromCommand(emote.Trim().ToLowerInvariant()));
+        foreach (var step in CommandParser.ParseQueuedEmoteSequence(emote))
+            queuedSequence.Enqueue(step);
+
+        TryStartNextQueuedSequenceStep(DateTime.UtcNow);
     }
+    
 
     public void Dispose()
     {
@@ -118,6 +150,105 @@ public unsafe sealed class EmoteGuard : IDisposable
         processChatBoxHook.Disable();
         processChatBoxHook.Dispose();
     }
+
+    private void OnFrameworkUpdate(IFramework _)
+    {
+        try
+        {
+            OnFrameworkUpdateInner();
+        }
+        catch (Exception ex)
+        {
+            ResetQueueState();
+            Plugin.ChatGui.PrintError($"EmoteGuard update error: {ex.Message}");
+        }
+    }
+
+    private void OnFrameworkUpdateInner()
+    {
+        var now = DateTime.UtcNow;
+        IsActive = true;
+
+        UpdateCombatActionBlock(now);
+
+        if (queued is not { } current)
+        {
+            TryStartNextQueuedSequenceStep(now);
+
+            if (queued is not { } nextCurrent)
+            {
+                PostEmoteQueue(now);
+                return;
+            }
+
+            current = nextCurrent;
+        }
+
+        if (now - current.QueuedAt > QueueTimeout)
+        {
+            ResetQueueState();
+            return;
+        }
+
+        if (HandleCombatPreEmoteDelay(now))
+            return;
+
+        if (TryGetEmoteBlockReason(out var blockReason, out var canAutoDismount))
+        {
+            HandleQueuedEmoteBlocked(blockReason, canAutoDismount, now);
+            return;
+        }
+
+        if (nextDismountAttemptAt + DismountGrace >= now)
+            return;
+
+        if (!EnsureMovementLockActive(now))
+            return;
+
+        if (!HasStoppedWhileSuppressed(now))
+            return;
+
+        ReplayQueuedEmote(current);
+    }
+    private void TryStartNextQueuedSequenceStep(DateTime now)
+    {
+        if (queued != null)
+            return;
+
+        if (nextSequenceStepAt > now)
+        {
+            RequestMovementBlock();
+            return;
+        }
+
+        while (queuedSequence.Count > 0)
+        {
+            var step = queuedSequence.Dequeue();
+
+            if (step.Kind == QueuedEmoteStepKind.Wait)
+            {
+                nextSequenceStepAt = now + step.Duration;
+
+                if (movementLockedUntil < nextSequenceStepAt)
+                    movementLockedUntil = nextSequenceStepAt;
+
+                RequestMovementBlock();
+
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(step.Command))
+            {
+                nextSequenceStepAt = DateTime.MinValue;
+                QueueReplay(QueuedEmote.FromCommand(step.Command));
+                return;
+            }
+        }
+
+        nextSequenceStepAt = DateTime.MinValue;
+    }
+
+
 
     private void BuildEmoteRegistry()
     {
@@ -164,6 +295,7 @@ public unsafe sealed class EmoteGuard : IDisposable
         // Shock-collar overrides.
         emotes.AddCommand("upset", false);
         emotes.AddCommand("shocked", false);
+        emotes.AddCommand("standup", false);
     }
 
     private byte ExecuteSlotDetour(RaptureHotbarModule* hotbarModule, HotbarSlot* hotbarSlot)
@@ -222,58 +354,7 @@ public unsafe sealed class EmoteGuard : IDisposable
         // Swallow the original slash command. It will be replayed once safe.
     }
 
-    private void OnFrameworkUpdate(IFramework _)
-    {
-        try
-        {
-            OnFrameworkUpdateInner();
-        }
-        catch (Exception ex)
-        {
-            ResetQueueState();
-            Plugin.ChatGui.PrintError($"EmoteGuard update error: {ex.Message}");
-        }
-    }
-
-    private void OnFrameworkUpdateInner()
-    {
-        var now = DateTime.UtcNow;
-        IsActive = true;
-
-        UpdateCombatActionBlock(now);
-
-        if (queued is not { } current)
-        {
-            PostEmoteQueue(now);
-            return;
-        }
-
-        if (now - current.QueuedAt > QueueTimeout)
-        {
-            ResetQueueState();
-            return;
-        }
-
-        if (HandleCombatPreEmoteDelay(now))
-            return;
-
-        if (TryGetEmoteBlockReason(out var blockReason, out var canAutoDismount))
-        {
-            HandleQueuedEmoteBlocked(blockReason, canAutoDismount, now);
-            return;
-        }
-
-        if (nextDismountAttemptAt + DismountGrace >= now)
-            return;
-
-        if (!EnsureMovementLockActive(now))
-            return;
-
-        if (!HasStoppedWhileSuppressed(now))
-            return;
-
-        ReplayQueuedEmote(current);
-    }
+    
 
     private bool HandleCombatPreEmoteDelay(DateTime now)
     {
@@ -985,6 +1066,80 @@ public unsafe sealed class EmoteGuard : IDisposable
                 text = text[..firstSpace];
 
             return text.Trim();
+        }
+        public static IEnumerable<QueuedEmoteStep> ParseQueuedEmoteSequence(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                yield break;
+
+            var commands = SplitSlashCommands(raw)
+                .Select(x => x.Trim().ToLowerInvariant())
+                .Where(x => x.StartsWith('/'))
+                .ToList();
+
+            for (var i = 0; i < commands.Count; i++)
+            {
+                var command = commands[i];
+
+                if (TryParseWaitCommand(command, out var waitDuration))
+                {
+                    yield return QueuedEmoteStep.WaitStep(waitDuration);
+                    continue;
+                }
+
+                yield return QueuedEmoteStep.CommandStep(command);
+
+                var nextIsExplicitWait =
+                    i + 1 < commands.Count &&
+                    TryParseWaitCommand(commands[i + 1], out _);
+
+                var hasAnotherCommandAfterThis =
+                    commands
+                        .Skip(i + 1)
+                        .Any(x => !TryParseWaitCommand(x, out _));
+
+                if (!nextIsExplicitWait && hasAnotherCommandAfterThis)
+                    yield return QueuedEmoteStep.WaitStep(DefaultSequenceDelay);
+            }
+        }
+
+        private static IEnumerable<string> SplitSlashCommands(string raw)
+        {
+            var parts = raw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var part in parts)
+                yield return "/" + part.Trim();
+        }
+
+        private static bool TryParseWaitCommand(string command, out TimeSpan duration)
+        {
+            duration = TimeSpan.Zero;
+
+            if (string.IsNullOrWhiteSpace(command))
+                return false;
+
+            var parts = command.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length != 2)
+                return false;
+
+            if (!string.Equals(parts[0], "/wait", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (!double.TryParse(
+                    parts[1],
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var seconds))
+            {
+                return false;
+            }
+
+            if (seconds < 0)
+                seconds = 0;
+
+            duration = TimeSpan.FromSeconds(seconds);
+            return true;
         }
     }
 }

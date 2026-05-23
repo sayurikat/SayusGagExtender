@@ -52,18 +52,21 @@ public sealed class Plugin : IDalamudPlugin
     public RandomZapSender RandomZapSender { get; set; }
     public RandomVibeSender RandomVibeSender { get; set; }
     public FriendListHelper FriendListHelper { get; set; }
+    public MoodleEnforcer MoodleEnforcer { get; set; }
     public TeleportBlocker TeleportBlocker { get; set; }
     public MountBlocker MountBlocker { get; set; }
     public JobSwitchBlocker JobSwitchBlocker { get; set; }
     public ChatMonitor ChatMonitor { get; set; }
     public BlindfoldMonitor BlindfoldMonitor { get; set; }
     public MirrorGagSpeak MirrorGagSpeak { get; set; }
-    public MoodleEnforcer MoodleEnforcer { get; set; }
     public PenumbraEnforcer PenumbraEnforcer { get; set; }
     public EmoteEnforcer EmoteEnforcer { get; set; }
     public CustomizePlusEnforcer CustomizePlusEnforcer { get; set; }
     public MovementBlocker MovementBlocker { get; set; }
     public ActionBlocker ActionBlocker { get; set; }
+    public RemoteChatCommandMonitor RemoteChatCommandMonitor { get; set; }
+
+
 
     private const string CommandName = "/sge";
     public Configuration Configuration { get; init; }
@@ -128,6 +131,7 @@ public sealed class Plugin : IDalamudPlugin
         Utils = new Utils(Instance);
         FriendListHelper = new FriendListHelper(Instance);
         CharacterHelper = new CharacterHelper(Instance);
+        MoodleEnforcer = new MoodleEnforcer(Instance);
         TeleportBlocker = new TeleportBlocker(Instance);
         MountBlocker = new MountBlocker(Instance);
         JobSwitchBlocker = new JobSwitchBlocker(Instance);
@@ -139,12 +143,12 @@ public sealed class Plugin : IDalamudPlugin
         MirrorGagSpeak = new MirrorGagSpeak(Instance);
         BlindfoldMonitor = new BlindfoldMonitor(Instance);
         ChatMonitor = new ChatMonitor(Instance);
-        MoodleEnforcer = new MoodleEnforcer(Instance);
         PenumbraEnforcer = new PenumbraEnforcer(Instance);
         EmoteEnforcer = new EmoteEnforcer(Instance);
         CustomizePlusEnforcer = new CustomizePlusEnforcer(Instance);
         MovementBlocker = new MovementBlocker(Instance);
         ActionBlocker = new ActionBlocker(Instance);
+        RemoteChatCommandMonitor = new RemoteChatCommandMonitor(Instance);
 
 
     }
@@ -187,6 +191,7 @@ public sealed class Plugin : IDalamudPlugin
         CustomizePlusEnforcer?.Dispose();
         MovementBlocker?.Dispose();
         CharacterHelper?.Dispose();
+        RemoteChatCommandMonitor?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);

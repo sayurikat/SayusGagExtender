@@ -18,17 +18,23 @@ namespace SayusGagExtender.Windows
         private Guid? selectedAutoZapRestraintToAdd;
         private string newZapCommand = "";
         private string newZapCommandWeight = "10";
-
+        private Guid? selectedAutoZapEngagedMoodleToSet;
+        private string autoZapEngagedMoodleSearch = "";
+        private Guid? selectedAutoZapControllerOnlineMoodleToSet;
+        private string autoZapControllerOnlineMoodleSearch = "";
 
         private void DrawAutoZapTab()
         {
+            if (configuration.AutoZapCountControllerLocked)
+                ImGui.BeginDisabled();
+
             var autoZapEnabled = configuration.AutoZapEnabled;
             if (ImGui.Checkbox("Enable Auto Zap", ref autoZapEnabled))
             {
                 configuration.AutoZapEnabled = autoZapEnabled;
                 configuration.Save();
             }
-
+            
             ImGui.SetNextItemWidth(80);
             var zapCount = configuration.AutoZapCount.ToString();
             if (ImGui.InputText(
@@ -42,15 +48,49 @@ namespace SayusGagExtender.Windows
                     configuration.Save();
                 }
             }
+            if (configuration.AutoZapCountControllerLocked)
+                ImGui.EndDisabled();
 
-            ImGui.TextWrapped("Ignored when Zap Controller is online.");
-
-            var zapControllerName = configuration.ZapControllerName;
-            if (ImGui.InputText("Zap Controller Name", ref zapControllerName))
+            if (configuration.AutoZapWhen == RandomZapSender.OperateWhen.Offline)
             {
-                configuration.ZapControllerName = zapControllerName;
-                configuration.Save();
+                ImGui.TextWrapped("Ignored when Controller is online.");
             }
+            else if (configuration.AutoZapWhen == RandomZapSender.OperateWhen.Distant)
+            {
+                ImGui.TextWrapped("Ignored when Controller within range.");
+            }
+            else if (configuration.AutoZapWhen == RandomZapSender.OperateWhen.Always)
+            {
+                //ImGui.TextWrapped("");
+            }
+
+            DrawAutoZapMoodleSetting(
+                "Moodle when Auto Zap is engaged",
+                "##AutoZapEngagedMoodle",
+                configuration.AutoZapEngagedMoodleId,
+                configuration.AutoZapEngagedMoodleName,
+                ref selectedAutoZapEngagedMoodleToSet,
+                ref autoZapEngagedMoodleSearch,
+                (id, name) =>
+                {
+                    configuration.AutoZapEngagedMoodleId = id;
+                    configuration.AutoZapEngagedMoodleName = name;
+                    configuration.Save();
+                });
+
+            DrawAutoZapMoodleSetting(
+                "Moodle when Controller is online",
+                "##AutoZapControllerOnlineMoodle",
+                configuration.AutoZapControllerOnlineMoodleId,
+                configuration.AutoZapControllerOnlineMoodleName,
+                ref selectedAutoZapControllerOnlineMoodleToSet,
+                ref autoZapControllerOnlineMoodleSearch,
+                (id, name) =>
+                {
+                    configuration.AutoZapControllerOnlineMoodleId = id;
+                    configuration.AutoZapControllerOnlineMoodleName = name;
+                    configuration.Save();
+                });
 
             ImGui.Spacing();
             ImGui.Separator();
@@ -69,6 +109,166 @@ namespace SayusGagExtender.Windows
             ImGui.Spacing();
 
             DrawZapCommands();
+        }
+        private void DrawAutoZapMoodleSetting(string label, string id, Guid currentMoodleId, string currentMoodleName, ref Guid? selectedMoodleToSet, ref string searchText, Action<Guid, string> onSet)
+        {
+            var availableMoodles = plugin.MoodlesApi.GetAllMoodles()
+                .Where(x => x.Key != Guid.Empty)
+                .OrderBy(x => x.Value, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var selectedId = selectedMoodleToSet;
+
+            if (selectedId != null &&
+                !availableMoodles.Any(x => x.Key == selectedId.Value))
+            {
+                selectedMoodleToSet = null;
+                selectedId = null;
+            }
+
+            ImGui.Spacing();
+
+            ImGui.TextUnformatted(label);
+
+            const float selectedRowWidth = 300f;
+
+            if (currentMoodleId != Guid.Empty)
+            {
+                var currentMoodle = availableMoodles.FirstOrDefault(x => x.Key == currentMoodleId);
+
+                var displayCurrentName = !string.IsNullOrWhiteSpace(currentMoodle.Value)
+                    ? currentMoodle.Value
+                    : currentMoodleName;
+
+                if (string.IsNullOrWhiteSpace(displayCurrentName))
+                    displayCurrentName = currentMoodleId.ToString();
+
+                //ImGui.TextDisabled("Selected Moodle");
+
+                var ctrlHeld = ImGui.GetIO().KeyCtrl;
+
+                ImGui.Indent();
+
+                ImGui.PushID($"{id}-selected-{currentMoodleId}");
+
+                if (DrawGagSpeakItem(displayCurrentName, selectedRowWidth, ctrlHeld))
+                {
+                    plugin.RandomZapSender.MoodleConfigChange(); // AutoZap version
+                    onSet(Guid.Empty, string.Empty);
+
+                    selectedMoodleToSet = null;
+                    searchText = "";
+                }
+
+                ImGui.PopID();
+
+                ImGui.Unindent();
+            }
+            else
+            {
+                ImGui.TextDisabled("No Moodle selected.");
+            }
+
+
+            var selectedName = "Select Moodle...";
+
+            if (selectedId != null)
+            {
+                var selectedMoodle = availableMoodles.FirstOrDefault(x => x.Key == selectedId.Value);
+                if (!string.IsNullOrWhiteSpace(selectedMoodle.Value))
+                    selectedName = selectedMoodle.Value;
+            }
+
+            ImGui.SetNextItemWidth(300);
+
+            if (ImGui.BeginCombo($"{id}Combo", selectedName))
+            {
+                ImGui.SetNextItemWidth(-1);
+
+                if (ImGui.IsWindowAppearing())
+                    ImGui.SetKeyboardFocusHere();
+
+                ImGui.InputTextWithHint(
+                    $"{id}Search",
+                    "Search...",
+                    ref searchText,
+                    128);
+
+                ImGui.Separator();
+
+                var localSearchText = searchText;
+
+                var filteredMoodles = string.IsNullOrWhiteSpace(localSearchText)
+                    ? availableMoodles
+                    : availableMoodles
+                        .Where(x => x.Value.Contains(localSearchText, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                if (filteredMoodles.Count == 0)
+                {
+                    ImGui.TextDisabled("No matches.");
+                }
+                else
+                {
+                    foreach (var moodle in filteredMoodles)
+                    {
+                        var guid = moodle.Key;
+                        var name = moodle.Value;
+                        var isSelected = selectedId == guid;
+
+                        if (ImGui.Selectable($"{name}{id}{guid}", isSelected))
+                        {
+                            selectedMoodleToSet = guid;
+                            selectedId = guid;
+                            searchText = "";
+                            ImGui.CloseCurrentPopup();
+                        }
+
+                        if (isSelected)
+                            ImGui.SetItemDefaultFocus();
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
+
+            ImGui.SameLine();
+
+            selectedId = selectedMoodleToSet;
+
+            var nameToSet = string.Empty;
+            var canSet = false;
+
+            if (selectedId != null)
+            {
+                var selectedMoodle = availableMoodles.FirstOrDefault(x => x.Key == selectedId.Value);
+
+                if (selectedMoodle.Key != Guid.Empty)
+                {
+                    nameToSet = string.IsNullOrWhiteSpace(selectedMoodle.Value)
+                        ? selectedMoodle.Key.ToString()
+                        : selectedMoodle.Value;
+
+                    canSet = true;
+                }
+            }
+
+            if (!canSet)
+                ImGui.BeginDisabled();
+
+            if (ImGui.Button($"Set{id}"))
+            {
+                plugin.RandomZapSender.MoodleConfigChange();
+                onSet(selectedId!.Value, nameToSet);
+
+                selectedMoodleToSet = null;
+                searchText = "";
+            }
+
+            if (!canSet)
+                ImGui.EndDisabled();
+
+
         }
         private void DrawAutoZapRequiredRestraints()
         {

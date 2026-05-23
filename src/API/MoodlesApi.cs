@@ -262,6 +262,7 @@ namespace SayusGagExtender.API
 
         public bool RemoveMoodle(Guid statusId, IPlayerCharacter player)
         {
+
             try
             {
                 if (!TryCacheReflectionWithRefresh())
@@ -435,6 +436,7 @@ namespace SayusGagExtender.API
 
         private void InvokeMoodlesIpcWithoutChangeCallbacks(object ipcProcessor, Action invoke)
         {
+
             var generation = ++ipcEventSuppressionGeneration;
 
             suppressMoodleChangeEvents = true;

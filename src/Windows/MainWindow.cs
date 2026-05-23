@@ -5,8 +5,10 @@ using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using ECommons;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
+using System.Linq;
 
 namespace SayusGagExtender.Windows;
 
@@ -144,22 +146,73 @@ public class MainWindow : Window, IDisposable
         using (ImRaii.Table("RuntimeStatusTable", 2, ImGuiTableFlags.SizingStretchProp))
         {
             ImGui.TableSetupColumn("Status", ImGuiTableColumnFlags.WidthStretch);
-            ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 120);
-
-
-            DrawTextStatusRow(
-                "Zap Controller",
-                string.IsNullOrWhiteSpace(plugin.Configuration.ZapControllerName)
-                    ? "Not set"
-                    : plugin.Configuration.ZapControllerName,
-                !string.IsNullOrWhiteSpace(plugin.Configuration.ZapControllerName));
+            ImGui.TableSetupColumn("Value", ImGuiTableColumnFlags.WidthFixed, 220);
 
             DrawTextStatusRow(
-                "Vibe Controller",
-                string.IsNullOrWhiteSpace(plugin.Configuration.VibeControllerName)
-                    ? "Not set"
-                    : plugin.Configuration.VibeControllerName,
-                !string.IsNullOrWhiteSpace(plugin.Configuration.VibeControllerName));
+                "Auto Zap",
+                plugin.RandomZapSender.AutonomousStatus,
+                plugin.RandomZapSender.IsAutonomousRunning);
+
+            DrawTextStatusRow(
+                "Zap controller",
+                plugin.RandomZapSender.ControllerPresenceStatus,
+                !plugin.RandomZapSender.ControllerPresenceStatus.Contains("Offline", StringComparison.OrdinalIgnoreCase) &&
+                !plugin.RandomZapSender.ControllerPresenceStatus.Contains("Not set", StringComparison.OrdinalIgnoreCase));
+
+            DrawTextStatusRow(
+                "Auto Vibe",
+                plugin.RandomVibeSender.AutonomousStatus,
+                plugin.RandomVibeSender.IsAutonomousRunning);
+
+            DrawTextStatusRow(
+                "Vibe controller",
+                plugin.RandomVibeSender.ControllerPresenceStatus,
+                !plugin.RandomVibeSender.ControllerPresenceStatus.Contains("Offline", StringComparison.OrdinalIgnoreCase) &&
+                !plugin.RandomVibeSender.ControllerPresenceStatus.Contains("Not set", StringComparison.OrdinalIgnoreCase));
+
+
+            DrawSeparatorRow();
+
+            DrawTextStatusRow(
+                "Mount quota",
+                BuildQuotaStatus(
+                    configuration.MountQuotaEnabled,
+                    configuration.MountQuotaActions,
+                    configuration.MountQuotaWindow,
+                    configuration.MountQuotaActionLogUtc),
+                IsQuotaGood(
+                    configuration.MountQuotaEnabled,
+                    configuration.MountQuotaActions,
+                    configuration.MountQuotaWindow,
+                    configuration.MountQuotaActionLogUtc));
+
+            DrawTextStatusRow(
+                "Teleport quota",
+                BuildQuotaStatus(
+                    configuration.TeleportQuotaEnabled,
+                    configuration.TeleportQuotaActions,
+                    configuration.TeleportQuotaWindow,
+                    configuration.TeleportQuotaActionLogUtc),
+                IsQuotaGood(
+                    configuration.TeleportQuotaEnabled,
+                    configuration.TeleportQuotaActions,
+                    configuration.TeleportQuotaWindow,
+                    configuration.TeleportQuotaActionLogUtc));
+
+            DrawTextStatusRow(
+                "Job switch quota",
+                BuildQuotaStatus(
+                    configuration.JobSwitchQuotaEnabled,
+                    configuration.JobSwitchQuotaActions,
+                    configuration.JobSwitchQuotaWindow,
+                    configuration.JobSwitchQuotaActionLogUtc),
+                IsQuotaGood(
+                    configuration.JobSwitchQuotaEnabled,
+                    configuration.JobSwitchQuotaActions,
+                    configuration.JobSwitchQuotaWindow,
+                    configuration.JobSwitchQuotaActionLogUtc));
+
+            DrawSeparatorRow();
 
             DrawStatusRow("Blindfolded", plugin.BlindfoldMonitor.blindfolded);
             DrawStatusRow("Chatbox hidden", plugin.ChatMonitor.chatboxHidden);
@@ -191,43 +244,98 @@ public class MainWindow : Window, IDisposable
 
         ImGui.TableSetColumnIndex(1);
 
-        //var color = new Vector4(0.2f, 1.0f, 0.2f, 1.0f);
+        var color = good
+            ? new Vector4(0.2f, 1.0f, 0.2f, 1.0f)
+            : new Vector4(1.0f, 0.25f, 0.25f, 1.0f);
 
-        ImGui.Text(value);
+        ImGui.TextColored(color, value);
     }
 
     private void DrawActions()
     {
         ImGui.Text("Actions");
+        if (ImGui.Button("Refresh GagSpeak Cache"))
+        {
+            plugin.GagSpeakContext.RefreshGagSpeakVisualsAsync();
+        }
 
-        //if (ImGui.Button("Open Settings"))
-        //{
-        //    plugin.ToggleConfigUi();
-        //}
-        //
-        //ImGui.SameLine();
-        //
-        //if (ImGui.Button("Reload GagSpeak Restrictions"))
-        //{
-        //    // Add your own refresh method here if available.
-        //    // Example:
-        //    // plugin.RefreshGagSpeakRestrictions();
-        //}
-        //
-        //if (ImGui.Button("Save Chat2 Blindfold Position"))
-        //{
-        //    if (plugin.Chat2Api.TryGetPositionAndSize(out var bounds) && bounds != null)
-        //    {
-        //        configuration.Chat2Bounds = bounds;
-        //        configuration.Save();
-        //    }
-        //}
-        //
-        //ImGui.SameLine();
-        //
-        //if (ImGui.Button("Apply Chat2 Blindfold Position"))
-        //{
-        //    plugin.Chat2Api.SetPositionAndSize(configuration.Chat2Bounds);
-        //}
+    }
+    private static void DrawSeparatorRow()
+    {
+        ImGui.TableNextRow();
+
+        ImGui.TableSetColumnIndex(0);
+        ImGui.Separator();
+
+        ImGui.TableSetColumnIndex(1);
+        ImGui.Separator();
+    }
+
+    private static string BuildQuotaStatus(
+        bool enabled,
+        int actionLimit,
+        Configuration.QuotaWindow window,
+        List<DateTime>? actionLogUtc)
+    {
+        if (!enabled)
+            return "Disabled";
+
+        if (actionLimit < 0)
+            return "Unlimited";
+
+        var used = GetQuotaUsed(actionLogUtc, window);
+        var remaining = Math.Max(0, actionLimit - used);
+        var windowLabel = GetQuotaWindowLabel(window);
+
+        if (remaining <= 0)
+            return $"Empty ({used}/{actionLimit} per {windowLabel})";
+
+        return $"{remaining} left ({used}/{actionLimit} per {windowLabel})";
+    }
+
+    private static bool IsQuotaGood(
+        bool enabled,
+        int actionLimit,
+        Configuration.QuotaWindow window,
+        List<DateTime>? actionLogUtc)
+    {
+        if (!enabled)
+            return false;
+
+        if (actionLimit < 0)
+            return true;
+
+        var used = GetQuotaUsed(actionLogUtc, window);
+        var remaining = Math.Max(0, actionLimit - used);
+
+        return remaining > 0;
+    }
+
+    private static int GetQuotaUsed(List<DateTime>? actionLogUtc, Configuration.QuotaWindow window)
+    {
+        if (actionLogUtc == null || actionLogUtc.Count == 0)
+            return 0;
+
+        var cutoff = DateTime.UtcNow - GetQuotaWindowDuration(window);
+
+        return actionLogUtc.Count(x => x >= cutoff);
+    }
+
+    private static TimeSpan GetQuotaWindowDuration(Configuration.QuotaWindow window)
+    {
+        return window switch
+        {
+            Configuration.QuotaWindow.Day => TimeSpan.FromHours(24),
+            _ => TimeSpan.FromHours(1),
+        };
+    }
+
+    private static string GetQuotaWindowLabel(Configuration.QuotaWindow window)
+    {
+        return window switch
+        {
+            Configuration.QuotaWindow.Day => "day",
+            _ => "hour",
+        };
     }
 }

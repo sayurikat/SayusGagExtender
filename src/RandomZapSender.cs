@@ -1,11 +1,11 @@
+using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.System.String;
-using FFXIVClientStructs.FFXIV.Client.UI;
-using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using static FFXIVClientStructs.FFXIV.Client.Game.Character.CustomizeData.Delegates;
+using System.Numerics;
 
 namespace SayusGagExtender
 {
@@ -17,65 +17,150 @@ namespace SayusGagExtender
         private int scheduledHour = -1;
         private readonly List<DateTime> triggerTimes = new();
         private int nextTriggerIndex = 0;
+
         public bool wearsRestrictedItems { get; private set; } = false;
         public bool IsActive => wearsRestrictedItems;
-        private DateTime lastItemChekUtc = DateTime.MinValue;
+
+        private DateTime lastItemCheckUtc = DateTime.MinValue;
+
+        private bool autoZapByControllerMoodleRequested;
+        private bool autoZapAutonomusMoodleRequested;
+
+        private const float ControllerNearbyDistance = 30f;
+        private ControllerPresence lastControllerPresence = ControllerPresence.Offline;
+
+        public enum OperateWhen
+        {
+            Always,
+            Distant,
+            Offline
+        }
+
+        private enum ControllerPresence
+        {
+            Offline,
+            OnlineDistant,
+            OnlineNearby,
+        }
+
         public class WeightedZapCommand
         {
             public string Command { get; set; } = "";
             public int Weight { get; set; } = 1;
         }
+
         public RandomZapSender(Plugin plugin)
         {
             this.plugin = plugin;
 
             this.ScheduleCurrentHour();
+
             Plugin.Framework.Update += this.OnFrameworkUpdate;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnRestrictionsChanged;
-            plugin.FriendListHelper.RequestFriendListUpdateWithCooldown();
-            //this.SendEmote();
+            
         }
 
         public void Dispose()
         {
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= this.OnRestrictionsChanged;
+
+            ClearAutoZapMoodles();
         }
+
         public void Enable()
         {
             plugin.Configuration.AutoZapEnabled = true;
-            plugin.FriendListHelper.RequestFriendListUpdateWithCooldown();
         }
+
         public void Disable()
         {
             plugin.Configuration.AutoZapEnabled = false;
+            ClearAutoZapMoodles();
+        }
+        public bool IsAutonomousRunning =>
+    plugin.Configuration.AutoZapEnabled &&
+    wearsRestrictedItems &&
+    ShouldOperateForPresence(lastControllerPresence);
+
+        public string ControllerPresenceStatus
+        {
+            get
+            {
+                //var controllerName = plugin.Configuration.RemoteControllerName;
+                //var controllerWorld = plugin.Configuration.RemoteControllerWorld;
+
+                //if (string.IsNullOrWhiteSpace(controllerName) || controllerName.Length <= 3)
+                //    return "Not set";
+                //
+                //var name = string.IsNullOrWhiteSpace(controllerWorld)
+                //    ? controllerName
+                //    : $"{controllerName}@{controllerWorld}";
+
+                return lastControllerPresence switch
+                {
+                    ControllerPresence.OnlineNearby => $"Nearby",
+                    ControllerPresence.OnlineDistant => $"Distant",
+                    ControllerPresence.Offline => $"Offline",
+                    _ => $"Unknown",
+                };
+            }
+        }
+
+        public string AutonomousStatus
+        {
+            get
+            {
+                if (!plugin.Configuration.AutoZapEnabled)
+                    return "Disabled";
+
+                if (!wearsRestrictedItems)
+                    return "Inactive";
+
+                return IsAutonomousRunning
+                    ? $"Running (Require {plugin.Configuration.AutoZapWhen})"
+                    : $"Paused (Require {plugin.Configuration.AutoZapWhen})";
+            }
         }
         private void CheckIfWearingRestrictiveItems()
         {
-            wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(plugin.Configuration.AutoZapRequiredRestrictions);
+            wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(
+                plugin.Configuration.AutoZapRequiredRestrictions);
         }
+
         private void OnRestrictionsChanged(object obj)
         {
             CheckIfWearingRestrictiveItems();
         }
+
         private void OnFrameworkUpdate(IFramework framework)
         {
             if (!plugin.Configuration.AutoZapEnabled)
+            {
+                lastControllerPresence = ControllerPresence.Offline;
+                ClearAutoZapMoodles();
                 return;
+            }
 
             var now = DateTime.UtcNow;
 
-            if ((now - this.lastItemChekUtc).TotalMilliseconds > 5000)
+            if ((now - this.lastItemCheckUtc).TotalMilliseconds > 5000)
             {
                 CheckIfWearingRestrictiveItems();
-                this.lastItemChekUtc = now;
+                this.lastItemCheckUtc = now;
             }
 
             if (!wearsRestrictedItems)
+            {   
+                lastControllerPresence = ControllerPresence.Offline;
+                ClearAutoZapMoodles();
                 return;
+            }
 
+            var presence = GetControllerPresence();
+            var shouldOperate = ShouldOperateForPresence(presence);
 
-
+            UpdateAutoZapMoodles(presence, shouldOperate);
 
             // New hour: generate new random trigger times.
             if (now.Hour != this.scheduledHour)
@@ -98,7 +183,12 @@ namespace SayusGagExtender
                 return;
             }
 
-            this.SendEmote();
+            if (shouldOperate)
+            {
+                TrySendRandomZapCommand(presence);
+            }
+                
+
             this.nextTriggerIndex++;
         }
 
@@ -116,49 +206,148 @@ namespace SayusGagExtender
                 now.Day,
                 now.Hour,
                 0,
-                0);
+                0,
+                DateTimeKind.Utc);
 
             var nextHourStart = hourStart.AddHours(1);
+            var totalSeconds = (int)(nextHourStart - hourStart).TotalSeconds;
 
-            ///Plugin.ChatGui.Print($"Zap triggers this hour");
             for (var i = 0; i < plugin.Configuration.AutoZapCount; i++)
             {
-                var totalSeconds = (int)(nextHourStart - hourStart).TotalSeconds;
                 var randomSecond = this.random.Next(0, totalSeconds);
-
                 var triggerTime = hourStart.AddSeconds(randomSecond);
-                
-                // If plugin starts halfway through the hour, avoid scheduling past times.
-                //if (triggerTime <= now)
-                //{
-                //    var remainingSeconds = Math.Max(1, (int)(nextHourStart - now).TotalSeconds);
-                //    triggerTime = now.AddSeconds(this.random.Next(1, remainingSeconds));
-                //}
 
                 this.triggerTimes.Add(triggerTime);
-                //Plugin.ChatGui.Print($"{i+1}: {triggerTime}");
             }
 
             this.triggerTimes.Sort();
         }
 
-        private void SendEmote()
+        private ControllerPresence GetControllerPresence()
         {
-            var controllerName = plugin.Configuration.ZapControllerName;
-            if (controllerName == null) return;
+            var controllerName = plugin.Configuration.RemoteControllerName;
+            var controllerWorld = plugin.Configuration.RemoteControllerWorld;
 
-            if (controllerName.Length > 3 && plugin.FriendListHelper.IsFriendOnline(controllerName))
+            if (string.IsNullOrWhiteSpace(controllerName) || controllerName.Length <= 3)
+                return ControllerPresence.Offline;
+
+
+            var isOnline = plugin.FriendListHelper.IsFriendOnlineSafe(controllerName, controllerWorld);
+            bool assumedOnline = false;
+            if (isOnline == null)
             {
-                Plugin.ChatGui.Print($"{controllerName} is online, skipping emote.");
-                return;
+                if (lastControllerPresence != ControllerPresence.Offline)
+                {
+                    assumedOnline = true;
+                }
+                else
+                {
+                    assumedOnline = false;
+                }
             }
+            else
+            {
+                assumedOnline = (bool)isOnline;
+            }
+
+            if (!assumedOnline)
+            {
+                lastControllerPresence = ControllerPresence.Offline;
+                return lastControllerPresence;
+            }
+
+            if (TryFindControllerInObjectTable(controllerName, controllerWorld, out var controller))
+            {
+                var localPlayer = Plugin.ObjectTable.LocalPlayer;
+
+                if (localPlayer != null)
+                {
+                    var maxDistanceSq = ControllerNearbyDistance * ControllerNearbyDistance;
+
+                    if (Vector3.DistanceSquared(localPlayer.Position, controller.Position) <= maxDistanceSq)
+                    {
+                        lastControllerPresence = ControllerPresence.OnlineNearby;
+                        return lastControllerPresence;
+
+                    }
+                }
+            }
+
+            lastControllerPresence = ControllerPresence.OnlineDistant;
+            return lastControllerPresence;
+        }
+
+        private bool ShouldOperateForPresence(ControllerPresence presence)
+        {
+            return plugin.Configuration.AutoZapWhen switch
+            {
+                OperateWhen.Always => true,
+
+                // Controller is offline OR online but not nearby.
+                OperateWhen.Distant => presence is ControllerPresence.Offline or ControllerPresence.OnlineDistant,
+
+                // Controller must be offline.
+                OperateWhen.Offline => presence == ControllerPresence.Offline,
+
+                _ => false,
+            };
+        }
+
+        private bool TryFindControllerInObjectTable(
+            string controllerName,
+            string? controllerWorld,
+            out IPlayerCharacter controller)
+        {
+            controller = null!;
+
+            foreach (var obj in Plugin.ObjectTable)
+            {
+                if (obj == null)
+                    continue;
+
+                if (obj.ObjectKind != ObjectKind.Pc)
+                    continue;
+
+                if (obj is not IPlayerCharacter player)
+                    continue;
+
+                var name = player.Name.ToString();
+
+                if (!string.Equals(name, controllerName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (!string.IsNullOrWhiteSpace(controllerWorld))
+                {
+                    var homeWorld = plugin.Utils.WorldRowIDToString(player.HomeWorld.RowId);
+
+                    if (!string.Equals(homeWorld, controllerWorld, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                }
+
+                controller = player;
+                return true;
+            }
+
+            return false;
+        }
+
+        private void UpdateAutoZapMoodles(ControllerPresence presence, bool shouldOperate)
+        {
+            //lugin.ChatGui.Print($"UpdateAutoZapMoodles {presence.ToString()} {shouldOperate}");
+            var controllerNearby = presence != ControllerPresence.Offline;
+
+            // Moodle for "controller is here / nearby".
+            SetAutoZapByControllerMoodle(controllerNearby);
+
+            // Moodle for "Auto Zap is currently operating".
+            SetAutoZapAutonomusMoodle(shouldOperate);
+        }
+
+        private void TrySendRandomZapCommand(ControllerPresence presence)
+        {
             try
             {
-                Plugin.ChatGui.Print($"{controllerName} is not online, sending emote.");
-                //plugin.Utils.ExecuteNativeCommand("/upset");
-
-                //Plugin.CommandManager.ProcessCommand("/quack eval /standup /upset");
-                //plugin.Utils.ExecuteCommand("/upset");
+                //Plugin.ChatGui.Print($"Auto Zap operating. Controller presence: {presence}.");
 
                 var zapCommands = plugin.Configuration.AutoZapCommands
                     .Where(x => !string.IsNullOrWhiteSpace(x.Command) && x.Weight > 0)
@@ -166,10 +355,7 @@ namespace SayusGagExtender
 
                 if (zapCommands.Count == 0)
                 {
-                    // Optional fallback if no commands are configured
-                    //Plugin.CommandManager.ProcessCommand("/quack eval /standup \"/wait 0.5\" /upset");
-                    //Plugin.CommandManager.ProcessCommand("/upset");
-                    plugin.Utils.ExecuteCommand("/upset");
+                    plugin.EmoteGuard.QueueGuardedEmote("/upset");
                     return;
                 }
 
@@ -184,9 +370,7 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
-                        //Plugin.ChatGui.Print($"Rolled: {roll}, using {zapCommand.Command}");
-                        Plugin.CommandManager.ProcessCommand(zapCommand.Command);
-                        plugin.Utils.ExecuteCommand(zapCommand.Command);
+                        plugin.EmoteGuard.QueueGuardedEmote(zapCommand.Command);
                         return;
                     }
                 }
@@ -196,9 +380,65 @@ namespace SayusGagExtender
                 Plugin.ChatGui.PrintError($"Failed to send zap command: {ex.Message}");
             }
         }
-        public static unsafe class GameCommandHelper
+
+        private void ClearAutoZapMoodles()
         {
-            
+            SetAutoZapByControllerMoodle(false);
+            SetAutoZapAutonomusMoodle(false);
+        }
+
+        private void SetAutoZapByControllerMoodle(bool active)
+        {
+            var moodleId = plugin.Configuration.AutoZapControllerOnlineMoodleId;
+
+            if (moodleId == Guid.Empty)
+                return;
+
+            if (active)
+            {
+                if (autoZapByControllerMoodleRequested)
+                    return;
+
+                autoZapByControllerMoodleRequested = true;
+                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, this);
+            }
+            else
+            {
+                if (!autoZapByControllerMoodleRequested)
+                    return;
+
+                autoZapByControllerMoodleRequested = false;
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(moodleId, this);
+            }
+        }
+
+        private void SetAutoZapAutonomusMoodle(bool active)
+        {
+            var moodleId = plugin.Configuration.AutoZapEngagedMoodleId;
+
+            if (moodleId == Guid.Empty)
+                return;
+
+            if (active)
+            {
+                if (autoZapAutonomusMoodleRequested)
+                    return;
+
+                autoZapAutonomusMoodleRequested = true;
+                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, this);
+            }
+            else
+            {
+                if (!autoZapAutonomusMoodleRequested)
+                    return;
+
+                autoZapAutonomusMoodleRequested = false;
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(moodleId, this);
+            }
+        }
+        public void MoodleConfigChange()
+        {
+            ClearAutoZapMoodles();
         }
     }
 }

@@ -2,14 +2,16 @@ using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using System;
+using System.Collections.Generic;
 using static FFXIVClientStructs.FFXIV.Client.Game.ActionManager;
-using static FFXIVClientStructs.FFXIV.Client.Game.UI.Telepo.Delegates;
+using static SayusGagExtender.Configuration;
 
 namespace SayusGagExtender;
 
 public unsafe sealed class TeleportBlocker : IDisposable
 {
     private readonly Plugin plugin;
+
     private delegate bool UseActionDelegate(
         ActionManager* actionManager,
         ActionType actionType,
@@ -23,38 +25,40 @@ public unsafe sealed class TeleportBlocker : IDisposable
     private readonly Hook<UseActionDelegate> useActionHook;
 
     public bool Enabled => plugin.Configuration.TeleportBlockFeature;
-    public bool IsActive => IsBlockMoodleActiveCached();
+    public bool IsActive => this.IsAnyTeleportBlockActive();
+
     private bool cachedMoodleActive = false;
     private long nextMoodleRefreshMs;
+    private long nextQuotaMaintenanceMs;
 
+    private bool quotaMoodleApplied;
+    private Guid appliedQuotaMoodleId = Guid.Empty;
+
+    private DateTime teleportCountCooldown = DateTime.MinValue;
 
     public TeleportBlocker(Plugin plugin)
     {
         this.plugin = plugin;
+
         this.useActionHook = Plugin.GameInterop.HookFromAddress<UseActionDelegate>(
             (nint)ActionManager.MemberFunctionPointers.UseAction,
             this.UseActionDetour);
+
         this.useActionHook.Enable();
+
+        Plugin.Framework.Update += this.OnFrameworkUpdate;
+
     }
 
     public void Enable()
     {
         plugin.Configuration.TeleportBlockFeature = true;
-        //this.Enabled = true;
-
-        //if (!this.useActionHook.IsEnabled)
-        //    this.useActionHook.Enable();
     }
 
     public void Disable()
     {
         plugin.Configuration.TeleportBlockFeature = false;
-        //this.Enabled = false;
-
-        // You may leave the hook enabled and just let Enabled gate behavior.
-        // Disabling it here is cleaner if this class only does teleport blocking.
-        //if (this.useActionHook.IsEnabled)
-        //    this.useActionHook.Disable();
+        this.RemoveQuotaMoodleIfApplied();
     }
 
     private bool UseActionDetour(
@@ -67,21 +71,16 @@ public unsafe sealed class TeleportBlocker : IDisposable
         uint comboRouteId,
         bool* outOptAreaTargeted)
     {
-        //Plugin.ChatGui.Print($"Use Action");
-        if (this.Enabled && IsTeleportOrReturn(actionType, actionId))
+        if (this.Enabled && this.IsTeleportOrReturn(actionType, actionId))
         {
-            //Plugin.ChatGui.Print($"!string.IsNullOrEmpty");
-            if (IsBlockMoodleActiveCached(forceRefresh: true))
+            if (this.ShouldBlockTeleportAction(actionType, actionId))
             {
-                //Plugin.ChatGui.Print($"Blocked teleport / return action due to active moodle: Type ={ actionType}, Id ={ actionId}, Moodle = {plugin.Configuration.TeleportBlockMoodle}");
-                Plugin.ChatGui.Print($"Blocked teleport / return action");
+                Plugin.ChatGui.Print("Blocked teleport / return action");
                 return false;
             }
-            //Plugin.ChatGui.Print($"Blocked teleport /return action: Type ={ actionType}, Id ={ actionId}");
-            //return false;
         }
 
-        return this.useActionHook.Original(
+        var result = this.useActionHook.Original(
             actionManager,
             actionType,
             actionId,
@@ -90,33 +89,226 @@ public unsafe sealed class TeleportBlocker : IDisposable
             mode,
             comboRouteId,
             outOptAreaTargeted);
+
+        if (this.Enabled && result && this.IsTeleportOrReturn(actionType, actionId) && this.teleportCountCooldown < DateTime.UtcNow)
+        {
+            // Teleport / Return can be noisy depending on how it is started.
+            // Cooldown avoids double-counting the same attempt.
+            this.teleportCountCooldown = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+            this.LogTeleportAction();
+            this.UpdateQuotaMoodleState();
+        }
+
+        return result;
     }
+
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        if (!this.Enabled)
+        {
+            this.RemoveQuotaMoodleIfApplied();
+            return;
+        }
+
+        var nowMs = Environment.TickCount64;
+
+        if (nowMs < this.nextQuotaMaintenanceMs)
+            return;
+
+        this.nextQuotaMaintenanceMs = nowMs + 30000;
+
+        if (this.PruneOldQuotaEntries())
+            plugin.Configuration.Save();
+
+        this.UpdateQuotaMoodleState();
+    }
+
+    private bool ShouldBlockTeleportAction(ActionType actionType, uint actionId)
+    {
+        if (!this.IsTeleportOrReturn(actionType, actionId))
+            return false;
+
+        if (this.IsBlockMoodleActiveCached(forceRefresh: true))
+            return true;
+
+        if (this.IsQuotaExhausted())
+            return true;
+
+        return false;
+    }
+
+    private bool IsAnyTeleportBlockActive(bool forceRefresh = false)
+    {
+        if (this.IsBlockMoodleActiveCached(forceRefresh))
+            return true;
+
+        if (this.IsQuotaExhausted())
+            return true;
+
+        return false;
+    }
+
     public bool IsBlockMoodleActiveCached(bool forceRefresh = false)
     {
         var moodles = plugin.Configuration.TeleportBlockMoodles;
         if (moodles == null || moodles.Count == 0)
+        {
+            this.cachedMoodleActive = false;
             return false;
+        }
 
         var now = Environment.TickCount64;
         if (!forceRefresh && now < this.nextMoodleRefreshMs)
             return this.cachedMoodleActive;
 
+        var anyActive = false;
+
         foreach (var moodle in moodles)
         {
             var id = moodle.Key;
-            if (id == null || id == Guid.Empty)
+            if (id == Guid.Empty)
                 continue;
 
-            this.cachedMoodleActive = plugin.MoodlesApi.IsStatusActive(id);
+            if (plugin.MoodlesApi.IsStatusActive(id))
+            {
+                anyActive = true;
+                break;
+            }
         }
 
+        this.cachedMoodleActive = anyActive;
         this.nextMoodleRefreshMs = now + 5000;
+
         return this.cachedMoodleActive;
     }
 
-    private static bool IsTeleportOrReturn(ActionType actionType, uint actionId)
+    private bool IsQuotaEnabled()
     {
-        //Plugin.ChatGui.Print($"Action Type ={actionType}, Id ={actionId}");
+        return plugin.Configuration.TeleportQuotaEnabled &&
+               plugin.Configuration.TeleportQuotaActions > -1;
+    }
+
+    private TimeSpan GetQuotaWindow()
+    {
+        return plugin.Configuration.TeleportQuotaWindow switch
+        {
+            QuotaWindow.Day => TimeSpan.FromHours(24),
+            _ => TimeSpan.FromHours(1),
+        };
+    }
+
+    private int GetUsedQuotaCount()
+    {
+        if (!this.IsQuotaEnabled())
+            return 0;
+
+        this.EnsureQuotaLog();
+
+        var cutoff = DateTime.UtcNow - this.GetQuotaWindow();
+        var count = 0;
+
+        foreach (var entryUtc in plugin.Configuration.TeleportQuotaActionLogUtc)
+        {
+            if (entryUtc >= cutoff)
+                count++;
+        }
+
+        return count;
+    }
+
+    public int GetRemainingQuota()
+    {
+        if (!this.IsQuotaEnabled())
+            return int.MaxValue;
+
+        var remaining = plugin.Configuration.TeleportQuotaActions - this.GetUsedQuotaCount();
+        return Math.Max(0, remaining);
+    }
+
+    public bool IsQuotaExhausted()
+    {
+        if (!this.IsQuotaEnabled())
+            return false;
+
+        this.PruneOldQuotaEntries();
+
+        return this.GetRemainingQuota() <= 0;
+    }
+
+    private void LogTeleportAction()
+    {
+        if (!this.IsQuotaEnabled())
+            return;
+
+        this.EnsureQuotaLog();
+        this.PruneOldQuotaEntries();
+
+        plugin.Configuration.TeleportQuotaActionLogUtc.Add(DateTime.UtcNow);
+        plugin.Configuration.Save();
+
+        Plugin.ChatGui.Print($"Teleport usage counted, remaining: {this.GetRemainingQuota()}");
+    }
+
+    private bool PruneOldQuotaEntries()
+    {
+        this.EnsureQuotaLog();
+
+        var cutoff = DateTime.UtcNow - TimeSpan.FromHours(24);
+
+        var before = plugin.Configuration.TeleportQuotaActionLogUtc.Count;
+        plugin.Configuration.TeleportQuotaActionLogUtc.RemoveAll(x => x < cutoff);
+
+        return plugin.Configuration.TeleportQuotaActionLogUtc.Count != before;
+    }
+
+    private void EnsureQuotaLog()
+    {
+        plugin.Configuration.TeleportQuotaActionLogUtc ??= new List<DateTime>();
+    }
+
+    private void UpdateQuotaMoodleState()
+    {
+        if (!this.Enabled || !this.IsQuotaEnabled())
+        {
+            this.RemoveQuotaMoodleIfApplied();
+            return;
+        }
+
+        var wantedMoodleId = this.IsQuotaExhausted()
+            ? plugin.Configuration.TeleportQuotaEmptyMoodleId
+            : plugin.Configuration.TeleportQuotaMoodleId;
+
+        if (wantedMoodleId == Guid.Empty)
+        {
+            this.RemoveQuotaMoodleIfApplied();
+            return;
+        }
+
+        if (this.quotaMoodleApplied && this.appliedQuotaMoodleId == wantedMoodleId)
+            return;
+
+        this.RemoveQuotaMoodleIfApplied();
+
+        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, this);
+
+        this.quotaMoodleApplied = true;
+        this.appliedQuotaMoodleId = wantedMoodleId;
+    }
+
+    private void RemoveQuotaMoodleIfApplied()
+    {
+        if (!this.quotaMoodleApplied || this.appliedQuotaMoodleId == Guid.Empty)
+            return;
+
+        plugin.MoodleEnforcer.RemoveEnforcedMoodle(this.appliedQuotaMoodleId, this);
+
+        this.quotaMoodleApplied = false;
+        this.appliedQuotaMoodleId = Guid.Empty;
+    }
+
+    private bool IsTeleportOrReturn(ActionType actionType, uint actionId)
+    {
         // Hotbar/menu GeneralActions:
         // 7 = Return
         // 8 = Teleport
@@ -135,6 +327,10 @@ public unsafe sealed class TeleportBlocker : IDisposable
 
     public void Dispose()
     {
+        Plugin.Framework.Update -= this.OnFrameworkUpdate;
+
+        this.RemoveQuotaMoodleIfApplied();
+
         this.useActionHook.Dispose();
     }
 }

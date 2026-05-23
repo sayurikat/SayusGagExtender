@@ -12,12 +12,19 @@ namespace SayusGagExtender.Windows
         private List<KeyValuePair<Guid, string>> availableAutoVibeRestraints = new();
         private string autoVibeRestraintSearch = "";
         private Guid? selectedAutoVibeRestraintToAdd;
-
         private string newVibeCommand = "";
         private string newVibeCommandWeight = "10";
+        private Guid? selectedAutoVibeEngagedMoodleToSet;
+        private string autoVibeEngagedMoodleSearch = "";
+        private Guid? selectedAutoVibeControllerOnlineMoodleToSet;
+        private string autoVibeControllerOnlineMoodleSearch = "";
 
         private void DrawAutoVibeTab()
         {
+
+            if (configuration.AutoVibeCountControllerLocked)
+                ImGui.BeginDisabled();
+
             var autoVibeEnabled = configuration.AutoVibeEnabled;
             if (ImGui.Checkbox("Enable Auto Vibe", ref autoVibeEnabled))
             {
@@ -38,15 +45,50 @@ namespace SayusGagExtender.Windows
                     configuration.Save();
                 }
             }
+            if (configuration.AutoVibeCountControllerLocked)
+                ImGui.EndDisabled();
 
-            ImGui.TextWrapped("Ignored when Vibe Controller is online.");
-
-            var vibeControllerName = configuration.VibeControllerName;
-            if (ImGui.InputText("Vibe Controller Name", ref vibeControllerName))
+            if (configuration.AutoVibeWhen == RandomVibeSender.OperateWhen.Offline)
             {
-                configuration.VibeControllerName = vibeControllerName;
-                configuration.Save();
+                ImGui.TextWrapped("Ignored when Controller is online.");
             }
+            else if (configuration.AutoVibeWhen == RandomVibeSender.OperateWhen.Distant)
+            {
+                ImGui.TextWrapped("Ignored when Controller within range.");
+            }
+            else if (configuration.AutoVibeWhen == RandomVibeSender.OperateWhen.Always)
+            {
+                //ImGui.TextWrapped("");
+            }
+
+
+            DrawAutoVibeMoodleSetting(
+                "Moodle when Auto Vibe is engaged",
+                "##AutoVibeEngagedMoodle",
+                configuration.AutoVibeEngagedMoodleId,
+                configuration.AutoVibeEngagedMoodleName,
+                ref selectedAutoVibeEngagedMoodleToSet,
+                ref autoVibeEngagedMoodleSearch,
+                (id, name) =>
+                {
+                    configuration.AutoVibeEngagedMoodleId = id;
+                    configuration.AutoVibeEngagedMoodleName = name;
+                    configuration.Save();
+                });
+
+            DrawAutoVibeMoodleSetting(
+                "Moodle when Auto Vibe is active but Controller is online",
+                "##AutoVibeControllerOnlineMoodle",
+                configuration.AutoVibeControllerOnlineMoodleId,
+                configuration.AutoVibeControllerOnlineMoodleName,
+                ref selectedAutoVibeControllerOnlineMoodleToSet,
+                ref autoVibeControllerOnlineMoodleSearch,
+                (id, name) =>
+                {
+                    configuration.AutoVibeControllerOnlineMoodleId = id;
+                    configuration.AutoVibeControllerOnlineMoodleName = name;
+                    configuration.Save();
+                });
 
             ImGui.Spacing();
             ImGui.Separator();
@@ -65,6 +107,171 @@ namespace SayusGagExtender.Windows
             ImGui.Spacing();
 
             DrawVibeCommands();
+        }
+        private void DrawAutoVibeMoodleSetting(
+    string label,
+    string id,
+    Guid currentMoodleId,
+    string currentMoodleName,
+    ref Guid? selectedMoodleToSet,
+    ref string searchText,
+    Action<Guid, string> onSet)
+        {
+            var availableMoodles = plugin.MoodlesApi.GetAllMoodles()
+                .Where(x => x.Key != Guid.Empty)
+                .OrderBy(x => x.Value, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var selectedId = selectedMoodleToSet;
+
+            if (selectedId != null &&
+                !availableMoodles.Any(x => x.Key == selectedId.Value))
+            {
+                selectedMoodleToSet = null;
+                selectedId = null;
+            }
+
+            ImGui.Spacing();
+
+            ImGui.TextUnformatted(label);
+
+            const float selectedRowWidth = 300f;
+
+            if (currentMoodleId != Guid.Empty)
+            {
+                var currentMoodle = availableMoodles.FirstOrDefault(x => x.Key == currentMoodleId);
+
+                var displayCurrentName = !string.IsNullOrWhiteSpace(currentMoodle.Value)
+                    ? currentMoodle.Value
+                    : currentMoodleName;
+
+                if (string.IsNullOrWhiteSpace(displayCurrentName))
+                    displayCurrentName = currentMoodleId.ToString();
+
+                //ImGui.TextDisabled("Selected Moodle");
+
+                var ctrlHeld = ImGui.GetIO().KeyCtrl;
+
+                ImGui.Indent();
+
+                ImGui.PushID($"{id}-selected-{currentMoodleId}");
+
+                if (DrawGagSpeakItem(displayCurrentName, selectedRowWidth, ctrlHeld))
+                {
+                    plugin.RandomVibeSender.MoodleConfigChange();
+                    onSet(Guid.Empty, string.Empty);
+
+                    selectedMoodleToSet = null;
+                    searchText = "";
+                }
+
+                ImGui.PopID();
+
+                ImGui.Unindent();
+            }
+            else
+            {
+                ImGui.TextDisabled("No Moodle selected.");
+            }
+
+            var selectedName = "Select Moodle...";
+
+            if (selectedId != null)
+            {
+                var selectedMoodle = availableMoodles.FirstOrDefault(x => x.Key == selectedId.Value);
+                if (!string.IsNullOrWhiteSpace(selectedMoodle.Value))
+                    selectedName = selectedMoodle.Value;
+            }
+
+            ImGui.SetNextItemWidth(300);
+
+            if (ImGui.BeginCombo($"{id}Combo", selectedName))
+            {
+                ImGui.SetNextItemWidth(-1);
+
+                if (ImGui.IsWindowAppearing())
+                    ImGui.SetKeyboardFocusHere();
+
+                ImGui.InputTextWithHint(
+                    $"{id}Search",
+                    "Search...",
+                    ref searchText,
+                    128);
+
+                ImGui.Separator();
+
+                var localSearchText = searchText;
+
+                var filteredMoodles = string.IsNullOrWhiteSpace(localSearchText)
+                    ? availableMoodles
+                    : availableMoodles
+                        .Where(x => x.Value.Contains(localSearchText, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                if (filteredMoodles.Count == 0)
+                {
+                    ImGui.TextDisabled("No matches.");
+                }
+                else
+                {
+                    foreach (var moodle in filteredMoodles)
+                    {
+                        var guid = moodle.Key;
+                        var name = moodle.Value;
+                        var isSelected = selectedId == guid;
+
+                        if (ImGui.Selectable($"{name}{id}{guid}", isSelected))
+                        {
+                            selectedMoodleToSet = guid;
+                            selectedId = guid;
+                            searchText = "";
+                            ImGui.CloseCurrentPopup();
+                        }
+
+                        if (isSelected)
+                            ImGui.SetItemDefaultFocus();
+                    }
+                }
+
+                ImGui.EndCombo();
+            }
+
+            ImGui.SameLine();
+
+            selectedId = selectedMoodleToSet;
+
+            var nameToSet = string.Empty;
+            var canSet = false;
+
+            if (selectedId != null)
+            {
+                var selectedMoodle = availableMoodles.FirstOrDefault(x => x.Key == selectedId.Value);
+
+                if (selectedMoodle.Key != Guid.Empty)
+                {
+                    nameToSet = string.IsNullOrWhiteSpace(selectedMoodle.Value)
+                        ? selectedMoodle.Key.ToString()
+                        : selectedMoodle.Value;
+
+                    canSet = true;
+                }
+            }
+
+            if (!canSet)
+                ImGui.BeginDisabled();
+
+            if (ImGui.Button($"Set{id}"))
+            {
+                plugin.RandomVibeSender.MoodleConfigChange();
+                onSet(selectedId!.Value, nameToSet);
+
+                selectedMoodleToSet = null;
+                searchText = "";
+            }
+
+            if (!canSet)
+                ImGui.EndDisabled();
+
         }
         private void DrawAutoVibeRequiredRestraints()
         {

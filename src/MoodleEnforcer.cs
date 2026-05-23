@@ -4,6 +4,7 @@ using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Principal;
 using static SayusGagExtender.API.GagSpeak.GagSpeakReflectionContext;
 
 namespace SayusGagExtender
@@ -11,6 +12,7 @@ namespace SayusGagExtender
     public sealed class MoodleEnforcer : IDisposable
     {
         private readonly Plugin plugin;
+        private readonly Dictionary<Guid, HashSet<string>> externalEnforcedMoodles = new();
 
         //private readonly Dictionary<Guid, bool> lastWantedMoodleStates = new();
         private DateTime onUpdateNextUTC = DateTime.MinValue;
@@ -91,41 +93,193 @@ namespace SayusGagExtender
             if (now < betweenAreasNextUTC)
                 return;
 
-            //Plugin.ChatGui.Print("GagSpeak Enforce.");
+            MoodleEnforcerActiveState? activeState = null;
+
+            if (plugin.Configuration.MoodleEnforcerEnabled)
+            {
+                activeState = GetActiveState();
+
+                foreach (var moodleConfig in plugin.Configuration.MoodleEnforcerMoodles)
+                {
+                    if (moodleConfig.MoodleId == Guid.Empty)
+                        continue;
+
+                    var hasConfiguredTriggers =
+                        moodleConfig.Restrictions.Count +
+                        moodleConfig.Gags.Count +
+                        moodleConfig.RestraintSets.Count > 0;
+
+                    // Only configured/monitored Moodles are controlled by regular enforcement.
+                    // This still preserves random user-applied Moodles.
+                    if (!hasConfiguredTriggers)
+                        continue;
+
+                    var wantedByRegular = ShouldMoodleBeActive(moodleConfig, activeState);
+                    var wantedByExternal = IsExternallyEnforced(moodleConfig.MoodleId);
+
+                    // Core rule:
+                    // A Moodle stays active as long as regular OR external wants it.
+                    var shouldBeActive = wantedByRegular || wantedByExternal;
+
+                    if (shouldBeActive)
+                        IsActive = true;
+
+                    //var isActive = plugin.MoodlesApi.IsStatusActive(moodleConfig.MoodleId);
+                    //if (!shouldBeActive && isActive)
+                    //{
+                    //    Plugin.ChatGui.Print($"removed during enforce, wantedByRegular {wantedByRegular} wantedByExternal {wantedByExternal} shouldBeActive {shouldBeActive} isActive {isActive}");
+                    //}
+
+                    EnsureMoodleState(moodleConfig.MoodleId, shouldBeActive);
+                }
+            }
+
+            // External requests are not gated by MoodleEnforcerEnabled.
+            // They are runtime ownership requests from other systems.
+            foreach (var moodleId in externalEnforcedMoodles.Keys.ToArray())
+            {
+                if (moodleId == Guid.Empty)
+                    continue;
+
+                //if (!IsExternallyEnforced(moodleId))
+                //    continue;
+            
+                IsActive = true;
+                EnsureMoodleState(moodleId, true);
+            }
+        }
+
+        public void AddEnforcedMoodle(Guid moodleId, string caller)
+        {
+            //Plugin.ChatGui.Print($"Adding moodle {moodleId} from {caller}");
+            if (moodleId == Guid.Empty)
+                return;
+
+            caller = NormalizeExternalCaller(caller);
+
+            if (!externalEnforcedMoodles.TryGetValue(moodleId, out var callers))
+            {
+                callers = new HashSet<string>(StringComparer.Ordinal);
+                externalEnforcedMoodles[moodleId] = callers;
+            }
+
+            callers.Add(caller);
+
+            Enforce();
+        }
+
+        public void AddEnforcedMoodle(Guid moodleId, Type callerType)
+        {
+            AddEnforcedMoodle(moodleId, callerType?.FullName ?? "unknown");
+        }
+
+        public void AddEnforcedMoodle(Guid moodleId, object caller)
+        {
+            AddEnforcedMoodle(moodleId, caller?.GetType().FullName ?? "unknown");
+        }
+
+        public bool RemoveEnforcedMoodle(Guid moodleId, string caller)
+        {
+            //Plugin.ChatGui.Print($"Removing moodle {moodleId} from {caller}");
+            if (moodleId == Guid.Empty)
+                return false;
+
+            caller = NormalizeExternalCaller(caller);
+
+            if (!externalEnforcedMoodles.TryGetValue(moodleId, out var callers))
+                return false;
+
+            // Only the same caller/source can clear its own request.
+            var removed = callers.Remove(caller);
+
+            if (!removed)
+                return false;
+
+            // If other external callers still enforce this Moodle, keep it active.
+            if (callers.Count > 0)
+            {
+                Enforce();
+                return true;
+            }
+
+            // This caller was the last external owner.
+            externalEnforcedMoodles.Remove(moodleId);
+
+            // External removal does not force the Moodle off.
+            // It only means external no longer wants it.
+            // If regular enforcement still wants it, it should stay active / be reapplied.
+            var wantedByRegular = IsWantedByRegularEnforcer(moodleId);
+
+            var isActive = plugin.MoodlesApi.IsStatusActive(moodleId);
+
+
+            //Plugin.ChatGui.Print($"removed during RemoveEnforcedMoodle, wantedByRegular {wantedByRegular} isActive {isActive}");
+
+            EnsureMoodleState(moodleId, wantedByRegular);
+
+            Enforce();
+
+            return true;
+        }
+
+        public bool RemoveEnforcedMoodle(Guid moodleId, Type callerType)
+        {
+            return RemoveEnforcedMoodle(moodleId, callerType?.FullName ?? "unknown");
+        }
+
+        public bool RemoveEnforcedMoodle(Guid moodleId, object caller)
+        {
+            return RemoveEnforcedMoodle(moodleId, caller?.GetType().FullName ?? "unknown");
+        }
+
+        public bool IsExternallyEnforced(Guid moodleId)
+        {
+            return moodleId != Guid.Empty
+                   && externalEnforcedMoodles.TryGetValue(moodleId, out var callers)
+                   && callers.Count > 0;
+        }
+        private bool IsWantedByRegularEnforcer(Guid moodleId)
+        {
+            if (moodleId == Guid.Empty)
+                return false;
 
             if (!plugin.Configuration.MoodleEnforcerEnabled)
-                return;
-
-            if (plugin.Configuration.MoodleEnforcerMoodles.Count == 0)
-                return;
-            //Plugin.ChatGui.Print("GagSpeak Enforce..");
+                return false;
 
             var activeState = GetActiveState();
 
+            return IsWantedByRegularEnforcer(moodleId, activeState);
+        }
+
+        private bool IsWantedByRegularEnforcer(Guid moodleId, MoodleEnforcerActiveState activeState)
+        {
+            if (moodleId == Guid.Empty)
+                return false;
+
             foreach (var moodleConfig in plugin.Configuration.MoodleEnforcerMoodles)
             {
-                if (moodleConfig.MoodleId == Guid.Empty)
+                if (moodleConfig.MoodleId != moodleId)
                     continue;
 
-                if (moodleConfig.Restrictions.Count + moodleConfig.Gags.Count + moodleConfig.RestraintSets.Count <= 0)
-                //if (!moodleConfig.IsMoodleEnabled)
+                var hasConfiguredTriggers =
+                    moodleConfig.Restrictions.Count +
+                    moodleConfig.Gags.Count +
+                    moodleConfig.RestraintSets.Count > 0;
+
+                if (!hasConfiguredTriggers)
                     continue;
 
-                var shouldBeActive = ShouldMoodleBeActive(moodleConfig, activeState);
-
-                //if (lastWantedMoodleStates.TryGetValue(moodleConfig.MoodleId, out var lastState) &&
-                //    lastState == shouldBeActive)
-                //{
-                //    continue;
-                //}
-
-                //lastWantedMoodleStates[moodleConfig.MoodleId] = shouldBeActive;
-
-                if (shouldBeActive)
-                    IsActive = true;
-
-                EnsureMoodleState(moodleConfig, shouldBeActive);
+                if (ShouldMoodleBeActive(moodleConfig, activeState))
+                    return true;
             }
+
+            return false;
+        }
+        private static string NormalizeExternalCaller(string caller)
+        {
+            return string.IsNullOrWhiteSpace(caller)
+                ? "unknown"
+                : caller.Trim();
         }
 
         private MoodleEnforcerActiveState GetActiveState()
@@ -238,19 +392,20 @@ namespace SayusGagExtender
             return false;
         }
 
-        private void EnsureMoodleState(MoodleEnforcerMoodleConfig moodleConfig, bool shouldBeActive)
+        private void EnsureMoodleState(Guid moodleId, bool shouldBeActive)
         {
-            var isActive = plugin.MoodlesApi.IsStatusActive(moodleConfig.MoodleId);
+            if (moodleId == Guid.Empty)
+                return;
+
+            var isActive = plugin.MoodlesApi.IsStatusActive(moodleId);
 
             if (isActive == shouldBeActive)
                 return;
 
             if (shouldBeActive)
-                plugin.MoodlesApi.ApplyMoodle(moodleConfig.MoodleId);
+                plugin.MoodlesApi.ApplyMoodle(moodleId);
             else
-            {
-                plugin.MoodlesApi.RemoveMoodle(moodleConfig.MoodleId);
-            }
+                plugin.MoodlesApi.RemoveMoodle(moodleId);
         }
 
         private sealed class MoodleEnforcerActiveState
