@@ -247,13 +247,9 @@ namespace SayusGagExtender
             if (!CanSendEmoteCommand())
                 return;
 
-            plugin.EmoteGuard.QueueGuardedEmote($"/sit /emoteid {emoteId}");
-            //if (plugin.EmoteApi.ExecuteEmote(emoteId))
-            //{
-                  currentEnforcedEmoteId = emoteId;
-                  nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
-            //}
-            //plugin.PenumbraApi.RedrawSelf();
+            plugin.EmoteGuard.QueueGuardedEmote($"/emoteid {emoteId} /wait 0.0 /groundsit /wait 0.0 /doze /wait 0.5");
+            currentEnforcedEmoteId = emoteId;
+            nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
         }
 
         private bool CanSendEmoteCommand()
