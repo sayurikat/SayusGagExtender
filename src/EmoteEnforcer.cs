@@ -17,7 +17,7 @@ namespace SayusGagExtender
         private readonly TimeSpan OnUpdateCooldown = TimeSpan.FromSeconds(1);
 
         private DateTime nextEmoteCommandUTC = DateTime.MinValue;
-        private readonly TimeSpan EmoteCommandCooldown = TimeSpan.FromSeconds(1);
+        private readonly TimeSpan EmoteCommandCooldown = TimeSpan.FromSeconds(3);
         public bool IsActive = false;
         private bool RequestedBlockState = false;
         public bool ShouldBlockUserEmotes => plugin.Configuration.EmoteEnforcerEnabled && IsActive;
@@ -247,11 +247,12 @@ namespace SayusGagExtender
             if (!CanSendEmoteCommand())
                 return;
 
-            if (plugin.EmoteApi.ExecuteEmote(emoteId))
-            {
-                currentEnforcedEmoteId = emoteId;
-                nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
-            }
+            plugin.EmoteGuard.QueueGuardedEmote($"/sit /emoteid {emoteId}");
+            //if (plugin.EmoteApi.ExecuteEmote(emoteId))
+            //{
+                  currentEnforcedEmoteId = emoteId;
+                  nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
+            //}
             //plugin.PenumbraApi.RedrawSelf();
         }
 

@@ -65,6 +65,10 @@ public sealed class Plugin : IDalamudPlugin
     public MovementBlocker MovementBlocker { get; set; }
     public ActionBlocker ActionBlocker { get; set; }
     public RemoteChatCommandMonitor RemoteChatCommandMonitor { get; set; }
+    public Pedometer Pedometer { get; set; }
+    public FatigueTracker FatigueTracker { get; set; }
+    public FatigueHandler FatigueHandler { get; set; }
+
 
 
 
@@ -149,8 +153,21 @@ public sealed class Plugin : IDalamudPlugin
         MovementBlocker = new MovementBlocker(Instance);
         ActionBlocker = new ActionBlocker(Instance);
         RemoteChatCommandMonitor = new RemoteChatCommandMonitor(Instance);
+        Pedometer = new Pedometer(Instance);
+        FatigueTracker = new FatigueTracker(Instance);
+        FatigueHandler = new FatigueHandler(Instance);
 
-
+        if (Configuration.OpenMainWindowOnStartup)
+        {
+            //MainWindow.Toggle();
+            //MainWindow.BringToFront();
+            MainWindow.IsOpen = true;
+        }
+        if (Configuration.OpenConfigWindowOnStartup)
+        {
+            ConfigWindow.IsOpen = true;
+        } 
+        
     }
 
     public void Dispose()
@@ -192,6 +209,9 @@ public sealed class Plugin : IDalamudPlugin
         MovementBlocker?.Dispose();
         CharacterHelper?.Dispose();
         RemoteChatCommandMonitor?.Dispose();
+        Pedometer?.Dispose();
+        FatigueTracker?.Dispose();
+        FatigueHandler?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);
@@ -275,6 +295,80 @@ public sealed class Plugin : IDalamudPlugin
             GagSpeakRestraintSetApi.RemoveRestraintSet(restraintSetName);
             return;
         }
+
+
+        if (args.Equals("pedometer speed start", StringComparison.OrdinalIgnoreCase))
+        {
+            Pedometer.StartSpeedRecord();
+            return;
+        }
+
+        if (args.Equals("pedometer speed stop", StringComparison.OrdinalIgnoreCase))
+        {
+            Pedometer.StopSpeedRecordAndPrint();
+            return;
+        }
+
+        if (args.Equals("pedometer speed", StringComparison.OrdinalIgnoreCase))
+        {
+            Pedometer.PrintCurrentSpeed();
+            return;
+        }
+
+        if (args.Equals("pedometer totals", StringComparison.OrdinalIgnoreCase))
+        {
+            Pedometer.PrintTotals();
+            return;
+        }
+
+        if (args.Equals("pedometer reset", StringComparison.OrdinalIgnoreCase))
+        {
+            Pedometer.ResetTotals();
+            return;
+        }
+
+        if (args.Equals("fatigue status", StringComparison.OrdinalIgnoreCase))
+        {
+            FatigueTracker.PrintStatus();
+            return;
+        }
+
+        if (args.Equals("fatigue reset", StringComparison.OrdinalIgnoreCase))
+        {
+            FatigueTracker.ResetFatigue();
+            return;
+        }
+
+        if (args.StartsWith("fatigue set ", StringComparison.OrdinalIgnoreCase))
+        {
+            var valueText = args.Substring("fatigue set ".Length).Trim();
+
+            if (float.TryParse(valueText, out var percent))
+                FatigueTracker.SetFatiguePercent(percent);
+            else
+                ChatGui.PrintError("Usage: /sge fatigue set [percent]");
+
+            return;
+        }
+
+        if (args.Equals("fatigue speed start", StringComparison.OrdinalIgnoreCase))
+        {
+            FatigueTracker.StartSpeedRecord();
+            return;
+        }
+
+        if (args.Equals("fatigue speed stop", StringComparison.OrdinalIgnoreCase))
+        {
+            FatigueTracker.StopSpeedRecordAndPrint();
+            return;
+        }
+
+        if (args.Equals("fatigue emote", StringComparison.OrdinalIgnoreCase))
+        {
+            FatigueTracker.PrintCurrentEmoteDebug();
+            return;
+        }
+
 
 
         MainWindow.Toggle();

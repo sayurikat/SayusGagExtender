@@ -6,6 +6,7 @@ using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Client.UI.Shell;
 using Lumina.Excel.Sheets;
+//using Lumina.Excel.Sheets.Experimental;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -83,18 +84,27 @@ public unsafe sealed class EmoteGuard : IDisposable
     {
         Command,
         Wait,
+        EmoteId,
+        Hotbar,
     }
 
     private readonly record struct QueuedEmoteStep(
-        QueuedEmoteStepKind Kind,
-        string? Command,
-        TimeSpan Duration)
+    QueuedEmoteStepKind Kind,
+    string? Command,
+    TimeSpan Duration,
+    uint EmoteId)
     {
         public static QueuedEmoteStep CommandStep(string command)
-            => new(QueuedEmoteStepKind.Command, command, TimeSpan.Zero);
+            => new(QueuedEmoteStepKind.Command, command, TimeSpan.Zero, 0);
 
         public static QueuedEmoteStep WaitStep(TimeSpan duration)
-            => new(QueuedEmoteStepKind.Wait, null, duration);
+            => new(QueuedEmoteStepKind.Wait, null, duration, 0);
+
+        public static QueuedEmoteStep EmoteIdStep(uint emoteId)
+            => new(QueuedEmoteStepKind.EmoteId, null, TimeSpan.Zero, emoteId);
+
+        public static QueuedEmoteStep HotbarStep(uint emoteId)
+            => new(QueuedEmoteStepKind.Hotbar, null, TimeSpan.Zero, emoteId);
     }
 
     public EmoteGuard(Plugin instance)
@@ -236,6 +246,20 @@ public unsafe sealed class EmoteGuard : IDisposable
 
                 return;
             }
+            //Plugin.ChatGui.Print($"TryStartNextQueuedSequenceStep {step.Kind.ToString()} {step.EmoteId.ToString()} {step.Command?.ToString()}");
+            if (step.Kind == QueuedEmoteStepKind.EmoteId && step.EmoteId > 0)
+            {
+                nextSequenceStepAt = DateTime.MinValue;
+                QueueReplay(QueuedEmote.FromApiEmoteId(step.EmoteId));
+                return;
+            }
+
+            if (step.Kind == QueuedEmoteStepKind.Hotbar && step.EmoteId > 0)
+            {
+                nextSequenceStepAt = DateTime.MinValue;
+                QueueReplay(QueuedEmote.FromHotbar(step.EmoteId));
+                return;
+            }
 
             if (!string.IsNullOrWhiteSpace(step.Command))
             {
@@ -248,7 +272,16 @@ public unsafe sealed class EmoteGuard : IDisposable
         nextSequenceStepAt = DateTime.MinValue;
     }
 
+    private bool IsQueuedSequenceBusy(DateTime now)
+    {
+        return queuedSequence.Count > 0 || nextSequenceStepAt > now;
+    }
 
+    private void QueueUserEmoteStep(QueuedEmoteStep step)
+    {
+        queuedSequence.Enqueue(step);
+        RequestMovementBlock();
+    }
 
     private void BuildEmoteRegistry()
     {
@@ -318,6 +351,14 @@ public unsafe sealed class EmoteGuard : IDisposable
         if (!plugin.Configuration.EmoteGuardEnabled)
             return executeSlotHook.Original(hotbarModule, hotbarSlot);
 
+        var now = DateTime.UtcNow;
+
+        if (IsQueuedSequenceBusy(now))
+        {
+            QueueUserEmoteStep(QueuedEmoteStep.HotbarStep(emoteId));
+            return 0;
+        }
+
         QueueReplay(QueuedEmote.FromHotbar(emoteId));
         return 0;
     }
@@ -350,11 +391,19 @@ public unsafe sealed class EmoteGuard : IDisposable
             return;
         }
 
+        var now = DateTime.UtcNow;
+
+        if (IsQueuedSequenceBusy(now))
+        {
+            QueueUserEmoteStep(QueuedEmoteStep.CommandStep(normalized));
+            return;
+        }
+
         QueueReplay(QueuedEmote.FromCommand(normalized));
         // Swallow the original slash command. It will be replayed once safe.
     }
 
-    
+
 
     private bool HandleCombatPreEmoteDelay(DateTime now)
     {
@@ -404,6 +453,7 @@ public unsafe sealed class EmoteGuard : IDisposable
         if (queued == null)
             ResetForNewQueue();
 
+        //Plugin.ChatGui.Print($"QueueReplay {emote.Kind.ToString()} {emote.EmoteId.ToString()} {emote.Command?.ToString()}");
         queued = emote;
     }
 
@@ -545,7 +595,7 @@ public unsafe sealed class EmoteGuard : IDisposable
             combatActionBlockUntil = DateTime.UtcNow + CombatAfterEmoteSuppressDuration;
             RequestCombatActionBlock();
         }
-
+        //Plugin.ChatGui.Print($"ReplayQueuedEmote {emote.Kind.ToString()} {emote.EmoteId.ToString()} {emote.Command?.ToString()}");
         replaying = true;
         try
         {
@@ -553,6 +603,10 @@ public unsafe sealed class EmoteGuard : IDisposable
             {
                 case QueuedEmoteKind.Hotbar:
                     ExecuteHotbarEmote(emote.EmoteId);
+                    break;
+
+                case QueuedEmoteKind.ApiEmoteId:
+                    plugin.EmoteApi.ExecuteEmote(emote.EmoteId);
                     break;
 
                 case QueuedEmoteKind.Command when !string.IsNullOrWhiteSpace(emote.Command):
@@ -878,19 +932,23 @@ public unsafe sealed class EmoteGuard : IDisposable
     {
         Hotbar,
         Command,
+        ApiEmoteId,
     }
 
     private readonly record struct QueuedEmote(
-        QueuedEmoteKind Kind,
-        uint EmoteId,
-        string? Command,
-        DateTime QueuedAt)
+    QueuedEmoteKind Kind,
+    uint EmoteId,
+    string? Command,
+    DateTime QueuedAt)
     {
         public static QueuedEmote FromHotbar(uint emoteId)
             => new(QueuedEmoteKind.Hotbar, emoteId, null, DateTime.UtcNow);
 
         public static QueuedEmote FromCommand(string command)
             => new(QueuedEmoteKind.Command, 0, command, DateTime.UtcNow);
+
+        public static QueuedEmote FromApiEmoteId(uint emoteId)
+            => new(QueuedEmoteKind.ApiEmoteId, emoteId, null, DateTime.UtcNow);
     }
 
     private sealed class EmoteRegistry
@@ -936,6 +994,7 @@ public unsafe sealed class EmoteGuard : IDisposable
             return emote.Kind switch
             {
                 QueuedEmoteKind.Hotbar => idAllowsMount.TryGetValue(emote.EmoteId, out var allowed) && allowed,
+                QueuedEmoteKind.ApiEmoteId => idAllowsMount.TryGetValue(emote.EmoteId, out var allowed) && allowed,
                 QueuedEmoteKind.Command => CanCommandUseMounted(emote.Command),
                 _ => false,
             };
@@ -1087,7 +1146,14 @@ public unsafe sealed class EmoteGuard : IDisposable
                     continue;
                 }
 
-                yield return QueuedEmoteStep.CommandStep(command);
+                if (TryParseEmoteIdCommand(command, out var emoteId))
+                {
+                    yield return QueuedEmoteStep.EmoteIdStep(emoteId);
+                }
+                else
+                {
+                    yield return QueuedEmoteStep.CommandStep(command);
+                }
 
                 var nextIsExplicitWait =
                     i + 1 < commands.Count &&
@@ -1134,12 +1200,31 @@ public unsafe sealed class EmoteGuard : IDisposable
             {
                 return false;
             }
-
+            
             if (seconds < 0)
                 seconds = 0;
 
             duration = TimeSpan.FromSeconds(seconds);
             return true;
+        }
+        private static bool TryParseEmoteIdCommand(string command, out uint emoteId)
+        {
+            emoteId = 0;
+
+            if (string.IsNullOrWhiteSpace(command))
+                return false;
+
+            command = command.Trim();
+
+            if (!command.StartsWith("/emoteid ", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var rawId = command.Substring("/emoteid ".Length).Trim();
+
+            if (!uint.TryParse(rawId, out emoteId))
+                return false;
+
+            return emoteId > 0;
         }
     }
 }

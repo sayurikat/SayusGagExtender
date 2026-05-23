@@ -345,6 +345,9 @@ namespace SayusGagExtender
 
         private void TrySendRandomZapCommand(ControllerPresence presence)
         {
+            if (plugin.EmoteEnforcer.ShouldBlockUserEmotes)
+                return;
+
             try
             {
                 //Plugin.ChatGui.Print($"Auto Zap operating. Controller presence: {presence}.");

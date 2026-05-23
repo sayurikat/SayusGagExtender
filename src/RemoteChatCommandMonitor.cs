@@ -45,14 +45,15 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         {
             _ = SendTellLinesAsync(senderName, senderWorld,
             [
-                "commands: sge help → this",
-                "commands: sge autozap [always/distant/offline] → toggles when autozap feature is active",
-                "commands: sge zapcount [count] → amount of automated zaps per hour",
-                "commands: sge autovibe [always/distant/offline] → toggles when autovibe feature is active",
-                "commands: sge vibecount [count] → amount of automated vibrations per hour",
-                "commands: sge mountlimit [day/hour] [count] → how many times a mount can be used per day/hour, or: sge mountlimit unlimited",
-                "commands: sge teleportlimit [day/hour] [count] → how many times a teleport can be used per day/hour, or: sge teleportlimit unlimited",
-                "commands: sge joblimit [day/hour] [count] → how many times jobs can be changed per day/hour, or: sge joblimit unlimited",
+                "commands: sge help → This",
+                "commands: sge status → Display all status/settings",
+                "commands: sge autozap [always/distant/offline] → Toggles when autozap feature is active",
+                "commands: sge zapcount [count] → Amount of automated zaps per hour",
+                "commands: sge autovibe [always/distant/offline] → Toggles when autovibe feature is active",
+                "commands: sge vibecount [count] → Amount of automated vibrations per hour",
+                "commands: sge mountlimit [day/hour] [count] → How many times a mount can be used per day/hour, or: sge mountlimit unlimited",
+                "commands: sge teleportlimit [day/hour] [count] → How many times a teleport can be used per day/hour, or: sge teleportlimit unlimited",
+                "commands: sge joblimit [day/hour] [count] → How many times jobs can be changed per day/hour, or: sge joblimit unlimited",
             ]);
 
             return;

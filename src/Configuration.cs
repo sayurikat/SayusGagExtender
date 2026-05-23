@@ -1,9 +1,7 @@
 using Dalamud.Configuration;
 using Dalamud.Game.Text;
-using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using static SayusGagExtender.MoodleEnforcer;
 using static SayusGagExtender.PenumbraEnforcer;
 using static SayusGagExtender.RandomVibeSender;
@@ -16,10 +14,8 @@ public class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 0;
 
-    public bool IsConfigWindowMovable { get; set; } = true;
-    public bool SomePropertyToBeSavedAndWithADefault { get; set; } = true;
-
-
+    public bool OpenMainWindowOnStartup { get; set; } = false;
+    public bool OpenConfigWindowOnStartup { get; set; } = false;
 
 
     public bool EmoteGuardEnabled { get; set; } = true;
@@ -83,6 +79,72 @@ public class Configuration : IPluginConfiguration
     public string JobSwitchQuotaMoodleName { get; set; } = string.Empty;
     public Guid JobSwitchQuotaEmptyMoodleId { get; set; } = Guid.Empty;
     public string JobSwitchQuotaEmptyMoodleName { get; set; } = string.Empty;
+
+
+    public bool FatigueEnabled { get; set; } = false;
+
+    // Runtime value, 0.0 = recovered, 1.0 = fully exhausted.
+    public float FatigueCurrent { get; set; } = 0.0f;
+
+    // User-facing thresholds.
+    public float FatigueForcedWalkPercent { get; set; } = 75.0f;
+    public float FatigueForcedStopPercent { get; set; } = 95.0f;
+    public float FatigueForcedSitPercent { get; set; } = 100.0f;
+
+    // User-friendly base calibration.
+    // "How many normal unbuffed running steps from 0% fatigue to forced walk."
+    public int FatigueBaseRunStepsUntilForcedWalk { get; set; } = 600;
+
+    // 0.0 = no fatigue without configured active restraints.
+    // 1.0 = normal fatigue even with no restraints.
+    // 0.25 = light passive fatigue without restraints.
+    public float FatigueUnrestrictedFactor { get; set; } = 0.0f;
+
+    // Walking usually should be less exhausting than running.
+    public float FatigueWalkRateMultiplier { get; set; } = 0.25f;
+
+    // Non-linear speed impact.
+    // 2.0 means 15% faster movement causes about 32% more fatigue.
+    public float FatigueSpeedExponent { get; set; } = 2.0f;
+
+    // Dev-calibrated normal run speed in yalms/second.
+    // Use FatigueTracker speed recording commands to tune this.
+    public float FatigueNormalRunSpeed { get; set; } = 6.0f;
+
+    // Full recovery from 100% to 0%.
+    public int FatigueFullRecoveryStandingSeconds { get; set; } = 300;
+    public int FatigueFullRecoveryRestingSeconds { get; set; } = 120;
+
+    // Raw 0.0 - 1.0 fatigue value.
+    // 0.05 = 5 percentage points.
+    // A force state turns on at its threshold, then only releases once fatigue
+    // drops below threshold - this tolerance.
+    public float FatigueReleaseTolerance { get; set; } = 0.05f;
+
+
+    // Restriction list with stackable factors.
+    public List<FatigueTracker.FatigueRestrictionConfig> FatigueRestrictions { get; set; } = new();
+    public Guid FatigueEnabledMoodleId { get; set; } = Guid.Empty;
+    public string FatigueEnabledMoodleName { get; set; } = string.Empty;
+
+    public Guid FatigueRestrainedMoodleId { get; set; } = Guid.Empty;
+    public string FatigueRestrainedMoodleName { get; set; } = string.Empty;
+
+    public Guid FatigueStatusFreshMoodleId { get; set; } = Guid.Empty;
+    public string FatigueStatusFreshMoodleName { get; set; } = string.Empty;
+
+    public Guid FatigueStatusStrainingMoodleId { get; set; } = Guid.Empty;
+    public string FatigueStatusStrainingMoodleName { get; set; } = string.Empty;
+
+    public Guid FatigueStatusBurningMoodleId { get; set; } = Guid.Empty;
+    public string FatigueStatusBurningMoodleName { get; set; } = string.Empty;
+
+    public Guid FatigueStatusStalledMoodleId { get; set; } = Guid.Empty;
+    public string FatigueStatusStalledMoodleName { get; set; } = string.Empty;
+
+    public Guid FatigueStatusBrokenMoodleId { get; set; } = Guid.Empty;
+    public string FatigueStatusBrokenMoodleName { get; set; } = string.Empty;
+
 
 
 

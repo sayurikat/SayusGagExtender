@@ -17,7 +17,7 @@ namespace SayusGagExtender.Windows
                 configuration.Save();
             }
 
-            ImGui.TextWrapped("Blocks auto attack and weapon sheathing.");
+            ImGui.TextWrapped("Blocks auto attack and sheaths weapon.");
 
             ImGui.Spacing();
             ImGui.Separator();

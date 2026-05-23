@@ -346,6 +346,9 @@ namespace SayusGagExtender
 
         private void TrySendRandomVibeCommand(ControllerPresence presence)
         {
+            if (plugin.EmoteEnforcer.ShouldBlockUserEmotes)
+                return;
+
             try
             {
                 //Plugin.ChatGui.Print($"Auto Vibe operating. Controller presence: {presence}.");

@@ -9,7 +9,7 @@ namespace SayusGagExtender
 
         private DateTime lastFriendRefreshUtc = DateTime.MinValue;
 
-        private static readonly TimeSpan FriendListRefreshCooldown = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan FriendListRefreshCooldown = TimeSpan.FromSeconds(300);
 
         // How long the count must stop changing before we accept the refresh as complete.
         // This is not used alone; count must also recover to the previous stable count.

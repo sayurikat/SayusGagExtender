@@ -20,7 +20,7 @@ public class MainWindow : Window, IDisposable
 
     public MainWindow(Plugin plugin)
         : base("Sayu's Gag Extender###SayusGagExtenderMainWindow",
-            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
+            ImGuiWindowFlags.None)
     {
         SizeConstraints = new WindowSizeConstraints
         {
@@ -44,7 +44,7 @@ public class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
-        ImGui.Text($"Normal Conditions: {Plugin.Condition[ConditionFlag.BetweenAreas]}");
+        //ImGui.Text($"Normal Conditions: {Plugin.Condition[ConditionFlag.BetweenAreas]}");
         DrawFeatureStatus();
 
         ImGui.Spacing();
@@ -66,8 +66,8 @@ public class MainWindow : Window, IDisposable
 
         if (icon != null)
         {
-            ImGui.Image(icon.Handle, new Vector2(48, 48));
-            ImGui.SameLine();
+            ImGui.Image(icon.Handle, new Vector2(144, 144));
+            //ImGui.SameLine();
         }
 
         ImGui.BeginGroup();
@@ -105,6 +105,7 @@ public class MainWindow : Window, IDisposable
             DrawFeaturesRow("Teleport Block", configuration.TeleportBlockFeature, plugin.TeleportBlocker.IsActive);
             DrawFeaturesRow("Mount Block", configuration.MountBlockFeature, plugin.MountBlocker.IsActive);
             DrawFeaturesRow("Job Switch Block", configuration.JobSwitchBlockFeature, plugin.JobSwitchBlocker.IsActive);
+            DrawFeaturesRow("Fatigue Tracker", configuration.FatigueEnabled, plugin.FatigueTracker.IsActive);
             DrawFeaturesRow("Moodle Enforcer", configuration.MoodleEnforcerEnabled, plugin.MoodleEnforcer.IsActive);
             DrawFeaturesRow("Penumbra Enforcer", configuration.PenumbraEnforcerEnabled, plugin.PenumbraEnforcer.IsActive);
             DrawFeaturesRow("C+ Enforcer", configuration.CustomizePlusEnforcerEnabled, plugin.CustomizePlusEnforcer.IsActive);
@@ -142,6 +143,15 @@ public class MainWindow : Window, IDisposable
     private void DrawRuntimeStatus()
     {
         ImGui.Text("Current Status");
+        ImGui.SameLine();
+        ImGui.TextDisabled(ConfigWindow.GetFatigueStatusLabel(plugin.FatigueTracker.CurrentFatigueStatus));
+
+        var fatiguePercent = configuration.FatigueCurrent * 100.0f;
+        var statusColor = ConfigWindow.GetFatigueStatusColor(plugin.FatigueTracker.CurrentFatigueStatus);
+        ImGui.PushStyleColor(ImGuiCol.PlotHistogram, statusColor);
+        ImGui.ProgressBar(configuration.FatigueCurrent, new Vector2(300, 0), $"{fatiguePercent:F1}%");
+        ImGui.PopStyleColor();
+        
 
         using (ImRaii.Table("RuntimeStatusTable", 2, ImGuiTableFlags.SizingStretchProp))
         {
@@ -213,6 +223,8 @@ public class MainWindow : Window, IDisposable
                     configuration.JobSwitchQuotaActionLogUtc));
 
             DrawSeparatorRow();
+
+
 
             DrawStatusRow("Blindfolded", plugin.BlindfoldMonitor.blindfolded);
             DrawStatusRow("Chatbox hidden", plugin.ChatMonitor.chatboxHidden);

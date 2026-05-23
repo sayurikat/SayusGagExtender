@@ -12,8 +12,13 @@ public sealed unsafe class MovementBlocker : IDisposable
 {
     private readonly Plugin plugin;
     private readonly HashSet<string> blockSources = [];
+    private readonly HashSet<string> forceWalkSources = [];
     public bool Enabled => blockSources.Count > 0;
     public IReadOnlyCollection<string> BlockSources => blockSources;
+
+    public bool ForceWalkEnabled => forceWalkSources.Count > 0;
+    public IReadOnlyCollection<string> ForceWalkSources => forceWalkSources;
+    private const float ForceWalkScale = 0.5f;
 
 
     private static readonly InputId[] BlockedInputs =
@@ -71,6 +76,7 @@ public sealed unsafe class MovementBlocker : IDisposable
     public void Dispose()
     {
         ClearAllBlocks();
+        ClearAllForceWalks();
 
         IsInputIdPressedHook.Dispose();
         IsInputIdDownHook.Dispose();
@@ -133,6 +139,60 @@ public sealed unsafe class MovementBlocker : IDisposable
         if (wasEnabled)
             DisableFullMovementLock();
     }
+
+    public void RequestForceWalk(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            source = "unknown";
+
+        var wasEnabled = ForceWalkEnabled;
+
+        forceWalkSources.Add(source);
+
+        if (!wasEnabled && ForceWalkEnabled)
+            Plugin.ChatGui.Print("Force Walk Enabled");
+    }
+
+    public void ClearForceWalk(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+            source = "unknown";
+
+        var wasEnabled = ForceWalkEnabled;
+
+        forceWalkSources.Remove(source);
+
+        if (wasEnabled && !ForceWalkEnabled)
+            Plugin.ChatGui.Print("Force Walk Disabled");
+    }
+
+    public void ClearAllForceWalks()
+    {
+        var wasEnabled = ForceWalkEnabled;
+
+        forceWalkSources.Clear();
+
+        if (wasEnabled)
+            Plugin.ChatGui.Print("Force Walk Disabled");
+    }
+
+
+    private void ApplyForceWalk(float* left, float* forward)
+    {
+        if (!ForceWalkEnabled)
+            return;
+
+        // Full movement block wins over force-walk.
+        if (Enabled)
+            return;
+
+        if (left != null)
+            *left *= ForceWalkScale;
+
+        if (forward != null)
+            *forward *= ForceWalkScale;
+    }
+
 
     private bool ShouldBlock(InputId inputId)
     {
@@ -221,25 +281,28 @@ public sealed unsafe class MovementBlocker : IDisposable
             autoRun,
             dontRotateWithCamera);
 
-        if (!Enabled)
+        if (Enabled)
+        {
+            // Block mouse-driven movement and right-click turning.
+            if (wishDirH != null)
+                *wishDirH = 0f;
+
+            if (wishDirV != null)
+                *wishDirV = 0f;
+
+            if (rotateDir != null)
+                *rotateDir = 0f;
+
+            if (alignWithCamera != null)
+                *alignWithCamera = 0;
+
+            if (autoRun != null)
+                *autoRun = 0;
+
             return;
+        }
 
-
-        // Block mouse-driven movement and right-click turning.
-        if (wishDirH != null)
-            *wishDirH = 0f;
-
-        if (wishDirV != null)
-            *wishDirV = 0f;
-
-        if (rotateDir != null)
-            *rotateDir = 0f;
-
-        if (alignWithCamera != null)
-            *alignWithCamera = 0;
-
-        if (autoRun != null)
-            *autoRun = 0;
+        ApplyForceWalk(wishDirH, wishDirV);
     }
 
     private static class Signatures
@@ -299,25 +362,29 @@ public sealed unsafe class MovementBlocker : IDisposable
             a6,
             bAdditiveUnk);
 
-        if (!Enabled)
+        if (Enabled)
+        {
+            // Movement
+            if (sumLeft != null)
+                *sumLeft = 0f;
+
+            if (sumForward != null)
+                *sumForward = 0f;
+
+            // This is the important one for right-click character turning.
+            if (sumTurnLeft != null)
+                *sumTurnLeft = 0f;
+
+            if (haveBackwardOrStrafe != null)
+                *haveBackwardOrStrafe = 0;
+
+            if (a6 != null)
+                *a6 = 0;
+
             return;
+        }
 
-        // Movement
-        if (sumLeft != null)
-            *sumLeft = 0f;
-
-        if (sumForward != null)
-            *sumForward = 0f;
-
-        // This is the important one for right-click character turning.
-        if (sumTurnLeft != null)
-            *sumTurnLeft = 0f;
-
-        if (haveBackwardOrStrafe != null)
-            *haveBackwardOrStrafe = 0;
-
-        if (a6 != null)
-            *a6 = 0;
+        ApplyForceWalk(sumLeft, sumForward);
     }
 
 
