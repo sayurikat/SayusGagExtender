@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Dalamud.Game.ClientState.Conditions;
 
 namespace SayusGagExtender.API.GagSpeak
 {
@@ -86,7 +87,13 @@ namespace SayusGagExtender.API.GagSpeak
         public Type MainHubType => mainHubType!;
         public Type RestraintLayerType => restraintLayerType!;
         public Type PushClientActiveRestraintType => pushClientActiveRestraintType!;
+        private static readonly TimeSpan ClientReadyRetryCooldown = TimeSpan.FromMilliseconds(500);
+        private static readonly TimeSpan ClientReadyStableDuration = TimeSpan.FromSeconds(3);
+        private static readonly TimeSpan StartupDiscoveryDelay = TimeSpan.FromSeconds(3);
+        private DateTime firstClientReadyUtc = DateTime.MinValue;
 
+        private DateTime nextClientReadyCheckUtc = DateTime.MinValue;
+        private DateTime clientReadySinceUtc = DateTime.MinValue;
         public object GagSpeakInstance => gagSpeakInstance!;
         public object RestraintManager => restraintManager!;
         public object MainHub => mainHub!;
@@ -108,10 +115,16 @@ namespace SayusGagExtender.API.GagSpeak
         {
             ChatPrint("Ensuring GagSpeakReflectionContext is ready...");
 
+            // Important: existing working cache must always win.
+            // Never block already-hooked services behind startup delay logic.
             if (CachedServicesStillUsable())
                 return true;
 
             ChatPrint("Cached GagSpeak services are not usable.");
+
+            // Only delay discovery/caching while the game client is still starting up.
+            if (!CanAttemptInitialGagSpeakDiscovery())
+                return false;
 
             if (DateTime.UtcNow < nextMissingGagSpeakCheckUtc)
                 return false;
@@ -119,7 +132,79 @@ namespace SayusGagExtender.API.GagSpeak
             ChatPrint("Attempting to find and cache live GagSpeak services...");
             return TryFindAndCacheLiveGagSpeakServices();
         }
+        private bool CanAttemptInitialGagSpeakDiscovery()
+        {
+            var now = DateTime.UtcNow;
 
+            try
+            {
+                if (!Plugin.ClientState.IsLoggedIn)
+                {
+                    firstClientReadyUtc = DateTime.MinValue;
+                    return false;
+                }
+
+                if (Plugin.ObjectTable.LocalPlayer == null)
+                {
+                    firstClientReadyUtc = DateTime.MinValue;
+                    return false;
+                }
+
+                if (firstClientReadyUtc == DateTime.MinValue)
+                {
+                    firstClientReadyUtc = now;
+                    return false;
+                }
+
+                return now - firstClientReadyUtc >= StartupDiscoveryDelay;
+            }
+            catch
+            {
+                firstClientReadyUtc = DateTime.MinValue;
+                return false;
+            }
+        }
+        private bool IsClientReadyForGagSpeakReflection()
+        {
+            var now = DateTime.UtcNow;
+
+            if (now < nextClientReadyCheckUtc)
+                return false;
+
+            nextClientReadyCheckUtc = now + ClientReadyRetryCooldown;
+
+            try
+            {
+                if (!Plugin.ClientState.IsLoggedIn)
+                {
+                    clientReadySinceUtc = DateTime.MinValue;
+                    return false;
+                }
+
+                if (Plugin.ObjectTable.LocalPlayer == null)
+                {
+                    clientReadySinceUtc = DateTime.MinValue;
+                    return false;
+                }
+
+                if (Plugin.Condition[ConditionFlag.BetweenAreas] ||
+                    Plugin.Condition[ConditionFlag.BetweenAreas51])
+                {
+                    clientReadySinceUtc = DateTime.MinValue;
+                    return false;
+                }
+
+                if (clientReadySinceUtc == DateTime.MinValue)
+                    clientReadySinceUtc = now;
+
+                return now - clientReadySinceUtc >= ClientReadyStableDuration;
+            }
+            catch
+            {
+                clientReadySinceUtc = DateTime.MinValue;
+                return false;
+            }
+        }
         public void ResetCachedServices()
         {
             gagSpeakInstance = null;

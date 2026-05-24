@@ -283,6 +283,12 @@ namespace SayusGagExtender.API
                 if (emote.RowId == 0)
                     continue;
 
+                if (IsAnySitOrSleep(emote.RowId))
+                {
+                    result.Add(emote.RowId);
+                    continue;
+                }
+
                 if (emote.EmoteCategory.RowId == 2 || string.Equals(emote.EmoteCategory.Value.Name.ToString(), "Special", StringComparison.OrdinalIgnoreCase))
                 {
                     result.Add(emote.RowId);

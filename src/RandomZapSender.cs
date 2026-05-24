@@ -351,6 +351,7 @@ namespace SayusGagExtender
             var interruptedEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
             if (!plugin.EmoteApi.IsEmoteSpecial((uint)interruptedEmoteId))
             {
+                Plugin.ChatGui.Print($" not special");
                 interruptedEmoteId = 0;
             }
             string returnToEmote = "";
@@ -389,6 +390,7 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
+                        Plugin.ChatGui.Print($" zap command: {zapCommand.Command + " " + returnToEmote}");
                         plugin.EmoteGuard.QueueGuardedEmote(zapCommand.Command + " " + returnToEmote);
                         return;
                     }
