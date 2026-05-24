@@ -28,6 +28,7 @@ namespace SayusGagExtender
         private const float ControllerNearbyDistance = 30f;
         private ControllerPresence lastControllerPresence = ControllerPresence.Offline;
 
+
         public enum OperateWhen
         {
             Always,
@@ -349,17 +350,29 @@ namespace SayusGagExtender
             if (plugin.EmoteEnforcer.ShouldBlockUserEmotes)
                 return;
 
+            var interruptedEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
+            if (!plugin.EmoteApi.IsEmoteSpecial((uint)interruptedEmoteId))
+            {
+                interruptedEmoteId = 0;
+            }
+            string returnToEmote = "";
+
+            var interuptedCommand = plugin.EmoteApi.GetEmoteCommand((uint)interruptedEmoteId);
+            if (interuptedCommand != null)
+            {
+                returnToEmote = interuptedCommand;
+            }
             try
             {
                 //Plugin.ChatGui.Print($"Auto Vibe operating. Controller presence: {presence}.");
-
+                
                 var vibeCommands = plugin.Configuration.AutoVibeCommands
                     .Where(x => !string.IsNullOrWhiteSpace(x.Command) && x.Weight > 0)
                     .ToList();
 
                 if (vibeCommands.Count == 0)
                 {
-                    plugin.EmoteGuard.QueueGuardedEmote("/upset");
+                    plugin.EmoteGuard.QueueGuardedEmote("/blush" + " " + returnToEmote);
                     return;
                 }
 
@@ -374,7 +387,7 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
-                        plugin.EmoteGuard.QueueGuardedEmote(vibeCommand.Command);
+                        plugin.EmoteGuard.QueueGuardedEmote(vibeCommand.Command + " " + returnToEmote);
                         return;
                     }
                 }

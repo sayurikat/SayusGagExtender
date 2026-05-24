@@ -20,6 +20,7 @@ namespace SayusGagExtender
         private readonly TimeSpan EmoteCommandCooldown = TimeSpan.FromSeconds(3);
         public bool IsActive = false;
         private bool RequestedBlockState = false;
+        private uint? interruptedEmoteId = 0;
         public bool ShouldBlockUserEmotes => plugin.Configuration.EmoteEnforcerEnabled && IsActive;
 
         public class EmoteEnforcerEmoteConfig
@@ -127,7 +128,14 @@ namespace SayusGagExtender
             if (wantedEmoteConfig == null)
             {
                 CancelCurrentEnforcedEmoteOnce();
+                interruptedEmoteId = null;
                 return;
+            }
+
+            //rememeber interupted emote
+            if (interruptedEmoteId == null)
+            {
+                interruptedEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
             }
 
             IsActive = true;
@@ -277,10 +285,42 @@ namespace SayusGagExtender
             if (!CanSendEmoteCommand())
                 return;
 
-            plugin.EmoteApi.CancelEmote();
+            //recall interupted emote
+            string returnToEmote = "";
+            if (interruptedEmoteId != null)
+            {
+                var ReturnEmoteId = (uint)interruptedEmoteId;
+                //only special / loops
+                if (plugin.EmoteApi.IsEmoteSpecial(ReturnEmoteId))
+                {
+                    var interuptedCommand = plugin.EmoteApi.GetEmoteCommand(ReturnEmoteId);
+                    if (interuptedCommand != null)
+                    {
+                        returnToEmote = interuptedCommand;
+                    }
+                }
+
+                //interruptedEmoteId = null;
+            }
+
+            CancelEmote(returnToEmote);
             nextEmoteCommandUTC = DateTime.UtcNow + EmoteCommandCooldown;
         }
+        public bool CancelEmote(string returnToEmote = "")
+        {
+            // There is no nice universal "/stopemote" command.
+            // /sit is the common safe-ish way to break most looping emotes.
+            // If the player is already sitting, this can stand them up, so only call it
+            // when you know the enforcer started the currently active emote.
 
+
+            string cancelEmote = plugin.Configuration.EmoteEnforcerCancelCommand + " " + returnToEmote;
+            Plugin.ChatGui.Print($"CancelEmote: {cancelEmote}");
+
+            plugin.EmoteGuard.QueueGuardedEmote(cancelEmote);
+
+            return true;
+        }
 
         private static bool ContainsAnyByIdOrName(
             List<GagSpeakItem> configuredItems,

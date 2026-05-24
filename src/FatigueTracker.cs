@@ -101,7 +101,6 @@ public sealed class FatigueTracker : IDisposable
 
     private float cachedStandingFatiguePerSecond;
     private int cachedActiveStandingPainCount;
-    private readonly HashSet<uint> restingEmoteIds = new();
 
     private Guid activeFatigueEnabledMoodleId = Guid.Empty;
     private Guid activeFatigueRestrainedMoodleId = Guid.Empty;
@@ -124,29 +123,6 @@ public sealed class FatigueTracker : IDisposable
         // Value means seconds from 0% fatigue to forced sit/stop threshold.
         public int StandingSecondsUntilForcedSit { get; set; } = 0;
     }
-    private static readonly uint[] ManualRestingEmoteIds =
-[
-    // Ground sit
-    52,
-    97,
-    98,
-    117,
-
-    // Chair sit
-    50,
-    95,
-    96,
-    254,
-    255,
-
-    // Doze / sleep
-    88,
-    99,
-    100,
-
-    // Playdead
-    143,
-];
     private enum MovementKind
     {
         None,
@@ -171,7 +147,6 @@ public sealed class FatigueTracker : IDisposable
 
         plugin.Configuration.FatigueCurrent = Clamp01(plugin.Configuration.FatigueCurrent);
 
-        BuildRestingEmoteRegistry();
 
         Plugin.Framework.Update += OnFrameworkUpdate;
     }
@@ -715,112 +690,7 @@ public sealed class FatigueTracker : IDisposable
         return latched;
     }
 
-    private readonly Dictionary<uint, string> emoteDebugNames = new();
-
-    private void BuildRestingEmoteRegistry()
-    {
-        restingEmoteIds.Clear();
-        emoteDebugNames.Clear();
-
-        try
-        {
-            foreach (var emote in Plugin.DataManager.GetExcelSheet<Emote>())
-            {
-                var textCommand = emote.TextCommand.Value;
-
-                var command = NormalizeCommandName(textCommand.Command.ToString());
-                var shortCommand = NormalizeCommandName(textCommand.ShortCommand.ToString());
-                var name = emote.Name.ToString();
-
-                emoteDebugNames[emote.RowId] = string.IsNullOrWhiteSpace(name)
-                    ? $"Emote #{emote.RowId}"
-                    : name;
-
-                if (IsRestingCommand(command)
-                    || IsRestingCommand(shortCommand)
-                    || IsRestingEmoteName(name))
-                {
-                    restingEmoteIds.Add(emote.RowId);
-                }
-            }
-
-            // Manual safety net.
-            // These commands can represent sitting/lying pose state depending on current character state.
-            AddRestingEmoteByCommand("sit");
-            AddRestingEmoteByCommand("groundsit");
-            AddRestingEmoteByCommand("doze");
-            AddRestingEmoteByCommand("playdead");
-
-            // Alternate sitting / resting pose IDs found by dev testing.
-            // Ground sit poses: 52, 97, 98, 117
-            // Chair sit poses: 50, 95, 96, 254, 255
-            // Doze poses: 88, 99, 100
-            foreach (var id in ManualRestingEmoteIds)
-                restingEmoteIds.Add(id);
-        }
-        catch (Exception ex)
-        {
-            Plugin.ChatGui.PrintError($"FatigueTracker failed to build resting emote registry: {ex.Message}");
-        }
-    }
-
-    private void AddRestingEmoteByCommand(string wantedCommand)
-    {
-        wantedCommand = NormalizeCommandName(wantedCommand);
-
-        foreach (var emote in Plugin.DataManager.GetExcelSheet<Emote>())
-        {
-            var textCommand = emote.TextCommand.Value;
-
-            var command = NormalizeCommandName(textCommand.Command.ToString());
-            var shortCommand = NormalizeCommandName(textCommand.ShortCommand.ToString());
-
-            if (command == wantedCommand || shortCommand == wantedCommand)
-                restingEmoteIds.Add(emote.RowId);
-        }
-    }
-
-    private static string NormalizeCommandName(string? command)
-    {
-        if (string.IsNullOrWhiteSpace(command))
-            return string.Empty;
-
-        command = command.Trim();
-
-        if (command.StartsWith('/'))
-            command = command[1..];
-
-        var spaceIndex = command.IndexOf(' ');
-        if (spaceIndex >= 0)
-            command = command[..spaceIndex];
-
-        return command.Trim().ToLowerInvariant();
-    }
-
-    private static bool IsRestingCommand(string command)
-    {
-        return command is
-            "sit"
-            or "groundsit"
-            or "doze";
-    }
-
-    private static bool IsRestingEmoteName(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return false;
-
-        name = name.Trim();
-
-        // These catch alternate pose rows that may not use /sit as their command.
-        return name.Contains("sit", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("ground sit", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("groundsit", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("doze", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("sleep", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("lie", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("lying", StringComparison.OrdinalIgnoreCase);
-    }
+    
 
     private bool IsRestingByEmote()
     {
@@ -829,26 +699,7 @@ public sealed class FatigueTracker : IDisposable
         if (currentEmoteId == 0)
             return false;
 
-        return restingEmoteIds.Contains(currentEmoteId);
-    }
-    public void PrintCurrentEmoteDebug()
-    {
-        var currentEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
-
-        if (currentEmoteId == 0)
-        {
-            Plugin.ChatGui.Print("FatigueTracker emote debug: current emote id = 0");
-            return;
-        }
-
-        var knownName = emoteDebugNames.TryGetValue(currentEmoteId, out var name)
-            ? name
-            : "unknown";
-
-        var resting = restingEmoteIds.Contains(currentEmoteId);
-
-        Plugin.ChatGui.Print(
-            $"FatigueTracker emote debug: id={currentEmoteId}, name='{knownName}', resting={resting}");
+        return plugin.EmoteApi.IsAnySitOrSleep(currentEmoteId) || plugin.EmoteApi.IsThisThatEmote(currentEmoteId, "/playdead");
     }
     private void UpdateFatigueMoodles()
     {

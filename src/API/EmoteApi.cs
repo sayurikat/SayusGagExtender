@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
+using ECommons;
 
 namespace SayusGagExtender.API
 {
@@ -13,11 +14,47 @@ namespace SayusGagExtender.API
         private readonly Plugin plugin;
 
         private Dictionary<uint, string>? emoteCommandsById;
+        private HashSet<uint>? specialEmotes;
+        private readonly Dictionary<string, Dictionary<uint, bool>> emoteMatchCacheByCommand = new();
 
+        private static readonly uint[] ManualGroundSitEmoteIds =
+        [
+            // Ground sit
+            52,
+            97,
+            98,
+            117,
+        ];
+        public bool IsGroundSit(uint id) => (ManualGroundSitEmoteIds.Contains(id));
+        private static readonly uint[] ManualChairSitEmoteIds =
+        [
+            // Chair sit
+            50,
+            95,
+            96,
+            254,
+            255,
+        ];
+        public bool IsChairSit(uint id) => (ManualChairSitEmoteIds.Contains(id));
+        private static readonly uint[] ManualSleepEmoteIds =
+        [
+            // Doze / sleep
+            88,
+            99,
+            100,
+        ];
+        public bool IsSleep(uint id) => (ManualSleepEmoteIds.Contains(id));
+        public bool IsAnySit(uint id) => (ManualGroundSitEmoteIds.Contains(id) || ManualChairSitEmoteIds.Contains(id));
+        public bool IsAnySitOrSleep(uint id) => (ManualGroundSitEmoteIds.Contains(id) || ManualChairSitEmoteIds.Contains(id) || ManualSleepEmoteIds.Contains(id));
         public EmoteApi(Plugin plugin)
         {
             this.plugin = plugin;
+
         }
+        
+    // Playdead
+    //143,
+
 
         public Dictionary<uint, string> GetAllEmotes()
         {
@@ -105,23 +142,65 @@ namespace SayusGagExtender.API
             return true;//Plugin.CommandManager.ProcessCommand($"{command} motion");
         }
 
-        public bool CancelEmote()
+        
+        public bool IsEmoteSpecial(uint emoteId)
         {
-            // There is no nice universal "/stopemote" command.
-            // /sit is the common safe-ish way to break most looping emotes.
-            // If the player is already sitting, this can stand them up, so only call it
-            // when you know the enforcer started the currently active emote.
-            Plugin.ChatGui.Print("CancelEmote.");
-            //plugin commands
-            //Plugin.CommandManager.ProcessCommand(plugin.Configuration.EmoteEnforcerCancelCommand);
+            try
+            {
+                specialEmotes ??= BuildSpecialEmoteCache();
+                return specialEmotes.Contains(emoteId);
+            }
+            catch (Exception ex)
+            {
+                Plugin.ChatGui.PrintError($"Failed to get emote for {emoteId}: {ex}");
+                return false;
+            }
+        }
+        
+        public bool IsThisThatEmote(uint emoteId, string command)
+        {
+            if (emoteMatchCacheByCommand.TryGetValue(command, out var cachedByEmoteId)
+                && cachedByEmoteId.TryGetValue(emoteId, out var cachedResult))
+            {
+                return cachedResult;
+            }
 
-            //game commands
-            //plugin.Utils.ExecuteCommand(plugin.Configuration.EmoteEnforcerCancelCommand);
+            var result = IsThisThatEmoteUncached(emoteId, command);
 
-            plugin.EmoteGuard.QueueGuardedEmote(plugin.Configuration.EmoteEnforcerCancelCommand);
+            if (!emoteMatchCacheByCommand.TryGetValue(command, out cachedByEmoteId))
+            {
+                cachedByEmoteId = new Dictionary<uint, bool>();
+                emoteMatchCacheByCommand[command] = cachedByEmoteId;
+            }
 
-            //plugin.EmoteGuard.QueueGuardedEmote("/sit");
-            return true;// Plugin.CommandManager.ProcessCommand("/sit");
+            cachedByEmoteId[emoteId] = result;
+
+            return result;
+        }
+
+        private bool IsThisThatEmoteUncached(uint emoteId, string command)
+        {
+            var sheet = Plugin.DataManager.GetExcelSheet<Emote>();
+            if (sheet == null)
+                return false;
+
+            foreach (var emote in sheet)
+            {
+                if (emote.RowId != emoteId)
+                    continue;
+
+                var readCommand = TryExtractCommand(emote);
+
+                // manual override
+                if (TryOverrideCommand(emote.RowId, out var commandOverride))
+                {
+                    readCommand = commandOverride;
+                }
+
+                return readCommand == command;
+            }
+
+            return false;
         }
 
         private Dictionary<uint, string> BuildEmoteCommandCache()
@@ -139,13 +218,18 @@ namespace SayusGagExtender.API
 
                 var command = TryExtractCommand(emote);
 
+                //manual override
+                if (TryOverrideCommand(emote.RowId, out var commandOverride))
+                {
+                    command = commandOverride;
+                }
+
                 if (!string.IsNullOrWhiteSpace(command))
                     result[emote.RowId] = command;
             }
 
             return result;
         }
-
         private static string? TryExtractCommand(Emote emote)
         {
             try
@@ -169,5 +253,44 @@ namespace SayusGagExtender.API
                 return null;
             }
         }
+        private static bool TryOverrideCommand(uint emoteId, out string command)
+        {
+            command = "";
+            if (ManualGroundSitEmoteIds.Contains(emoteId))
+            {
+                command = "/groundsit"; return true;
+            }
+            if (ManualChairSitEmoteIds.Contains(emoteId))
+            {
+                command = "/sit"; return true;
+            }
+            if (ManualSleepEmoteIds.Contains(emoteId))
+            {
+                command = "/doze"; return true;
+            }
+            return false;
+        }
+        private HashSet<uint> BuildSpecialEmoteCache()
+        {
+            var result = new HashSet<uint>();
+
+            var sheet = Plugin.DataManager.GetExcelSheet<Emote>();
+            if (sheet == null)
+                return result;
+
+            foreach (var emote in sheet)
+            {
+                if (emote.RowId == 0)
+                    continue;
+
+                if (emote.EmoteCategory.RowId == 2 || string.Equals(emote.EmoteCategory.Value.Name.ToString(), "Special", StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(emote.RowId);
+                }
+            }
+
+            return result;
+        }
+        
     }
 }

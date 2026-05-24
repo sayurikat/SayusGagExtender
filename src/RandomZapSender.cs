@@ -342,15 +342,31 @@ namespace SayusGagExtender
             // Moodle for "Auto Zap is currently operating".
             SetAutoZapAutonomusMoodle(shouldOperate);
         }
-
+        
         private void TrySendRandomZapCommand(ControllerPresence presence)
         {
             if (plugin.EmoteEnforcer.ShouldBlockUserEmotes)
                 return;
 
+            var interruptedEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
+            if (!plugin.EmoteApi.IsEmoteSpecial((uint)interruptedEmoteId))
+            {
+                interruptedEmoteId = 0;
+            }
+            string returnToEmote = "";
+
+            var interuptedCommand = plugin.EmoteApi.GetEmoteCommand((uint)interruptedEmoteId);
+            if (interuptedCommand != null)
+            {
+                returnToEmote = interuptedCommand;
+            }
+
             try
             {
                 //Plugin.ChatGui.Print($"Auto Zap operating. Controller presence: {presence}.");
+                
+                
+
 
                 var zapCommands = plugin.Configuration.AutoZapCommands
                     .Where(x => !string.IsNullOrWhiteSpace(x.Command) && x.Weight > 0)
@@ -358,7 +374,7 @@ namespace SayusGagExtender
 
                 if (zapCommands.Count == 0)
                 {
-                    plugin.EmoteGuard.QueueGuardedEmote("/upset");
+                    plugin.EmoteGuard.QueueGuardedEmote("/upset" + " " + returnToEmote);
                     return;
                 }
 
@@ -373,7 +389,7 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
-                        plugin.EmoteGuard.QueueGuardedEmote(zapCommand.Command);
+                        plugin.EmoteGuard.QueueGuardedEmote(zapCommand.Command + " " + returnToEmote);
                         return;
                     }
                 }

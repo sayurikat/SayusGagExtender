@@ -363,11 +363,6 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (args.Equals("fatigue emote", StringComparison.OrdinalIgnoreCase))
-        {
-            FatigueTracker.PrintCurrentEmoteDebug();
-            return;
-        }
 
 
 

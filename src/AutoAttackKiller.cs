@@ -101,7 +101,7 @@ namespace SayusGagExtender
                     this.autoAttackSetB.Enable();
                 }
 
-                Plugin.ChatGui.Print("Auto-attack guard enabled.");
+                //Plugin.ChatGui.Print("Auto-attack guard enabled.");
             }
             catch (Exception ex)
             {

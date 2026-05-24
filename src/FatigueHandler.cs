@@ -21,39 +21,14 @@ public sealed class FatigueHandler : IDisposable
 
     private bool stopBlockRequested;
 
-    private readonly HashSet<uint> sittingEmoteIds = new();
-
     public bool IsForceWalkActive { get; private set; }
     public bool IsForceStopActive { get; private set; }
     public bool IsForceSitActive { get; private set; }
-    private static readonly uint[] ManualSittingEmoteIds =
-[
-    // Ground sit
-    52,
-    97,
-    98,
-    117,
-
-    // Chair sit
-    50,
-    95,
-    96,
-    254,
-    255,
-
-    // Doze / sleep
-    88,
-    99,
-    100,
-
-    // Playdead
-    143,
-];
+ 
     public FatigueHandler(Plugin plugin)
     {
         this.plugin = plugin;
 
-        BuildSittingEmoteRegistry();
 
         Plugin.Framework.Update += OnFrameworkUpdate;
     }
@@ -279,62 +254,7 @@ public sealed class FatigueHandler : IDisposable
         nextStatusPrintUtc = now + StatusPrintCooldown;
         Plugin.ChatGui.Print(message);
     }
-    private void BuildSittingEmoteRegistry()
-    {
-        sittingEmoteIds.Clear();
 
-        try
-        {
-            foreach (var emote in Plugin.DataManager.GetExcelSheet<Emote>())
-            {
-                var textCommand = emote.TextCommand.Value;
-
-                var command = NormalizeCommandName(textCommand.Command.ToString());
-                var shortCommand = NormalizeCommandName(textCommand.ShortCommand.ToString());
-
-                if (IsSittingCommand(command) || IsSittingCommand(shortCommand))
-                    sittingEmoteIds.Add(emote.RowId);
-            }
-
-            // Alternate sitting / resting pose IDs found by dev testing.
-            // Ground sit poses: 52, 97, 98, 117
-            // Chair sit poses: 50, 95, 96, 254, 255
-            // Doze poses: 88, 99, 100
-            foreach (var id in ManualSittingEmoteIds)
-                sittingEmoteIds.Add(id);
-
-        }
-        catch (Exception ex)
-        {
-            Plugin.ChatGui.PrintError($"FatigueHandler failed to build sitting emote registry: {ex.Message}");
-        }
-    }
-
-    private static string NormalizeCommandName(string? command)
-    {
-        if (string.IsNullOrWhiteSpace(command))
-            return string.Empty;
-
-        command = command.Trim();
-
-        if (command.StartsWith('/'))
-            command = command[1..];
-
-        var spaceIndex = command.IndexOf(' ');
-        if (spaceIndex >= 0)
-            command = command[..spaceIndex];
-
-        return command.Trim().ToLowerInvariant();
-    }
-
-    private static bool IsSittingCommand(string command)
-    {
-        return command is
-            "sit"
-            or "groundsit"
-            or "doze"
-            or "playdead";
-    }
 
     private bool IsSittingOrLyingByEmote()
     {
@@ -342,8 +262,7 @@ public sealed class FatigueHandler : IDisposable
 
         if (currentEmoteId == 0)
             return false;
-
-        return sittingEmoteIds.Contains(currentEmoteId);
+        return plugin.EmoteApi.IsAnySitOrSleep(currentEmoteId) || plugin.EmoteApi.IsThisThatEmote(currentEmoteId, "/playdead");
     }
 
     private bool IsInAnyEmote()
