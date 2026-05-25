@@ -56,7 +56,7 @@ public partial class ConfigWindow
         ImGui.Separator();
         ImGui.Spacing();
 
-        DrawFatigueMoodles();
+        DrawFatigueEffects();
     }
 
     private void DrawFatigueCurrentStatus()
@@ -234,7 +234,7 @@ public partial class ConfigWindow
             SameLineDisabledText(
                 $"≈ {StepText(EstimateRunStepsToFatigue(GetForcedWalkThreshold01(), configuration.FatigueUnrestrictedFactor))}, " +
                 $"/ {TimeText(EstimateRunTimeToFatigue(GetForcedWalkThreshold01(), configuration.FatigueUnrestrictedFactor))} to forced walk, ");
-                //$"{StepText(EstimateRunStepsToFatigue(GetForcedStopThreshold01(), configuration.FatigueUnrestrictedFactor))} to stop");
+            //$"{StepText(EstimateRunStepsToFatigue(GetForcedStopThreshold01(), configuration.FatigueUnrestrictedFactor))} to stop");
         }
 
         var walkRateMultiplier = configuration.FatigueWalkRateMultiplier;
@@ -515,93 +515,93 @@ public partial class ConfigWindow
         //        false,
         //        ImGuiWindowFlags.HorizontalScrollbar))
         //{
-            ImGui.Indent();
+        ImGui.Indent();
 
-            foreach (var item in items)
+        foreach (var item in items)
+        {
+            ImGui.PushID($"FatigueRestriction-{item.RestrictionId}");
+
+            var displayName = string.IsNullOrWhiteSpace(item.RestrictionName)
+                ? item.RestrictionId.ToString()
+                : item.RestrictionName;
+
+            if (DrawGagSpeakItem(displayName, selectedRowWidth, ctrlHeld))
             {
-                ImGui.PushID($"FatigueRestriction-{item.RestrictionId}");
-
-                var displayName = string.IsNullOrWhiteSpace(item.RestrictionName)
-                    ? item.RestrictionId.ToString()
-                    : item.RestrictionName;
-
-                if (DrawGagSpeakItem(displayName, selectedRowWidth, ctrlHeld))
-                {
-                    configuration.FatigueRestrictions.RemoveAll(x => x.RestrictionId == item.RestrictionId);
-                    configuration.Save();
-
-                    ImGui.PopID();
-                    continue;
-                }
-
-                ImGui.SameLine();
-
-                ImGui.SetNextItemWidth(70);
-                var factorText = item.FatigueFactor.ToString("0.###");
-
-                if (ImGui.InputText("Factor##FatigueFactor", ref factorText, 16, ImGuiInputTextFlags.CharsDecimal))
-                {
-                    if (float.TryParse(factorText.Trim(), out var factor))
-                    {
-                        item.FatigueFactor = Math.Clamp(factor, 0.0f, 100.0f);
-                        configuration.Save();
-                    }
-                }
-
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("1.0 = normal, 2.0 = twice as exhausting, 0.5 = half as exhausting.");
-
-                var forcedWalkSteps = EstimateRunStepsToFatigue(
-                    GetForcedWalkThreshold01(),
-                    item.FatigueFactor);
-
-                var forcedStopSteps = EstimateRunStepsToFatigue(
-                    GetForcedStopThreshold01(),
-                    item.FatigueFactor);
-
-                ImGui.SameLine();
-                ImGui.TextDisabled(
-                    //$"≈ {StepText(forcedWalkSteps)} to forced walk, {StepText(forcedStopSteps)} to stop");
-                    $"≈ {StepText(forcedWalkSteps)} to forced walk");
-
-                ImGui.SameLine();
-
-                ImGui.SetNextItemWidth(80);
-                var standingText = item.StandingSecondsUntilForcedSit <= 0
-                    ? ""
-                    : item.StandingSecondsUntilForcedSit.ToString();
-
-                if (ImGui.InputTextWithHint(
-                        "Stand s##StandingSecondsUntilForcedSit",
-                        "off",
-                        ref standingText,
-                        16,
-                        ImGuiInputTextFlags.CharsDecimal))
-                {
-                    if (string.IsNullOrWhiteSpace(standingText))
-                    {
-                        item.StandingSecondsUntilForcedSit = 0;
-                        configuration.Save();
-                    }
-                    else if (int.TryParse(standingText.Trim(), out var seconds))
-                    {
-                        item.StandingSecondsUntilForcedSit = Math.Clamp(seconds, 0, 86400);
-                        configuration.Save();
-                    }
-                }
-
-                if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Seconds standing still from 0% fatigue until forced sit/stop. Empty or 0 disables standing fatigue.");
-
-                ImGui.SameLine();
-
-                ImGui.TextDisabled(
-                    StandingSitText(EstimateStandingSecondsToForcedSit(item)));
+                configuration.FatigueRestrictions.RemoveAll(x => x.RestrictionId == item.RestrictionId);
+                configuration.Save();
 
                 ImGui.PopID();
+                continue;
             }
 
-            ImGui.Unindent();
+            ImGui.SameLine();
+
+            ImGui.SetNextItemWidth(70);
+            var factorText = item.FatigueFactor.ToString("0.###");
+
+            if (ImGui.InputText("Factor##FatigueFactor", ref factorText, 16, ImGuiInputTextFlags.CharsDecimal))
+            {
+                if (float.TryParse(factorText.Trim(), out var factor))
+                {
+                    item.FatigueFactor = Math.Clamp(factor, 0.0f, 100.0f);
+                    configuration.Save();
+                }
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("1.0 = normal, 2.0 = twice as exhausting, 0.5 = half as exhausting.");
+
+            var forcedWalkSteps = EstimateRunStepsToFatigue(
+                GetForcedWalkThreshold01(),
+                item.FatigueFactor);
+
+            var forcedStopSteps = EstimateRunStepsToFatigue(
+                GetForcedStopThreshold01(),
+                item.FatigueFactor);
+
+            ImGui.SameLine();
+            ImGui.TextDisabled(
+                //$"≈ {StepText(forcedWalkSteps)} to forced walk, {StepText(forcedStopSteps)} to stop");
+                $"≈ {StepText(forcedWalkSteps)} to forced walk");
+
+            ImGui.SameLine();
+
+            ImGui.SetNextItemWidth(80);
+            var standingText = item.StandingSecondsUntilForcedSit <= 0
+                ? ""
+                : item.StandingSecondsUntilForcedSit.ToString();
+
+            if (ImGui.InputTextWithHint(
+                    "Stand s##StandingSecondsUntilForcedSit",
+                    "off",
+                    ref standingText,
+                    16,
+                    ImGuiInputTextFlags.CharsDecimal))
+            {
+                if (string.IsNullOrWhiteSpace(standingText))
+                {
+                    item.StandingSecondsUntilForcedSit = 0;
+                    configuration.Save();
+                }
+                else if (int.TryParse(standingText.Trim(), out var seconds))
+                {
+                    item.StandingSecondsUntilForcedSit = Math.Clamp(seconds, 0, 86400);
+                    configuration.Save();
+                }
+            }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Seconds standing still from 0% fatigue until forced sit/stop. Empty or 0 disables standing fatigue.");
+
+            ImGui.SameLine();
+
+            ImGui.TextDisabled(
+                StandingSitText(EstimateStandingSecondsToForcedSit(item)));
+
+            ImGui.PopID();
+        }
+
+        ImGui.Unindent();
         //}
         //
         //ImGui.EndChild();
@@ -974,107 +974,58 @@ public partial class ConfigWindow
             _ => "Inactive",
         };
     }
-    private void DrawFatigueMoodles()
+    private void DrawFatigueEffects()
     {
-        ImGui.Text("Fatigue Moodles");
-        ImGui.TextWrapped("All Moodles are optional. Status Moodles are exclusive: only one fatigue status Moodle is enforced at a time.");
-        ImGui.TextWrapped("Status changes use the same release tolerance as force walk / stop / sit.");
+        ImGui.Text("Fatigue Effects");
+        ImGui.TextWrapped("Each fatigue condition can apply both a Moodle and an Honorific title. Status effects are exclusive, but enabled/restrained effects can also be active.");
+        ImGui.TextWrapped("For Honorifics, the highest priority active Fatigue effect wins.");
 
         ImGui.Spacing();
 
-        DrawSingleFatigueMoodlePicker(
-            label: "Fatigue enabled",
-            controlId: "fatigue-enabled-moodle",
-            currentId: configuration.FatigueEnabledMoodleId,
-            currentName: configuration.FatigueEnabledMoodleName,
-            onChanged: (id, name) =>
-            {
-                configuration.FatigueEnabledMoodleId = id;
-                configuration.FatigueEnabledMoodleName = name;
-                configuration.Save();
-            });
+        DrawSingleFatigueEffectEditor(
+            "Fatigue enabled",
+            "fatigue-enabled-effect",
+            configuration.FatigueEnabledEffect);
 
-        DrawSingleFatigueMoodlePicker(
-            label: "Wearing fatigue restraint + enabled",
-            controlId: "fatigue-restrained-moodle",
-            currentId: configuration.FatigueRestrainedMoodleId,
-            currentName: configuration.FatigueRestrainedMoodleName,
-            onChanged: (id, name) =>
-            {
-                configuration.FatigueRestrainedMoodleId = id;
-                configuration.FatigueRestrainedMoodleName = name;
-                configuration.Save();
-            });
+        DrawSingleFatigueEffectEditor(
+            "Wearing fatigue restraint + enabled",
+            "fatigue-restrained-effect",
+            configuration.FatigueRestrainedEffect);
 
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
 
-        ImGui.Text("Status Moodles");
+        ImGui.Text("Status Effects");
 
-        DrawSingleFatigueMoodlePicker(
-            label: "Fresh",
-            controlId: "fatigue-status-ok-moodle",
-            currentId: configuration.FatigueStatusFreshMoodleId,
-            currentName: configuration.FatigueStatusFreshMoodleName,
-            onChanged: (id, name) =>
-            {
-                configuration.FatigueStatusFreshMoodleId = id;
-                configuration.FatigueStatusFreshMoodleName = name;
-                configuration.Save();
-            });
+        DrawSingleFatigueEffectEditor(
+            "Fresh",
+            "fatigue-status-fresh-effect",
+            configuration.FatigueStatusFreshEffect);
 
-        DrawSingleFatigueMoodlePicker(
-            label: "Straining",
-            controlId: "fatigue-status-slightly-tired-moodle",
-            currentId: configuration.FatigueStatusStrainingMoodleId,
-            currentName: configuration.FatigueStatusStrainingMoodleName,
-            onChanged: (id, name) =>
-            {
-                configuration.FatigueStatusStrainingMoodleId = id;
-                configuration.FatigueStatusStrainingMoodleName = name;
-                configuration.Save();
-            });
+        DrawSingleFatigueEffectEditor(
+            "Straining",
+            "fatigue-status-straining-effect",
+            configuration.FatigueStatusStrainingEffect);
 
-        DrawSingleFatigueMoodlePicker(
-            label: "Burning",
-            controlId: "fatigue-status-exhausted-moodle",
-            currentId: configuration.FatigueStatusBurningMoodleId,
-            currentName: configuration.FatigueStatusBurningMoodleName,
-            onChanged: (id, name) =>
-            {
-                configuration.FatigueStatusBurningMoodleId = id;
-                configuration.FatigueStatusBurningMoodleName = name;
-                configuration.Save();
-            });
+        DrawSingleFatigueEffectEditor(
+            "Burning",
+            "fatigue-status-burning-effect",
+            configuration.FatigueStatusBurningEffect);
 
-        DrawSingleFatigueMoodlePicker(
-            label: "Stalled",
-            controlId: "fatigue-status-drained-moodle",
-            currentId: configuration.FatigueStatusStalledMoodleId,
-            currentName: configuration.FatigueStatusStalledMoodleName,
-            onChanged: (id, name) =>
-            {
-                configuration.FatigueStatusStalledMoodleId = id;
-                configuration.FatigueStatusStalledMoodleName = name;
-                configuration.Save();
-            });
+        DrawSingleFatigueEffectEditor(
+            "Stalled",
+            "fatigue-status-stalled-effect",
+            configuration.FatigueStatusStalledEffect);
 
-        DrawSingleFatigueMoodlePicker(
-            label: "Broken",
-            controlId: "fatigue-status-worn-out-moodle",
-            currentId: configuration.FatigueStatusBrokenMoodleId,
-            currentName: configuration.FatigueStatusBrokenMoodleName,
-            onChanged: (id, name) =>
-            {
-                configuration.FatigueStatusBrokenMoodleId = id;
-                configuration.FatigueStatusBrokenMoodleName = name;
-                configuration.Save();
-            });
+        DrawSingleFatigueEffectEditor(
+            "Broken",
+            "fatigue-status-broken-effect",
+            configuration.FatigueStatusBrokenEffect);
 
         ImGui.Spacing();
 
-        if (ImGui.Button("Refresh Moodle list##fatigue"))
+        if (ImGui.Button("Refresh Moodle list##fatigue-effects"))
             _ = RefreshMoodleBlockOptionsAsync(force: true);
 
         if (moodleBlockOptionsLoading)
@@ -1083,16 +1034,39 @@ public partial class ConfigWindow
             ImGui.TextDisabled("Loading Moodles...");
         }
     }
-    private void DrawSingleFatigueMoodlePicker(
-    string label,
-    string controlId,
-    Guid currentId,
-    string currentName,
-    Action<Guid, string> onChanged)
-    {
-        ImGui.TextUnformatted(label);
 
-        var displayName = GetCurrentFatigueMoodleDisplayName(currentId, currentName);
+    private void DrawSingleFatigueEffectEditor(
+        string label,
+        string controlId,
+        Configuration.FatigueEffectConfig config)
+    {
+        ImGui.PushID(controlId);
+
+        if (ImGui.CollapsingHeader($"{label}##header", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.Indent();
+
+            DrawFatigueEffectMoodleEditor(controlId, config);
+
+            ImGui.Spacing();
+
+            DrawFatigueEffectHonorificEditor(config);
+
+            ImGui.Unindent();
+        }
+
+        ImGui.PopID();
+    }
+
+    private void DrawFatigueEffectMoodleEditor(
+        string controlId,
+        Configuration.FatigueEffectConfig config)
+    {
+        ImGui.TextUnformatted("Moodle");
+
+        var displayName = GetCurrentFatigueMoodleDisplayName(
+            config.MoodleId,
+            config.MoodleName);
 
         stagedFatigueMoodleSelections.TryGetValue(controlId, out var stagedId);
 
@@ -1102,17 +1076,19 @@ public partial class ConfigWindow
 
         const float selectedRowWidth = 300f;
 
-        if (currentId != Guid.Empty)
+        if (config.MoodleId != Guid.Empty)
         {
             var ctrlHeld = ImGui.GetIO().KeyCtrl;
 
             ImGui.Indent();
 
-            ImGui.PushID($"{controlId}-selected-{currentId}");
+            ImGui.PushID($"{controlId}-selected-{config.MoodleId}");
 
             if (DrawGagSpeakItem(displayName, selectedRowWidth, ctrlHeld))
             {
-                onChanged(Guid.Empty, string.Empty);
+                config.MoodleId = Guid.Empty;
+                config.MoodleName = string.Empty;
+                configuration.Save();
 
                 stagedFatigueMoodleSelections.Remove(controlId);
                 fatigueMoodleSearchText[controlId] = string.Empty;
@@ -1129,7 +1105,7 @@ public partial class ConfigWindow
 
         ImGui.SetNextItemWidth(300);
 
-        if (ImGui.BeginCombo($"##{controlId}-combo", stagedPreview))
+        if (ImGui.BeginCombo($"##{controlId}-moodle-combo", stagedPreview))
         {
             if (!fatigueMoodleSearchText.TryGetValue(controlId, out var searchText))
                 searchText = string.Empty;
@@ -1138,12 +1114,13 @@ public partial class ConfigWindow
                 ImGui.SetKeyboardFocusHere();
 
             ImGui.SetNextItemWidth(-1);
-            if (ImGui.InputText($"##{controlId}-search", ref searchText, 128))
+
+            if (ImGui.InputText($"##{controlId}-moodle-search", ref searchText, 128))
                 fatigueMoodleSearchText[controlId] = searchText;
 
             ImGui.Separator();
 
-            if (ImGui.Selectable($"None##{controlId}-none", currentId == Guid.Empty))
+            if (ImGui.Selectable($"None##{controlId}-none", config.MoodleId == Guid.Empty))
             {
                 stagedFatigueMoodleSelections[controlId] = Guid.Empty;
                 fatigueMoodleSearchText[controlId] = string.Empty;
@@ -1160,7 +1137,7 @@ public partial class ConfigWindow
 
             foreach (var moodle in filteredMoodles)
             {
-                var isSelected = moodle.Key == currentId;
+                var isSelected = moodle.Key == config.MoodleId;
                 var isStaged = moodle.Key == stagedId;
 
                 if (ImGui.Selectable($"{moodle.Value}##{controlId}-{moodle.Key}", isSelected || isStaged))
@@ -1191,16 +1168,20 @@ public partial class ConfigWindow
         if (!stagedFatigueMoodleSelections.ContainsKey(controlId) || !stagedValid)
             ImGui.BeginDisabled();
 
-        if (ImGui.Button($"Set##{controlId}-set"))
+        if (ImGui.Button($"Set##{controlId}-moodle-set"))
         {
             if (stagedId == Guid.Empty)
             {
-                onChanged(Guid.Empty, string.Empty);
+                config.MoodleId = Guid.Empty;
+                config.MoodleName = string.Empty;
             }
             else if (moodleBlockOptions.TryGetValue(stagedId, out var selectedName))
             {
-                onChanged(stagedId, selectedName);
+                config.MoodleId = stagedId;
+                config.MoodleName = selectedName;
             }
+
+            configuration.Save();
 
             stagedFatigueMoodleSelections.Remove(controlId);
             fatigueMoodleSearchText[controlId] = string.Empty;
@@ -1208,8 +1189,54 @@ public partial class ConfigWindow
 
         if (!stagedFatigueMoodleSelections.ContainsKey(controlId) || !stagedValid)
             ImGui.EndDisabled();
+    }
 
-        ImGui.Spacing();
+    private void DrawFatigueEffectHonorificEditor(Configuration.FatigueEffectConfig config)
+    {
+        ImGui.TextUnformatted("Honorific");
+
+        var title = config.HonorificTitle;
+        var color = config.HonorificColor;
+        var glow = config.HonorificGlow;
+        var priority = config.HonorificPriority;
+
+        if (plugin.HonorificManager.DrawPermanentTitleConfigEditors(
+                ref title,
+                ref color,
+                ref glow,
+                ref priority,
+                titleWidth: 160f,
+                priorityWidth: 50f))
+        {
+            config.HonorificTitle = title;
+            config.HonorificColor = color;
+            config.HonorificGlow = glow;
+            config.HonorificPriority = priority;
+
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+
+        var ctrlHeld = ImGui.GetIO().KeyCtrl;
+        if (!ctrlHeld)
+            ImGui.BeginDisabled();
+
+        if (ImGui.SmallButton("Clear##honorific"))
+        {
+            config.HonorificTitle = string.Empty;
+            config.HonorificColor = new Vector3(1f, 1f, 1f);
+            config.HonorificGlow = new Vector3(0f, 0f, 0f);
+            config.HonorificPriority = 0;
+
+            configuration.Save();
+        }
+
+        if (!ctrlHeld)
+            ImGui.EndDisabled();
+
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(ctrlHeld ? "Clear this Honorific title" : "Hold CTRL to clear");
     }
 
     private string GetCurrentFatigueMoodleDisplayName(Guid id, string savedName)
@@ -1225,4 +1252,5 @@ public partial class ConfigWindow
 
         return $"{id} (missing)";
     }
+
 }

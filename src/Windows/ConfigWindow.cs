@@ -33,6 +33,7 @@ public partial class ConfigWindow : Window, IDisposable
         Vibrator,
         Chat2,
         GagSpeakMirror,
+        HonorificEnforcer,
     }
 
     public ConfigWindow(Plugin plugin) : base("Sayu's Gag Extender Config###SayusGagExtenderConfig")
@@ -82,6 +83,7 @@ public partial class ConfigWindow : Window, IDisposable
         DrawNavigationItem("Penumbra Enforcer", ConfigTab.PenumbraEnforcer);
         DrawNavigationItem("C+ Enforcer", ConfigTab.CustomizePlusEnforcer);
         DrawNavigationItem("Emote Enforcer", ConfigTab.EmoteEnforcer);
+        DrawNavigationItem("Honorific Enforcer", ConfigTab.HonorificEnforcer);
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -146,6 +148,10 @@ public partial class ConfigWindow : Window, IDisposable
 
             case ConfigTab.EmoteEnforcer:
                 DrawEmoteEnforcerTab();
+                break;
+
+            case ConfigTab.HonorificEnforcer:
+                DrawHonorificEnforcerTab();
                 break;
 
             case ConfigTab.ShockCollar:

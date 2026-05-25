@@ -45,6 +45,7 @@ public sealed class Plugin : IDalamudPlugin
     public API.GagSpeak.GagSpeakRestrictionsApi GagSpeakRestrictionsApi { get; private set; }
     public API.GagSpeak.GagSpeakChatMonitorApi GagSpeakChatMonitorApi { get; private set; }
     public API.GagSpeak.GagSpeakGagsApi GagSpeakGagsApi { get; private set; }
+    public API.HonorificApi HonorificApi { get; private set; }
     public CharacterHelper CharacterHelper { get; set; }
     public EmoteGuard EmoteGuard { get; set; }
     public AutoAttackKiller AutoAttackKiller { get; set; }
@@ -68,7 +69,8 @@ public sealed class Plugin : IDalamudPlugin
     public Pedometer Pedometer { get; set; }
     public FatigueTracker FatigueTracker { get; set; }
     public FatigueHandler FatigueHandler { get; set; }
-
+    public HonorificManager HonorificManager { get; private set; }
+    public HonorificEnforcer HonorificEnforcer { get; set; }
 
 
 
@@ -78,6 +80,7 @@ public sealed class Plugin : IDalamudPlugin
     public readonly WindowSystem WindowSystem = new("Sayus Gag Extender");
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
+    private MiniWindow MiniWindow { get; init; }
 
     public Plugin()
     {
@@ -89,9 +92,11 @@ public sealed class Plugin : IDalamudPlugin
 
         ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);
+        MiniWindow = new MiniWindow(this);
 
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);
+        WindowSystem.AddWindow(MiniWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -131,6 +136,7 @@ public sealed class Plugin : IDalamudPlugin
         this.GagSpeakChatMonitorApi = new GagSpeakChatMonitorApi(this, GagSpeakContext);
         this.GagSpeakGagsApi = new GagSpeakGagsApi(this, GagSpeakContext);
         this.Chat2Api = new API.Chat2Api(this);
+        this.HonorificApi = new API.HonorificApi(this);
 
         Utils = new Utils(Instance);
         FriendListHelper = new FriendListHelper(Instance);
@@ -156,6 +162,8 @@ public sealed class Plugin : IDalamudPlugin
         Pedometer = new Pedometer(Instance);
         FatigueTracker = new FatigueTracker(Instance);
         FatigueHandler = new FatigueHandler(Instance);
+        HonorificManager = new HonorificManager(Instance);
+        HonorificEnforcer = new HonorificEnforcer(Instance);
 
         if (Configuration.OpenMainWindowOnStartup)
         {
@@ -166,8 +174,11 @@ public sealed class Plugin : IDalamudPlugin
         if (Configuration.OpenConfigWindowOnStartup)
         {
             ConfigWindow.IsOpen = true;
-        } 
-        
+        }
+        if (Configuration.OpenMiniWindowOnStartup)
+        {
+            MiniWindow.IsOpen = true;
+        }
     }
 
     public void Dispose()
@@ -183,6 +194,7 @@ public sealed class Plugin : IDalamudPlugin
 
         ConfigWindow.Dispose();
         MainWindow.Dispose();
+        MiniWindow.Dispose();
 
         EmoteGuard?.Dispose();
         AutoAttackKiller?.Dispose();
@@ -192,13 +204,6 @@ public sealed class Plugin : IDalamudPlugin
         TeleportBlocker?.Dispose();
         MountBlocker?.Dispose();
         JobSwitchBlocker?.Dispose();
-        GagSpeakRestraintSetApi?.Dispose();
-        GagSpeakRestrictionsApi?.Dispose();
-        GagSpeakChatMonitorApi?.Dispose();
-        GagSpeakGagsApi?.Dispose();
-        MoodlesApi?.Dispose();
-        PenumbraApi?.Dispose();
-        CustomizePlusApi.Dispose();
         ChatMonitor?.Dispose();
         BlindfoldMonitor?.Dispose();
         MirrorGagSpeak?.Dispose();
@@ -211,7 +216,19 @@ public sealed class Plugin : IDalamudPlugin
         RemoteChatCommandMonitor?.Dispose();
         Pedometer?.Dispose();
         FatigueTracker?.Dispose();
-        FatigueHandler?.Dispose();
+        FatigueHandler?.Dispose(); 
+        HonorificManager?.Dispose();
+        HonorificEnforcer?.Dispose();
+
+
+        GagSpeakRestraintSetApi?.Dispose();
+        GagSpeakRestrictionsApi?.Dispose();
+        GagSpeakChatMonitorApi?.Dispose();
+        GagSpeakGagsApi?.Dispose();
+        MoodlesApi?.Dispose();
+        PenumbraApi?.Dispose();
+        CustomizePlusApi.Dispose();
+        HonorificApi?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);
@@ -371,4 +388,5 @@ public sealed class Plugin : IDalamudPlugin
     
     public void ToggleConfigUi() => ConfigWindow.Toggle();
     public void ToggleMainUi() => MainWindow.Toggle();
+    public void ToggleMiniUi() => MiniWindow.Toggle();
 }

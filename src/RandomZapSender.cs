@@ -47,6 +47,13 @@ namespace SayusGagExtender
         {
             public string Command { get; set; } = "";
             public int Weight { get; set; } = 1;
+
+            public string HonorificTitle { get; set; } = "";
+            public Vector3 HonorificColor { get; set; } = new(1.0f, 1.0f, 1.0f);
+            public Vector3 HonorificGlow { get; set; } = new(0.0f, 0.0f, 0.0f);
+
+            public int HonorificDurationSeconds { get; set; } = 10;
+            public int HonorificPriority { get; set; } = 100;
         }
 
         public RandomZapSender(Plugin plugin)
@@ -390,6 +397,7 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
+                        ApplyHonorificTitleForCommand(zapCommand);
                         Plugin.ChatGui.Print($" zap command: {zapCommand.Command + " " + returnToEmote}");
                         plugin.EmoteGuard.QueueGuardedEmote(zapCommand.Command + " " + returnToEmote);
                         return;
@@ -401,7 +409,28 @@ namespace SayusGagExtender
                 Plugin.ChatGui.PrintError($"Failed to send zap command: {ex.Message}");
             }
         }
+        private void ApplyHonorificTitleForCommand(WeightedZapCommand zapCommand)
+        {
+            if (string.IsNullOrWhiteSpace(zapCommand.HonorificTitle))
+                return;
 
+            if (zapCommand.HonorificDurationSeconds <= 0)
+                return;
+
+            var titleJson = plugin.HonorificManager.BuildTitleJson(
+                zapCommand.HonorificTitle,
+                zapCommand.HonorificColor,
+                zapCommand.HonorificGlow);
+
+            if (string.IsNullOrWhiteSpace(titleJson))
+                return;
+
+            plugin.HonorificManager.SetTitle(
+                titleJson,
+                TimeSpan.FromSeconds(zapCommand.HonorificDurationSeconds),
+                zapCommand.HonorificPriority,
+                this);
+        }
         private void ClearAutoZapMoodles()
         {
             SetAutoZapByControllerMoodle(false);

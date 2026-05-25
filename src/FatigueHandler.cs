@@ -247,6 +247,7 @@ public sealed class FatigueHandler : IDisposable
 
     private void MaybePrintStatus(string message)
     {
+        return;
         var now = DateTime.UtcNow;
         if (now < nextStatusPrintUtc)
             return;

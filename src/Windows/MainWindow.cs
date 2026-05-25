@@ -88,6 +88,15 @@ public class MainWindow : Window, IDisposable
         {
             plugin.ToggleConfigUi();
         }
+
+        ImGui.SameLine();
+
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() - buttonWidth*2.1f);
+
+        if (ImGui.Button("Mini"))
+        {
+            plugin.ToggleMiniUi();
+        }
     }
 
     private void DrawFeatureStatus()
@@ -108,6 +117,7 @@ public class MainWindow : Window, IDisposable
             DrawFeaturesRow("Fatigue Tracker", configuration.FatigueEnabled, plugin.FatigueTracker.IsActive);
             DrawFeaturesRow("Moodle Enforcer", configuration.MoodleEnforcerEnabled, plugin.MoodleEnforcer.IsActive);
             DrawFeaturesRow("Penumbra Enforcer", configuration.PenumbraEnforcerEnabled, plugin.PenumbraEnforcer.IsActive);
+            DrawFeaturesRow("Honorific Enforcer", configuration.HonorificEnforcerEnabled, plugin.HonorificEnforcer.IsActive);
             DrawFeaturesRow("C+ Enforcer", configuration.CustomizePlusEnforcerEnabled, plugin.CustomizePlusEnforcer.IsActive);
             DrawFeaturesRow("Emote Enforcer", configuration.EmoteEnforcerEnabled, plugin.EmoteEnforcer.IsActive);
             DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled, plugin.RandomZapSender.IsActive);
@@ -266,10 +276,18 @@ public class MainWindow : Window, IDisposable
     private void DrawActions()
     {
         ImGui.Text("Actions");
+        if (ImGui.Button("Open Mini"))
+        {
+            plugin.ToggleMiniUi();
+        }
+        ImGui.SameLine();
         if (ImGui.Button("Refresh GagSpeak Cache"))
         {
-            plugin.GagSpeakContext.RefreshGagSpeakVisualsAsync();
+            _ = plugin.GagSpeakContext.RefreshGagSpeakVisualsAsync();
         }
+
+
+        
 
     }
     private static void DrawSeparatorRow()

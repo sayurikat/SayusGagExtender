@@ -2,6 +2,7 @@ using Dalamud.Configuration;
 using Dalamud.Game.Text;
 using System;
 using System.Collections.Generic;
+using static SayusGagExtender.HonorificEnforcer;
 using static SayusGagExtender.MoodleEnforcer;
 using static SayusGagExtender.PenumbraEnforcer;
 using static SayusGagExtender.RandomVibeSender;
@@ -16,6 +17,7 @@ public class Configuration : IPluginConfiguration
 
     public bool OpenMainWindowOnStartup { get; set; } = false;
     public bool OpenConfigWindowOnStartup { get; set; } = false;
+    public bool OpenMiniWindowOnStartup { get; set; } = false;
 
 
     public bool EmoteGuardEnabled { get; set; } = true;
@@ -80,6 +82,8 @@ public class Configuration : IPluginConfiguration
     public Guid JobSwitchQuotaEmptyMoodleId { get; set; } = Guid.Empty;
     public string JobSwitchQuotaEmptyMoodleName { get; set; } = string.Empty;
 
+    public bool HonorificEnforcerEnabled { get; set; } = false;
+    public List<HonorificEnforcerConfig> HonorificEnforcerTitles { get; set; } = new();
 
     public bool FatigueEnabled { get; set; } = false;
 
@@ -144,6 +148,32 @@ public class Configuration : IPluginConfiguration
 
     public Guid FatigueStatusBrokenMoodleId { get; set; } = Guid.Empty;
     public string FatigueStatusBrokenMoodleName { get; set; } = string.Empty;
+    public sealed class FatigueEffectConfig
+    {
+        public Guid MoodleId { get; set; } = Guid.Empty;
+        public string MoodleName { get; set; } = string.Empty;
+
+        public string HonorificTitle { get; set; } = string.Empty;
+        public System.Numerics.Vector3 HonorificColor { get; set; } = new(1f, 1f, 1f);
+        public System.Numerics.Vector3 HonorificGlow { get; set; } = new(0f, 0f, 0f);
+        public int HonorificPriority { get; set; } = 0;
+    }
+
+    public FatigueEffectConfig FatigueEnabledEffect { get; set; } = new();
+    public FatigueEffectConfig FatigueRestrainedEffect { get; set; } = new();
+
+    public FatigueEffectConfig FatigueStatusFreshEffect { get; set; } = new();
+    public FatigueEffectConfig FatigueStatusStrainingEffect { get; set; } = new();
+    public FatigueEffectConfig FatigueStatusBurningEffect { get; set; } = new();
+    public FatigueEffectConfig FatigueStatusStalledEffect { get; set; } = new();
+    public FatigueEffectConfig FatigueStatusBrokenEffect { get; set; } = new();
+
+
+
+
+
+
+
 
 
 

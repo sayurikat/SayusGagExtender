@@ -21,6 +21,13 @@ namespace SayusGagExtender.Windows
                 configuration.Save();
             }
 
+            var openMiniWindowOnStartup = configuration.OpenMiniWindowOnStartup;
+            if (ImGui.Checkbox("Open Mini automatically on startup", ref openMiniWindowOnStartup))
+            {
+                configuration.OpenMiniWindowOnStartup = openMiniWindowOnStartup;
+                configuration.Save();
+            }
+
             var openConfigWindowOnStartup = configuration.OpenConfigWindowOnStartup;
             if (ImGui.Checkbox("Open settings automatically on startup", ref openConfigWindowOnStartup))
             {

@@ -103,7 +103,7 @@ namespace SayusGagExtender.Windows
             }
         }
 
-        private void DrawGagSpeakItemList(string label, List<GagSpeakItem> configuredItems, Dictionary<Guid, string> availableItems, string selectorKey)
+        private void DrawGagSpeakItemList(string label, List<GagSpeakItem> configuredItems, Dictionary<Guid, string> availableItems, string selectorKey, Action? onChanged = null)
         {
             ImGui.Text(label);
 
@@ -192,6 +192,7 @@ namespace SayusGagExtender.Windows
                 });
 
                 configuration.Save();
+                onChanged?.Invoke();
             }
 
             if (configuredItems.Count == 0)
@@ -218,6 +219,7 @@ namespace SayusGagExtender.Windows
                 {
                     configuredItems.RemoveAt(i);
                     configuration.Save();
+                    onChanged?.Invoke();
                 }
 
                 ImGui.PopID();

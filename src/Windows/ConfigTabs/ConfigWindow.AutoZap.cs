@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
+using System.Numerics;
 
 namespace SayusGagExtender.Windows
 {
@@ -466,6 +467,30 @@ namespace SayusGagExtender.Windows
                             zapCommand.Weight = Math.Max(0, parsedWeight);
                             configuration.Save();
                         }
+                    }
+
+                    ImGui.SameLine();
+
+                    var honorificTitle = zapCommand.HonorificTitle;
+                    var honorificColor = zapCommand.HonorificColor;
+                    var honorificGlow = zapCommand.HonorificGlow;
+                    var honorificDuration = zapCommand.HonorificDurationSeconds;
+                    var honorificPriority = zapCommand.HonorificPriority;
+
+                    if (plugin.HonorificManager.DrawTitleConfigEditors(
+                            ref honorificTitle,
+                            ref honorificColor,
+                            ref honorificGlow,
+                            ref honorificDuration,
+                            ref honorificPriority))
+                    {
+                        zapCommand.HonorificTitle = honorificTitle.Trim();
+                        zapCommand.HonorificColor = honorificColor;
+                        zapCommand.HonorificGlow = honorificGlow;
+                        zapCommand.HonorificDurationSeconds = honorificDuration;
+                        zapCommand.HonorificPriority = honorificPriority;
+
+                        configuration.Save();
                     }
 
                     ImGui.SameLine();

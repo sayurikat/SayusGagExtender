@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using static SayusGagExtender.RandomVibeSender;
+using System.Numerics;
 
 namespace SayusGagExtender.Windows
 {
@@ -14,6 +15,7 @@ namespace SayusGagExtender.Windows
         private Guid? selectedAutoVibeRestraintToAdd;
         private string newVibeCommand = "";
         private string newVibeCommandWeight = "10";
+
         private Guid? selectedAutoVibeEngagedMoodleToSet;
         private string autoVibeEngagedMoodleSearch = "";
         private Guid? selectedAutoVibeControllerOnlineMoodleToSet;
@@ -469,6 +471,30 @@ namespace SayusGagExtender.Windows
                             vibeCommand.Weight = Math.Max(0, parsedWeight);
                             configuration.Save();
                         }
+                    }
+
+                    ImGui.SameLine();
+
+                    var honorificTitle = vibeCommand.HonorificTitle;
+                    var honorificColor = vibeCommand.HonorificColor;
+                    var honorificGlow = vibeCommand.HonorificGlow;
+                    var honorificDuration = vibeCommand.HonorificDurationSeconds;
+                    var honorificPriority = vibeCommand.HonorificPriority;
+
+                    if (plugin.HonorificManager.DrawTitleConfigEditors(
+                            ref honorificTitle,
+                            ref honorificColor,
+                            ref honorificGlow,
+                            ref honorificDuration,
+                            ref honorificPriority))
+                    {
+                        vibeCommand.HonorificTitle = honorificTitle.Trim();
+                        vibeCommand.HonorificColor = honorificColor;
+                        vibeCommand.HonorificGlow = honorificGlow;
+                        vibeCommand.HonorificDurationSeconds = honorificDuration;
+                        vibeCommand.HonorificPriority = honorificPriority;
+
+                        configuration.Save();
                     }
 
                     ImGui.SameLine();

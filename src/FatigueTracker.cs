@@ -35,7 +35,7 @@ public sealed class FatigueTracker : IDisposable
 
     public const float WalkSpeed = 2.4f;
     public const float RunSpeed = 6.0f;
-    
+
     private const float SprintModifier = 1.3f;
     private const float PelatonModifier = 1.2f;
     private const float JogModifier = 1.2f;
@@ -112,6 +112,10 @@ public sealed class FatigueTracker : IDisposable
 
     private FatigueStatusLevel currentFatigueStatus = FatigueStatusLevel.None;
 
+    private bool hasSubmittedHonorificRequest;
+    private string lastSubmittedHonorificJson = string.Empty;
+    private int lastSubmittedHonorificPriority = -1;
+
     public sealed class FatigueRestrictionConfig
     {
         public Guid RestrictionId { get; set; } = Guid.Empty;
@@ -160,7 +164,7 @@ public sealed class FatigueTracker : IDisposable
     public void Dispose()
     {
         Plugin.Framework.Update -= OnFrameworkUpdate;
-        ClearFatigueMoodles();
+        ClearFatigueEffects();
         SaveNow();
     }
 
@@ -183,7 +187,7 @@ public sealed class FatigueTracker : IDisposable
         {
             ResetRuntimeFlags();
             ResetTrackingPosition();
-            ClearFatigueMoodles();
+            ClearFatigueEffects();
             currentFatigueStatus = FatigueStatusLevel.None;
             return;
         }
@@ -196,7 +200,7 @@ public sealed class FatigueTracker : IDisposable
             return;
         }
 
-        UpdateFatigueMoodles();
+        UpdateFatigueEffects();
 
         if (IsInvalidTrackingState())
         {
@@ -285,7 +289,7 @@ public sealed class FatigueTracker : IDisposable
         if (!IsRestingState() && cachedStandingFatiguePerSecond > 0)
             ApplyUprightFatigue(seconds);
 
-        
+
 
         MaybeSave();
     }
@@ -556,7 +560,7 @@ public sealed class FatigueTracker : IDisposable
         SetFatigue(0);
         ResetForceLatches();
         currentFatigueStatus = FatigueStatusLevel.Fresh;
-        UpdateFatigueMoodles();
+        UpdateFatigueEffects();
         ResetTrackingPosition();
         SaveNow();
 
@@ -713,7 +717,7 @@ public sealed class FatigueTracker : IDisposable
         return latched;
     }
 
-    
+
 
     private bool IsRestingByEmote()
     {
@@ -724,34 +728,44 @@ public sealed class FatigueTracker : IDisposable
 
         return plugin.EmoteApi.IsAnySitOrSleep(currentEmoteId) || plugin.EmoteApi.IsThisThatEmote(currentEmoteId, "/playdead");
     }
-    private void UpdateFatigueMoodles()
+    private void UpdateFatigueEffects()
     {
         if (!plugin.Configuration.FatigueEnabled)
         {
-            ClearFatigueMoodles();
+            ClearFatigueEffects();
             currentFatigueStatus = FatigueStatusLevel.None;
             return;
         }
 
+        var status = GetLatchedFatigueStatus();
+        currentFatigueStatus = status;
+
+        var enabledEffect = plugin.Configuration.FatigueEnabledEffect;
+        var restrainedEffect = plugin.Configuration.FatigueRestrainedEffect;
+        var statusEffect = GetEffectConfigForFatigueStatus(status);
+
         EnsureFatigueMoodleState(
             ref activeFatigueEnabledMoodleId,
-            plugin.Configuration.FatigueEnabledMoodleId,
+            enabledEffect.MoodleId,
             shouldBeActive: plugin.Configuration.FatigueEnabled);
 
         EnsureFatigueMoodleState(
             ref activeFatigueRestrainedMoodleId,
-            plugin.Configuration.FatigueRestrainedMoodleId,
+            restrainedEffect.MoodleId,
             shouldBeActive: plugin.Configuration.FatigueEnabled && cachedActiveRestrictionCount > 0);
-
-        var status = GetLatchedFatigueStatus();
-        currentFatigueStatus = status;
-
-        var statusMoodleId = GetMoodleIdForFatigueStatus(status);
 
         EnsureFatigueMoodleState(
             ref activeFatigueStatusMoodleId,
-            statusMoodleId,
-            shouldBeActive: status != FatigueStatusLevel.None && statusMoodleId != Guid.Empty);
+            statusEffect.MoodleId,
+            shouldBeActive: status != FatigueStatusLevel.None && statusEffect.MoodleId != Guid.Empty);
+
+        UpdateFatigueHonorificWinner(enabledEffect, restrainedEffect, statusEffect);
+    }
+
+    private void ClearFatigueEffects()
+    {
+        ClearFatigueMoodles();
+        RecallFatigueHonorificRequest();
     }
 
     private void ClearFatigueMoodles()
@@ -786,6 +800,85 @@ public sealed class FatigueTracker : IDisposable
         plugin.MoodleEnforcer.RemoveEnforcedMoodle(activeId, this);
         activeId = Guid.Empty;
     }
+
+    private void UpdateFatigueHonorificWinner(
+        Configuration.FatigueEffectConfig enabledEffect,
+        Configuration.FatigueEffectConfig restrainedEffect,
+        Configuration.FatigueEffectConfig statusEffect)
+    {
+        Configuration.FatigueEffectConfig? winner = null;
+
+        if (plugin.Configuration.FatigueEnabled)
+            winner = PickBetterHonorificEffect(winner, enabledEffect);
+
+        if (plugin.Configuration.FatigueEnabled && cachedActiveRestrictionCount > 0)
+            winner = PickBetterHonorificEffect(winner, restrainedEffect);
+
+        if (currentFatigueStatus != FatigueStatusLevel.None)
+            winner = PickBetterHonorificEffect(winner, statusEffect);
+
+        if (winner == null)
+        {
+            RecallFatigueHonorificRequest();
+            return;
+        }
+
+        var json = plugin.HonorificManager.BuildTitleJson(
+            winner.HonorificTitle,
+            winner.HonorificColor,
+            winner.HonorificGlow);
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            RecallFatigueHonorificRequest();
+            return;
+        }
+
+        if (hasSubmittedHonorificRequest &&
+            lastSubmittedHonorificPriority == winner.HonorificPriority &&
+            string.Equals(lastSubmittedHonorificJson, json, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        plugin.HonorificManager.SetTitle(
+            json,
+            winner.HonorificPriority,
+            this);
+
+        hasSubmittedHonorificRequest = true;
+        lastSubmittedHonorificJson = json;
+        lastSubmittedHonorificPriority = winner.HonorificPriority;
+    }
+
+    private static Configuration.FatigueEffectConfig? PickBetterHonorificEffect(
+        Configuration.FatigueEffectConfig? currentBest,
+        Configuration.FatigueEffectConfig candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate.HonorificTitle))
+            return currentBest;
+
+        if (currentBest == null)
+            return candidate;
+
+        if (candidate.HonorificPriority > currentBest.HonorificPriority)
+            return candidate;
+
+        return currentBest;
+    }
+
+    private void RecallFatigueHonorificRequest()
+    {
+        if (!hasSubmittedHonorificRequest)
+            return;
+
+        plugin.HonorificManager.RecallTitle(this);
+
+        hasSubmittedHonorificRequest = false;
+        lastSubmittedHonorificJson = string.Empty;
+        lastSubmittedHonorificPriority = -1;
+    }
+
     private FatigueStatusLevel GetLatchedFatigueStatus()
     {
         if (!plugin.Configuration.FatigueEnabled)
@@ -852,16 +945,16 @@ public sealed class FatigueTracker : IDisposable
         };
     }
 
-    private Guid GetMoodleIdForFatigueStatus(FatigueStatusLevel status)
+    private Configuration.FatigueEffectConfig GetEffectConfigForFatigueStatus(FatigueStatusLevel status)
     {
         return status switch
         {
-            FatigueStatusLevel.Fresh => plugin.Configuration.FatigueStatusFreshMoodleId,
-            FatigueStatusLevel.Straining => plugin.Configuration.FatigueStatusStrainingMoodleId,
-            FatigueStatusLevel.Burning => plugin.Configuration.FatigueStatusBurningMoodleId,
-            FatigueStatusLevel.Stalled => plugin.Configuration.FatigueStatusStalledMoodleId,
-            FatigueStatusLevel.Broken => plugin.Configuration.FatigueStatusBrokenMoodleId,
-            _ => Guid.Empty,
+            FatigueStatusLevel.Fresh => plugin.Configuration.FatigueStatusFreshEffect,
+            FatigueStatusLevel.Straining => plugin.Configuration.FatigueStatusStrainingEffect,
+            FatigueStatusLevel.Burning => plugin.Configuration.FatigueStatusBurningEffect,
+            FatigueStatusLevel.Stalled => plugin.Configuration.FatigueStatusStalledEffect,
+            FatigueStatusLevel.Broken => plugin.Configuration.FatigueStatusBrokenEffect,
+            _ => new Configuration.FatigueEffectConfig(),
         };
     }
 }

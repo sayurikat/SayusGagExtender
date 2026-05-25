@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Numerics;
+using System.Text.RegularExpressions;
 
 namespace SayusGagExtender
 {
@@ -47,6 +49,13 @@ namespace SayusGagExtender
         {
             public string Command { get; set; } = "";
             public int Weight { get; set; } = 1;
+
+            public string HonorificTitle { get; set; } = "";
+            public Vector3 HonorificColor { get; set; } = new(1.0f, 1.0f, 1.0f);
+            public Vector3 HonorificGlow { get; set; } = new(0.0f, 0.0f, 0.0f);
+
+            public int HonorificDurationSeconds { get; set; } = 30;
+            public int HonorificPriority { get; set; } = 100;
         }
 
         public RandomVibeSender(Plugin plugin)
@@ -366,9 +375,12 @@ namespace SayusGagExtender
             {
                 //Plugin.ChatGui.Print($"Auto Vibe operating. Controller presence: {presence}.");
                 
+
                 var vibeCommands = plugin.Configuration.AutoVibeCommands
                     .Where(x => !string.IsNullOrWhiteSpace(x.Command) && x.Weight > 0)
                     .ToList();
+
+                
 
                 if (vibeCommands.Count == 0)
                 {
@@ -387,6 +399,7 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
+                        ApplyHonorificTitleForCommand(vibeCommand);
                         plugin.EmoteGuard.QueueGuardedEmote(vibeCommand.Command + " " + returnToEmote);
                         return;
                     }
@@ -397,7 +410,28 @@ namespace SayusGagExtender
                 Plugin.ChatGui.PrintError($"Failed to send vibe command: {ex.Message}");
             }
         }
+        private void ApplyHonorificTitleForCommand(WeightedVibeCommand vibeCommand)
+        {
+            if (string.IsNullOrWhiteSpace(vibeCommand.HonorificTitle))
+                return;
 
+            if (vibeCommand.HonorificDurationSeconds <= 0)
+                return;
+
+            var titleJson = plugin.HonorificManager.BuildTitleJson(
+                vibeCommand.HonorificTitle,
+                vibeCommand.HonorificColor,
+                vibeCommand.HonorificGlow);
+
+            if (string.IsNullOrWhiteSpace(titleJson))
+                return;
+
+            plugin.HonorificManager.SetTitle(
+                titleJson,
+                TimeSpan.FromSeconds(vibeCommand.HonorificDurationSeconds),
+                vibeCommand.HonorificPriority,
+                this);
+        }
         private void ClearAutoVibeMoodles()
         {
             SetAutoVibeByControllerMoodle(false);
