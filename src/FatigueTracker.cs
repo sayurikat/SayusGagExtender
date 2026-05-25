@@ -30,14 +30,22 @@ public sealed class FatigueTracker : IDisposable
     private const float MinDelta = 0.01f;
     private const float MaxDeltaPerFrame = 5.0f;
 
-    private const float WalkStepLength = 0.75f;
-    private const float RunStepLength = 1.05f;
+    public const float WalkStepLength = 1.18f;
+    public const float RunStepLength = 1.9f;
+
+    public const float WalkSpeed = 2.4f;
+    public const float RunSpeed = 6.0f;
+    
+    private const float SprintModifier = 1.3f;
+    private const float PelatonModifier = 1.2f;
+    private const float JogModifier = 1.2f;
 
     private static readonly TimeSpan RestrictionCheckCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SaveCooldown = TimeSpan.FromSeconds(30);
 
     private const uint SprintStatusId = 50;
     private const uint PelotonStatusId = 1199;
+    private const uint JogStatusId = 4209;
 
     public float Fatigue => Clamp01(plugin.Configuration.FatigueCurrent);
 
@@ -79,17 +87,13 @@ public sealed class FatigueTracker : IDisposable
     public bool IsActive => plugin.Configuration.FatigueEnabled && Fatigue > 0.001f;
 
     public bool IsMoving { get; private set; }
-
+    public bool IsMounted { get; private set; }
     public bool IsWalking { get; private set; }
-
     public bool IsRunning { get; private set; }
-
     public bool IsSprinting { get; private set; }
-
     public bool HasPeloton { get; private set; }
-
+    public bool IsJogging { get; private set; }
     public bool IsResting { get; private set; }
-
     public double LastSpeed { get; private set; }
 
     public float LastRestrictionFactor => cachedRestrictionFactor;
@@ -125,11 +129,13 @@ public sealed class FatigueTracker : IDisposable
     }
     private enum MovementKind
     {
-        None,
-        Walk,
-        Run,
-        Sprint,
-        Peloton,
+        None,           //walk  run     +%      steps/60ylm  step lenght    time
+        Walk,           //---   2.4             71,          1.18m          29.6s
+        Run,            //6.0   ---             114,         1.9m           19.1s
+        Sprint,         //7.80  3.12    30%     115.         1.9m           14.8s
+        Peloton,        //7.20  2.88    20%
+        Jog,            //7.20  2.88    20%
+        Mount,
     }
     public enum FatigueStatusLevel
     {
@@ -268,6 +274,8 @@ public sealed class FatigueTracker : IDisposable
         IsRunning = movementKind == MovementKind.Run;
         IsSprinting = movementKind == MovementKind.Sprint;
         HasPeloton = movementKind == MovementKind.Peloton;
+        IsJogging = movementKind == MovementKind.Jog;
+        IsMounted = movementKind == MovementKind.Mount;
         IsResting = false;
 
         ApplyMovementFatigue(delta, movementKind, LastSpeed);
@@ -295,7 +303,7 @@ public sealed class FatigueTracker : IDisposable
     }
     private void ApplyMovementFatigue(float distance, MovementKind movementKind, double speed)
     {
-        if (movementKind == MovementKind.None)
+        if (movementKind == MovementKind.None || movementKind == MovementKind.Mount)
             return;
 
         var forcedWalkThreshold = Math.Max(0.01f, ForcedWalkThreshold);
@@ -318,6 +326,7 @@ public sealed class FatigueTracker : IDisposable
             MovementKind.Run => 1.0f,
             MovementKind.Sprint => 1.0f,
             MovementKind.Peloton => 1.0f,
+            MovementKind.Jog => 1.0f,
             _ => 0.0f,
         };
 
@@ -352,7 +361,7 @@ public sealed class FatigueTracker : IDisposable
 
     private float CalculateSpeedMultiplier(double speed)
     {
-        var normalRunSpeed = Math.Max(0.1f, plugin.Configuration.FatigueNormalRunSpeed);
+        var normalRunSpeed = Math.Max(0.1f, RunSpeed);
         var exponent = Math.Max(0.1f, plugin.Configuration.FatigueSpeedExponent);
 
         var ratio = Math.Max(0.1, speed / normalRunSpeed);
@@ -389,6 +398,9 @@ public sealed class FatigueTracker : IDisposable
 
     private MovementKind GetCurrentMovementKind()
     {
+        if (IsPlayerMounted())
+            return MovementKind.Mount;
+
         if (plugin.MovementBlocker?.ForceWalkEnabled == true)
             return MovementKind.Walk;
 
@@ -398,9 +410,20 @@ public sealed class FatigueTracker : IDisposable
         if (HasStatus(PelotonStatusId))
             return MovementKind.Peloton;
 
-        return MovementKind.Run;
-    }
+        if (HasStatus(JogStatusId))
+            return MovementKind.Jog;
 
+        if (LastSpeed > 4)
+            return MovementKind.Run;
+
+        return MovementKind.Walk;
+    }
+    private bool IsPlayerMounted()
+    {
+        return Plugin.Condition.Any(
+            ConditionFlag.Mounted,
+            ConditionFlag.RidingPillion);
+    }
     private bool IsInvalidTrackingState()
     {
         return Plugin.Condition.Any(

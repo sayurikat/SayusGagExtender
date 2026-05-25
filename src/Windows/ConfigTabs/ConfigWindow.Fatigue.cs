@@ -80,6 +80,23 @@ public partial class ConfigWindow
             $"Speed: {plugin.FatigueTracker.LastSpeed:F2} y/s | " +
             $"Factor: {plugin.FatigueTracker.LastRestrictionFactor:F2}x");
 
+        if (plugin.FatigueTracker.IsMoving) ImGui.Text("IsMoving"); else ImGui.TextDisabled("IsMoving"); ImGui.SameLine();
+        if (plugin.FatigueTracker.IsWalking) ImGui.Text("IsWalking"); else ImGui.TextDisabled("IsWalking"); ImGui.SameLine();
+        if (plugin.FatigueTracker.IsRunning) ImGui.Text("IsRunning"); else ImGui.TextDisabled("IsRunning"); ImGui.SameLine();
+        if (plugin.FatigueTracker.IsSprinting) ImGui.Text("IsSprinting"); else ImGui.TextDisabled("IsSprinting"); ImGui.SameLine();
+        if (plugin.FatigueTracker.HasPeloton) ImGui.Text("HasPeloton"); else ImGui.TextDisabled("HasPeloton"); ImGui.SameLine();
+        if (plugin.FatigueTracker.IsJogging) ImGui.Text("IsJogging"); else ImGui.TextDisabled("IsJogging"); ImGui.SameLine();
+        if (plugin.FatigueTracker.IsMounted) ImGui.Text("IsMounted"); else ImGui.TextDisabled("IsMounted"); ImGui.SameLine();
+        if (plugin.FatigueTracker.IsResting) ImGui.Text("IsResting"); else ImGui.TextDisabled("IsResting"); ImGui.SameLine();
+
+
+
+
+
+
+
+
+
         if (ImGui.Button("Print Status##Fatigue"))
             plugin.FatigueTracker.PrintStatus();
 
@@ -193,7 +210,8 @@ public partial class ConfigWindow
             configuration.Save();
         }
 
-        SameLineDisabledText("reference");
+        //SameLineDisabledText($"≈ {StepText(EstimateRunStepsToFatigue(GetForcedWalkThreshold01(), 1.0f))} to forced walk, ");
+        SameLineDisabledText($"≈ {TimeText(EstimateRunTimeToFatigue(GetForcedWalkThreshold01(), 1.0f))} to forced walk, ");
 
         var unrestrictedFactor = configuration.FatigueUnrestrictedFactor;
         if (DrawFloatInput(
@@ -214,8 +232,9 @@ public partial class ConfigWindow
         else
         {
             SameLineDisabledText(
-                $"≈ {StepText(EstimateRunStepsToFatigue(GetForcedWalkThreshold01(), configuration.FatigueUnrestrictedFactor))} to forced walk, " +
-                $"{StepText(EstimateRunStepsToFatigue(GetForcedStopThreshold01(), configuration.FatigueUnrestrictedFactor))} to stop");
+                $"≈ {StepText(EstimateRunStepsToFatigue(GetForcedWalkThreshold01(), configuration.FatigueUnrestrictedFactor))}, " +
+                $"/ {TimeText(EstimateRunTimeToFatigue(GetForcedWalkThreshold01(), configuration.FatigueUnrestrictedFactor))} to forced walk, ");
+                //$"{StepText(EstimateRunStepsToFatigue(GetForcedStopThreshold01(), configuration.FatigueUnrestrictedFactor))} to stop");
         }
 
         var walkRateMultiplier = configuration.FatigueWalkRateMultiplier;
@@ -230,15 +249,50 @@ public partial class ConfigWindow
             configuration.Save();
         }
 
-        var restrictedWalkSteps = EstimateWalkStepsToFatigue(GetForcedWalkThreshold01(), 1.0f);
+        //GetForcedWalkThreshold01()
+
+        ;
+
+        var restrictedWalkSteps = EstimateWalkStepsFromFatigueToStop(GetForcedWalkThreshold01(), GetForcedStopThreshold01(), 1.0f);
         var unrestrictedWalkSteps = configuration.FatigueUnrestrictedFactor <= 0.0001f
             ? 0
-            : EstimateWalkStepsToFatigue(GetForcedWalkThreshold01(), configuration.FatigueUnrestrictedFactor);
+            : EstimateWalkStepsFromFatigueToStop(GetForcedWalkThreshold01(), GetForcedStopThreshold01(), configuration.FatigueUnrestrictedFactor);
 
-        SameLineDisabledText(
-            configuration.FatigueUnrestrictedFactor <= 0.0001f
-                ? $"≈ {StepText(restrictedWalkSteps)} with restraints, none unrestricted"
-                : $"≈ {StepText(restrictedWalkSteps)} restricted, {StepText(unrestrictedWalkSteps)} unrestricted");
+        var restrictedWalkTime = EstimateWalkTimeFromFatigueToStop(GetForcedWalkThreshold01(), GetForcedStopThreshold01(), 1.0f);
+        var unrestrictedWalkTime = configuration.FatigueUnrestrictedFactor <= 0.0001f
+            ? 0
+            : EstimateWalkTimeFromFatigueToStop(GetForcedWalkThreshold01(), GetForcedStopThreshold01(), configuration.FatigueUnrestrictedFactor);
+
+        var unrestrictedWalkText = configuration.FatigueUnrestrictedFactor <= 0.0001f
+                ? $" unrestricted"
+                : $"≈ {StepText(unrestrictedWalkSteps)} / {TimeText(unrestrictedWalkTime)} unrestricted";
+
+        var walkText = configuration.FatigueWalkRateMultiplier <= 0.0001f
+                ? $"no walking fatigue"
+                : $"≈ {StepText(restrictedWalkSteps)} / {TimeText(unrestrictedWalkTime)} from forced walk to stop, " + unrestrictedWalkText;
+
+        //var restrictedWalkSteps = EstimateWalkStepsToFatigue(GetForcedWalkThreshold01(), 1.0f);
+        //var unrestrictedWalkSteps = configuration.FatigueUnrestrictedFactor <= 0.0001f
+        //    ? 0
+        //    : EstimateWalkStepsToFatigue(GetForcedWalkThreshold01(), configuration.FatigueUnrestrictedFactor);
+        //
+        //var restrictedWalkTime = EstimateWalkTimeToFatigue(GetForcedWalkThreshold01(), 1.0f);
+        //var unrestrictedWalkTime = configuration.FatigueUnrestrictedFactor <= 0.0001f
+        //    ? 0
+        //    : EstimateWalkTimeToFatigue(GetForcedWalkThreshold01(), configuration.FatigueUnrestrictedFactor);
+        //
+        //var unrestrictedWalkText = configuration.FatigueUnrestrictedFactor <= 0.0001f
+        //        ? $"no unrestricted walking fatigue"
+        //        : $"≈ {StepText(unrestrictedWalkSteps)} / {TimeText(unrestrictedWalkTime)} to forced walk unrestricted";
+        //
+        //var walkText = configuration.FatigueWalkRateMultiplier <= 0.0001f
+        //        ? $"no walking fatigue"
+        //        : $"≈ {StepText(restrictedWalkSteps)} / {TimeText(unrestrictedWalkTime)} to forced walk, " + unrestrictedWalkText;
+
+        SameLineDisabledText(walkText);
+
+
+
 
         var speedExponent = configuration.FatigueSpeedExponent;
         if (DrawFloatInput(
@@ -254,25 +308,26 @@ public partial class ConfigWindow
 
         var sprintSpeedMultiplier = GetSpeedMultiplierForReference(FatigueUiSprintReferenceMultiplier);
         var sprintWalkSteps = EstimateRunStepsToFatigue(GetForcedWalkThreshold01(), 1.0f, sprintSpeedMultiplier);
+        var sprintWalkTime = EstimateRunTimeToFatigue(GetForcedWalkThreshold01(), 1.0f, sprintSpeedMultiplier);
         var sprintStopSteps = EstimateRunStepsToFatigue(GetForcedStopThreshold01(), 1.0f, sprintSpeedMultiplier);
 
         SameLineDisabledText(
             $"Sprint ref {FatigueUiSprintReferenceMultiplier:0.##}x speed => {sprintSpeedMultiplier:0.##}x fatigue, " +
-            $"≈ {StepText(sprintWalkSteps)} walk / {StepText(sprintStopSteps)} stop");
+            $"≈ {StepText(sprintWalkSteps)} / {TimeText(sprintWalkTime)} to forced walk");
 
-        var normalRunSpeed = configuration.FatigueNormalRunSpeed;
-        if (DrawFloatInput(
-            "Normal run speed y/s",
-            ref normalRunSpeed,
-            0.1f,
-            30.0f,
-            "Use the speed recorder to calibrate this for normal unbuffed running."))
-        {
-            configuration.FatigueNormalRunSpeed = normalRunSpeed;
-            configuration.Save();
-        }
-
-        SameLineDisabledText("baseline for sprint / speed buffs");
+        //var normalRunSpeed = configuration.FatigueNormalRunSpeed;
+        //if (DrawFloatInput(
+        //    "Normal run speed y/s",
+        //    ref normalRunSpeed,
+        //    0.1f,
+        //    30.0f,
+        //    "Use the speed recorder to calibrate this for normal unbuffed running."))
+        //{
+        //    configuration.FatigueNormalRunSpeed = normalRunSpeed;
+        //    configuration.Save();
+        //}
+        //
+        //SameLineDisabledText("baseline for sprint / speed buffs");
 
         var fullRecoveryStandingSeconds = configuration.FatigueFullRecoveryStandingSeconds;
         if (DrawIntInput(
@@ -287,7 +342,7 @@ public partial class ConfigWindow
         }
 
         SameLineDisabledText(
-            $"100% → 0% in {configuration.FatigueFullRecoveryStandingSeconds:n0}s standing");
+            $"100% → 0% in {TimeText(configuration.FatigueFullRecoveryStandingSeconds)} standing");
 
         var fullRecoveryRestingSeconds = configuration.FatigueFullRecoveryRestingSeconds;
         if (DrawIntInput(
@@ -302,7 +357,134 @@ public partial class ConfigWindow
         }
 
         SameLineDisabledText(
-            $"100% → 0% in {configuration.FatigueFullRecoveryRestingSeconds:n0}s resting");
+            $"100% → 0% in {TimeText(configuration.FatigueFullRecoveryRestingSeconds)} resting");
+
+
+        if (ImGui.Button("Set Default##Fatigue"))
+        {
+            configuration.FatigueForcedWalkPercent = 60;
+            configuration.FatigueForcedStopPercent = 80;
+            configuration.FatigueForcedSitPercent = 90;
+            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueBaseRunStepsUntilForcedWalk = 600;
+            configuration.FatigueUnrestrictedFactor = 1;
+            configuration.FatigueWalkRateMultiplier = 0.25f;
+            configuration.FatigueSpeedExponent = 2;
+            configuration.FatigueFullRecoveryStandingSeconds = 300;
+            configuration.FatigueFullRecoveryRestingSeconds = 120;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Set Alt2##Fatigue"))
+        {
+            configuration.FatigueForcedWalkPercent = 60;
+            configuration.FatigueForcedStopPercent = 80;
+            configuration.FatigueForcedSitPercent = 90;
+            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueBaseRunStepsUntilForcedWalk = 2500;
+            configuration.FatigueUnrestrictedFactor = 1;
+            configuration.FatigueWalkRateMultiplier = 0.25f;
+            configuration.FatigueSpeedExponent = 2;
+            configuration.FatigueFullRecoveryStandingSeconds = 3600;
+            configuration.FatigueFullRecoveryRestingSeconds = 900;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Set Athlete##Fatigue"))
+        {
+            configuration.FatigueForcedWalkPercent = 60;
+            configuration.FatigueForcedStopPercent = 80;
+            configuration.FatigueForcedSitPercent = 90;
+            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueBaseRunStepsUntilForcedWalk = 4500;
+            configuration.FatigueUnrestrictedFactor = 1;
+            configuration.FatigueWalkRateMultiplier = 0.37f;
+            configuration.FatigueSpeedExponent = 2;
+            configuration.FatigueFullRecoveryStandingSeconds = 360;
+            configuration.FatigueFullRecoveryRestingSeconds = 180;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Set Average##Fatigue"))
+        {
+            configuration.FatigueForcedWalkPercent = 60;
+            configuration.FatigueForcedStopPercent = 80;
+            configuration.FatigueForcedSitPercent = 90;
+            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueBaseRunStepsUntilForcedWalk = 1800;
+            configuration.FatigueUnrestrictedFactor = 1;
+            configuration.FatigueWalkRateMultiplier = 0.25f;
+            configuration.FatigueSpeedExponent = 2;
+            configuration.FatigueFullRecoveryStandingSeconds = 600;
+            configuration.FatigueFullRecoveryRestingSeconds = 300;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Set Base Dweller##Fatigue"))
+        {
+            configuration.FatigueForcedWalkPercent = 60;
+            configuration.FatigueForcedStopPercent = 80;
+            configuration.FatigueForcedSitPercent = 90;
+            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueBaseRunStepsUntilForcedWalk = 600;
+            configuration.FatigueUnrestrictedFactor = 1;
+            configuration.FatigueWalkRateMultiplier = 0.25f;
+            configuration.FatigueSpeedExponent = 2;
+            configuration.FatigueFullRecoveryStandingSeconds = 900;
+            configuration.FatigueFullRecoveryRestingSeconds = 480;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Set Overweight##Fatigue"))
+        {
+            configuration.FatigueForcedWalkPercent = 60;
+            configuration.FatigueForcedStopPercent = 80;
+            configuration.FatigueForcedSitPercent = 90;
+            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueBaseRunStepsUntilForcedWalk = 1000;
+            configuration.FatigueUnrestrictedFactor = 1;
+            configuration.FatigueWalkRateMultiplier = 0.28f;
+            configuration.FatigueSpeedExponent = 2;
+            configuration.FatigueFullRecoveryStandingSeconds = 900;
+            configuration.FatigueFullRecoveryRestingSeconds = 480;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Set Sedentary##Fatigue"))
+        {
+            configuration.FatigueForcedWalkPercent = 60;
+            configuration.FatigueForcedStopPercent = 80;
+            configuration.FatigueForcedSitPercent = 90;
+            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueBaseRunStepsUntilForcedWalk = 350;
+            configuration.FatigueUnrestrictedFactor = 1;
+            configuration.FatigueWalkRateMultiplier = 0.23f;
+            configuration.FatigueSpeedExponent = 2;
+            configuration.FatigueFullRecoveryStandingSeconds = 1200;
+            configuration.FatigueFullRecoveryRestingSeconds = 720;
+            configuration.Save();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("Set Injured/Sick##Fatigue"))
+        {
+            configuration.FatigueForcedWalkPercent = 60;
+            configuration.FatigueForcedStopPercent = 80;
+            configuration.FatigueForcedSitPercent = 90;
+            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueBaseRunStepsUntilForcedWalk = 150;
+            configuration.FatigueUnrestrictedFactor = 1;
+            configuration.FatigueWalkRateMultiplier = 0.20f;
+            configuration.FatigueSpeedExponent = 2;
+            configuration.FatigueFullRecoveryStandingSeconds = 1800;
+            configuration.FatigueFullRecoveryRestingSeconds = 900;
+            configuration.Save();
+        }
+        //Athlete:        4500 run steps, 4500 walk steps, 360 standing, 180 sitting
+        //Average:        1800 run steps, 2000 walk steps, 600 standing, 300 sitting
+        //Base dweller:    600 run steps,  800 walk steps, 900 standing, 480 sitting
+        //Overweight:     1000 run steps, 1200 walk steps, 900 standing, 480 sitting
+        //Sedentary:       350 run steps,  500 walk steps, 1200 standing, 720 sitting
+        //Injured/Sick:    150 run steps,  250 walk steps, 1800 standing, 900 sitting
     }
 
     private void DrawFatigueRestrictionList()
@@ -379,7 +561,8 @@ public partial class ConfigWindow
 
                 ImGui.SameLine();
                 ImGui.TextDisabled(
-                    $"≈ {StepText(forcedWalkSteps)} to forced walk, {StepText(forcedStopSteps)} to stop");
+                    //$"≈ {StepText(forcedWalkSteps)} to forced walk, {StepText(forcedStopSteps)} to stop");
+                    $"≈ {StepText(forcedWalkSteps)} to forced walk");
 
                 ImGui.SameLine();
 
@@ -408,7 +591,7 @@ public partial class ConfigWindow
                 }
 
                 if (ImGui.IsItemHovered())
-                    ImGui.SetTooltip("Seconds standing still from 0% fatigue until forced sit/stop. Empty or 0 disables standing pain.");
+                    ImGui.SetTooltip("Seconds standing still from 0% fatigue until forced sit/stop. Empty or 0 disables standing fatigue.");
 
                 ImGui.SameLine();
 
@@ -624,7 +807,7 @@ public partial class ConfigWindow
         return false;
     }
 
-    private const float FatigueUiSprintReferenceMultiplier = 1.25f;
+    private const float FatigueUiSprintReferenceMultiplier = 1.30f;
 
     private float GetForcedWalkThreshold01()
     {
@@ -676,10 +859,74 @@ public partial class ConfigWindow
         var walkMultiplier = Math.Max(0.0001f, configuration.FatigueWalkRateMultiplier);
         return EstimateRunStepsToFatigue(targetFatigue01, fatigueFactor * walkMultiplier);
     }
+    private int EstimateWalkStepsFromFatigueToStop(float targetFatigue01, float targetStop01, float fatigueFactor)
+    {
+        var targetFatigue = targetStop01 - targetFatigue01;
+        var walkMultiplier = Math.Max(0.0001f, configuration.FatigueWalkRateMultiplier);
+        return EstimateRunStepsToFatigue(targetFatigue, fatigueFactor * walkMultiplier);
+    }
+
+    private int EstimateRunTimeToFatigue(float targetFatigue01, float fatigueFactor, float speedMultiplier = 1.0f)
+    {
+        var forcedWalk = GetForcedWalkThreshold01();
+        var baseSteps = GetBaseRunStepsToForcedWalk();
+
+        fatigueFactor = Math.Max(0.0001f, fatigueFactor);
+        speedMultiplier = Math.Max(0.0001f, speedMultiplier);
+
+        // baseSteps reaches forcedWalk at factor 1.0.
+        // So reaching any target is scaled by target / forcedWalk.
+        var steps = baseSteps * (targetFatigue01 / forcedWalk) / fatigueFactor / speedMultiplier;
+
+        var distance = steps * FatigueTracker.RunStepLength;
+
+        var time = distance / FatigueTracker.RunSpeed;
+
+        return Math.Max(1, (int)MathF.Round(time));
+    }
+    private int EstimateWalkTimeToFatigue(float targetFatigue01, float fatigueFactor)
+    {
+        var walkMultiplier = Math.Max(0.0001f, configuration.FatigueWalkRateMultiplier);
+        var steps = EstimateRunStepsToFatigue(targetFatigue01, fatigueFactor * walkMultiplier);
+
+        var distance = steps * FatigueTracker.WalkStepLength;
+
+        var time = distance / FatigueTracker.WalkSpeed;
+
+        return Math.Max(1, (int)MathF.Round(time));
+    }
+    private int EstimateWalkTimeFromFatigueToStop(float targetFatigue01, float targetStop01, float fatigueFactor)
+    {
+        var targetFatigue = targetStop01 - targetFatigue01;
+        var walkMultiplier = Math.Max(0.0001f, configuration.FatigueWalkRateMultiplier);
+        var steps = EstimateRunStepsToFatigue(targetFatigue, fatigueFactor * walkMultiplier);
+
+        var distance = steps * FatigueTracker.WalkStepLength;
+
+        var time = distance / FatigueTracker.WalkSpeed;
+
+        return Math.Max(1, (int)MathF.Round(time));
+    }
 
     private string StepText(int steps)
     {
         return $"{steps:n0} steps";
+    }
+    private string TimeText(int seconds)
+    {
+        if (seconds < 0) seconds = 0;
+
+        int hours = seconds / 3600;
+        int minutes = (seconds % 3600) / 60;
+        int secs = seconds % 60;
+
+        if (hours > 0)
+            return secs > 0 ? $"{hours}h{minutes}m{secs}s" : minutes > 0 ? $"{hours}h{minutes}m" : $"{hours}h";
+
+        if (minutes > 0)
+            return secs > 0 ? $"{minutes}m{secs}s" : $"{minutes}m";
+
+        return $"{secs}s";
     }
 
     private void SameLineDisabledText(string text)
@@ -699,7 +946,7 @@ public partial class ConfigWindow
     private string StandingSitText(int seconds)
     {
         return seconds <= 0
-            ? "standing pain off"
+            ? "standing fatigue off"
             : $"≈ {seconds:n0}s standing to forced sit";
     }
     public static Vector4 GetFatigueStatusColor(FatigueTracker.FatigueStatusLevel status)

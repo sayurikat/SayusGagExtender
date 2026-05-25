@@ -136,7 +136,7 @@ public sealed class FatigueHandler : IDisposable
         nextSitAttemptUtc = now + SitAttemptCooldown;
 
         
-        plugin.EmoteGuard?.QueueGuardedEmote("/sit");
+        plugin.EmoteGuard?.QueueGuardedEmote("/groundsit");
 
         MaybePrintStatus("Fatigue: forcing sit.");
     }

@@ -88,6 +88,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     $"Autozap will always run, regardless of where you are. <me> can never change this.",
                     Status(RemoteStatusType.Zap),
                 ]);
+                return;
             }
             if (arguments[1].Equals("distant", StringComparison.OrdinalIgnoreCase))
             {
@@ -99,6 +100,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     $"Autozap will only run when you are out of range. <me> can never change this.",
                     Status(RemoteStatusType.Zap),
                 ]);
+                return;
             }
             if (arguments[1].Equals("offline", StringComparison.OrdinalIgnoreCase))
             {
@@ -110,6 +112,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     $"Autozap will only run when you are offline. <me> can never change this.",
                     Status(RemoteStatusType.Zap),
                 ]);
+                return;
             }
 
 
@@ -133,6 +136,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     $"Autovibe will always run, regardless of where you are. <me> can never change this.",
                     Status(RemoteStatusType.Vibe),
                 ]);
+                return;
             }
             if (arguments[1].Equals("distant", StringComparison.OrdinalIgnoreCase))
             {
@@ -144,6 +148,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     $"Autovibe will only run when you are out of range. <me> can never change this.",
                     Status(RemoteStatusType.Zap),
                 ]);
+                return;
             }
             if (arguments[1].Equals("offline", StringComparison.OrdinalIgnoreCase))
             {
@@ -155,6 +160,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     $"Autovibe will only run when you are offline. <me> can never change this.",
                     Status(RemoteStatusType.Zap),
                 ]);
+                return;
             }
 
 
@@ -185,7 +191,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     ]);
                     return;
                 }
-                if (count > 0)
+                if (count >= 0)
                 {
                     plugin.Configuration.AutoZapEnabled = true;
                     plugin.Configuration.AutoZapCount = count;
@@ -226,7 +232,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     ]);
                     return;
                 }
-                if (count > 0)
+                if (count >= 0)
                 {
                     plugin.Configuration.AutoVibeEnabled = true;
                     plugin.Configuration.AutoVibeCount = count;
