@@ -514,12 +514,29 @@ namespace SayusGagExtender.Windows
                             : "Hold Ctrl to remove this vibe command");
                     }
 
+                    ImGui.SameLine();
+
+                    var honorificTriggerCommand = vibeCommand.HonorificTriggerCommand;
+
+                    ImGui.SetNextItemWidth(160);
+                    if (ImGui.InputTextWithHint(
+                            "##HonorificTriggerCommand",
+                            "Honorific trigger",
+                            ref honorificTriggerCommand,
+                            128))
+                    {
+                        vibeCommand.HonorificTriggerCommand = honorificTriggerCommand;
+                        configuration.Save();
+                        plugin.RandomVibeSender.RefreshHonorificEmoteSubscriptions();
+                    }
+
                     ImGui.PopID();
 
                     if (deleteClicked)
                     {
                         configuration.AutoVibeCommands.RemoveAt(i);
                         configuration.Save();
+                        plugin.RandomVibeSender.RefreshHonorificEmoteSubscriptions();
                         break;
                     }
                 }

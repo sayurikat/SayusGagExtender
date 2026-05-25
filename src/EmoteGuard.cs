@@ -15,6 +15,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using static FFXIVClientStructs.FFXIV.Client.Game.InstanceContent.DynamicEvent.Delegates;
 using static FFXIVClientStructs.FFXIV.Client.UI.Misc.RaptureHotbarModule;
+using Action = System.Action;
 
 namespace SayusGagExtender;
 
@@ -77,6 +78,8 @@ public unsafe sealed class EmoteGuard : IDisposable
     private DateTime nextSequenceStepAt = DateTime.MinValue;
 
     private static readonly TimeSpan DefaultSequenceDelay = TimeSpan.FromSeconds(2);
+
+    private readonly Dictionary<string, List<Action<string>>> firedEmoteCommandSubscribers = new(StringComparer.OrdinalIgnoreCase);
 
     public bool IsActive = false;
 
@@ -141,7 +144,43 @@ public unsafe sealed class EmoteGuard : IDisposable
 
         TryStartNextQueuedSequenceStep(DateTime.UtcNow);
     }
-    
+    public IDisposable SubscribeToFiredEmoteCommand(string rawCommand, Action<string> callback)
+    {
+        if (callback == null)
+            return new ActionDisposable(null);
+
+        if (string.IsNullOrWhiteSpace(rawCommand))
+            return new ActionDisposable(null);
+
+        if (!TryNormalizeEmoteCommand(rawCommand, out var normalized))
+            return new ActionDisposable(null);
+
+        if (!CommandParser.TryGetCommandName(normalized, out var commandName))
+            return new ActionDisposable(null);
+
+        var key = NormalizeFiredEmoteSubscriberKey(commandName);
+        if (string.IsNullOrWhiteSpace(key))
+            return new ActionDisposable(null);
+
+        if (!firedEmoteCommandSubscribers.TryGetValue(key, out var subscribers))
+        {
+            subscribers = new List<Action<string>>();
+            firedEmoteCommandSubscribers[key] = subscribers;
+        }
+
+        subscribers.Add(callback);
+
+        return new ActionDisposable(() =>
+        {
+            if (!firedEmoteCommandSubscribers.TryGetValue(key, out var list))
+                return;
+
+            list.Remove(callback);
+
+            if (list.Count == 0)
+                firedEmoteCommandSubscribers.Remove(key);
+        });
+    }
 
     public void Dispose()
     {
@@ -160,6 +199,7 @@ public unsafe sealed class EmoteGuard : IDisposable
         processChatBoxHook.Disable();
         processChatBoxHook.Dispose();
     }
+    
 
     private void OnFrameworkUpdate(IFramework _)
     {
@@ -613,6 +653,8 @@ public unsafe sealed class EmoteGuard : IDisposable
                     ExecuteNativeCommand(emote.Command);
                     break;
             }
+
+            NotifyFiredEmote(emote);
         }
         finally
         {
@@ -1082,6 +1124,8 @@ public unsafe sealed class EmoteGuard : IDisposable
             hasPosition = false;
             stoppedSince = DateTime.MinValue;
         }
+
+        
     }
 
     private static class CommandParser
@@ -1225,6 +1269,86 @@ public unsafe sealed class EmoteGuard : IDisposable
                 return false;
 
             return emoteId > 0;
+        }
+    }
+    private void NotifyFiredEmote(QueuedEmote emote)
+    {
+        string? command = emote.Kind switch
+        {
+            QueuedEmoteKind.Command => emote.Command,
+
+            QueuedEmoteKind.Hotbar =>
+                plugin.EmoteApi.GetEmoteCommand(emote.EmoteId),
+
+            QueuedEmoteKind.ApiEmoteId =>
+                plugin.EmoteApi.GetEmoteCommand(emote.EmoteId),
+
+            _ => null,
+        };
+
+        if (string.IsNullOrWhiteSpace(command))
+            return;
+
+        if (!TryNormalizeEmoteCommand(command, out var normalized))
+            return;
+
+        if (!CommandParser.TryGetCommandName(normalized, out var commandName))
+            return;
+
+        var key = NormalizeFiredEmoteSubscriberKey(commandName);
+        if (string.IsNullOrWhiteSpace(key))
+            return;
+
+        if (!firedEmoteCommandSubscribers.TryGetValue(key, out var subscribers) || subscribers.Count == 0)
+            return;
+
+        foreach (var subscriber in subscribers.ToArray())
+        {
+            try
+            {
+                subscriber(normalized);
+            }
+            catch (Exception ex)
+            {
+                Plugin.ChatGui.PrintError($"EmoteGuard fired-emote subscriber error: {ex.Message}");
+            }
+        }
+    }
+
+    private static string NormalizeFiredEmoteSubscriberKey(string? command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+            return string.Empty;
+
+        command = command.Trim();
+
+        if (command.StartsWith('/'))
+            command = command[1..];
+
+        var spaceIndex = command.IndexOf(' ');
+        if (spaceIndex >= 0)
+            command = command[..spaceIndex];
+
+        return command.Trim();
+    }
+
+    private sealed class ActionDisposable : IDisposable
+    {
+        private Action? dispose;
+
+        public ActionDisposable(Action? dispose)
+        {
+            this.dispose = dispose;
+        }
+
+        public void Dispose()
+        {
+            var action = dispose;
+            if (action == null)
+                return;
+
+            dispose = null;
+            action();
         }
     }
 }

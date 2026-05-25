@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using static SayusGagExtender.RandomVibeSender;
 
 namespace SayusGagExtender
 {
@@ -28,6 +29,8 @@ namespace SayusGagExtender
 
         private const float ControllerNearbyDistance = 30f;
         private ControllerPresence lastControllerPresence = ControllerPresence.Offline;
+
+        private readonly List<IDisposable> honorificEmoteSubscriptions = new();
 
         public enum OperateWhen
         {
@@ -52,8 +55,9 @@ namespace SayusGagExtender
             public Vector3 HonorificColor { get; set; } = new(1.0f, 1.0f, 1.0f);
             public Vector3 HonorificGlow { get; set; } = new(0.0f, 0.0f, 0.0f);
 
-            public int HonorificDurationSeconds { get; set; } = 10;
+            public int HonorificDurationSeconds { get; set; } = 30;
             public int HonorificPriority { get; set; } = 100;
+            public string HonorificTriggerCommand { get; set; } = "";
         }
 
         public RandomZapSender(Plugin plugin)
@@ -64,7 +68,8 @@ namespace SayusGagExtender
 
             Plugin.Framework.Update += this.OnFrameworkUpdate;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnRestrictionsChanged;
-            
+
+            RefreshHonorificEmoteSubscriptions();
         }
 
         public void Dispose()
@@ -72,6 +77,7 @@ namespace SayusGagExtender
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= this.OnRestrictionsChanged;
 
+            ClearHonorificEmoteSubscriptions();
             ClearAutoZapMoodles();
         }
 
@@ -86,9 +92,9 @@ namespace SayusGagExtender
             ClearAutoZapMoodles();
         }
         public bool IsAutonomousRunning =>
-    plugin.Configuration.AutoZapEnabled &&
-    wearsRestrictedItems &&
-    ShouldOperateForPresence(lastControllerPresence);
+        plugin.Configuration.AutoZapEnabled &&
+        wearsRestrictedItems &&
+        ShouldOperateForPresence(lastControllerPresence);
 
         public string ControllerPresenceStatus
         {
@@ -489,6 +495,84 @@ namespace SayusGagExtender
         public void MoodleConfigChange()
         {
             ClearAutoZapMoodles();
+        }
+    
+
+        
+        private void ApplyHonorificTitleForCommand(WeightedVibeCommand vibeCommand)
+        {
+            if (!plugin.Configuration.AutoVibeEnabled)
+                return;
+
+            if (!wearsRestrictedItems)
+            {
+                CheckIfWearingRestrictiveItems();
+
+                if (!wearsRestrictedItems)
+                    return;
+            }
+
+            if (string.IsNullOrWhiteSpace(vibeCommand.HonorificTitle))
+                return;
+
+            if (vibeCommand.HonorificDurationSeconds <= 0)
+                return;
+
+            var titleJson = plugin.HonorificManager.BuildTitleJson(
+                vibeCommand.HonorificTitle,
+                vibeCommand.HonorificColor,
+                vibeCommand.HonorificGlow);
+
+            if (string.IsNullOrWhiteSpace(titleJson))
+                return;
+
+            plugin.HonorificManager.SetTitle(
+                titleJson,
+                TimeSpan.FromSeconds(vibeCommand.HonorificDurationSeconds),
+                vibeCommand.HonorificPriority,
+                this);
+        }
+
+        public void RefreshHonorificEmoteSubscriptions()
+        {
+            ClearHonorificEmoteSubscriptions();
+
+            foreach (var zapCommand in plugin.Configuration.AutoZapCommands)
+            {
+                if (string.IsNullOrWhiteSpace(zapCommand.HonorificTriggerCommand))
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(zapCommand.HonorificTitle))
+                    continue;
+
+                if (zapCommand.HonorificDurationSeconds <= 0)
+                    continue;
+
+                var capturedCommand = zapCommand;
+
+                var subscription = plugin.EmoteGuard.SubscribeToFiredEmoteCommand(
+                    capturedCommand.HonorificTriggerCommand,
+                    _ => ApplyHonorificTitleForCommand(capturedCommand));
+
+                honorificEmoteSubscriptions.Add(subscription);
+            }
+        }
+
+        private void ClearHonorificEmoteSubscriptions()
+        {
+            foreach (var subscription in honorificEmoteSubscriptions)
+            {
+                try
+                {
+                    subscription.Dispose();
+                }
+                catch
+                {
+                    // Best-effort cleanup.
+                }
+            }
+
+            honorificEmoteSubscriptions.Clear();
         }
     }
 }

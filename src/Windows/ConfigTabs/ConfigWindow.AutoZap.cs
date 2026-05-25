@@ -23,6 +23,7 @@ namespace SayusGagExtender.Windows
         private string autoZapEngagedMoodleSearch = "";
         private Guid? selectedAutoZapControllerOnlineMoodleToSet;
         private string autoZapControllerOnlineMoodleSearch = "";
+        private string newZapHonorificTriggerCommand = "";
 
         private void DrawAutoZapTab()
         {
@@ -495,6 +496,21 @@ namespace SayusGagExtender.Windows
 
                     ImGui.SameLine();
 
+                    var honorificTriggerCommand = zapCommand.HonorificTriggerCommand;
+                    ImGui.SetNextItemWidth(160);
+                    if (ImGui.InputTextWithHint(
+                            "##HonorificTriggerCommand",
+                            "Honorific trigger",
+                            ref honorificTriggerCommand,
+                            128))
+                    {
+                        zapCommand.HonorificTriggerCommand = honorificTriggerCommand;
+                        configuration.Save();
+                        plugin.RandomZapSender.RefreshHonorificEmoteSubscriptions();
+                    }
+
+                    ImGui.SameLine();
+
                     if (!ctrlHeld)
                         ImGui.BeginDisabled();
 
@@ -516,6 +532,7 @@ namespace SayusGagExtender.Windows
                     {
                         configuration.AutoZapCommands.RemoveAt(i);
                         configuration.Save();
+                        plugin.RandomZapSender.RefreshHonorificEmoteSubscriptions();
                         break;
                     }
                 }

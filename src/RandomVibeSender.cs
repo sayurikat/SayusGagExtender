@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Numerics;
 using System.Text.RegularExpressions;
 
 namespace SayusGagExtender
@@ -30,7 +29,7 @@ namespace SayusGagExtender
         private const float ControllerNearbyDistance = 30f;
         private ControllerPresence lastControllerPresence = ControllerPresence.Offline;
 
-
+        private readonly List<IDisposable> honorificEmoteSubscriptions = new();
         public enum OperateWhen
         {
             Always,
@@ -55,7 +54,8 @@ namespace SayusGagExtender
             public Vector3 HonorificGlow { get; set; } = new(0.0f, 0.0f, 0.0f);
 
             public int HonorificDurationSeconds { get; set; } = 30;
-            public int HonorificPriority { get; set; } = 100;
+            public int HonorificPriority { get; set; } = 100; 
+            public string HonorificTriggerCommand { get; set; } = "";
         }
 
         public RandomVibeSender(Plugin plugin)
@@ -66,6 +66,9 @@ namespace SayusGagExtender
 
             Plugin.Framework.Update += this.OnFrameworkUpdate;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnRestrictionsChanged;
+            plugin.FriendListHelper.RequestFriendListUpdateWithCooldown();
+
+            RefreshHonorificEmoteSubscriptions();
         }
 
         public void Dispose()
@@ -73,6 +76,7 @@ namespace SayusGagExtender
             Plugin.Framework.Update -= this.OnFrameworkUpdate;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged -= this.OnRestrictionsChanged;
 
+            ClearHonorificEmoteSubscriptions();
             ClearAutoVibeMoodles();
         }
 
@@ -399,7 +403,6 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
-                        ApplyHonorificTitleForCommand(vibeCommand);
                         plugin.EmoteGuard.QueueGuardedEmote(vibeCommand.Command + " " + returnToEmote);
                         return;
                     }
@@ -412,6 +415,17 @@ namespace SayusGagExtender
         }
         private void ApplyHonorificTitleForCommand(WeightedVibeCommand vibeCommand)
         {
+            if (!plugin.Configuration.AutoVibeEnabled)
+                return;
+
+            if (!wearsRestrictedItems)
+            {
+                CheckIfWearingRestrictiveItems();
+
+                if (!wearsRestrictedItems)
+                    return;
+            }
+
             if (string.IsNullOrWhiteSpace(vibeCommand.HonorificTitle))
                 return;
 
@@ -491,6 +505,47 @@ namespace SayusGagExtender
         public void MoodleConfigChange()
         {
             ClearAutoVibeMoodles();
+        }
+        public void RefreshHonorificEmoteSubscriptions()
+        {
+            ClearHonorificEmoteSubscriptions();
+
+            foreach (var vibeCommand in plugin.Configuration.AutoVibeCommands)
+            {
+                if (string.IsNullOrWhiteSpace(vibeCommand.HonorificTriggerCommand))
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(vibeCommand.HonorificTitle))
+                    continue;
+
+                if (vibeCommand.HonorificDurationSeconds <= 0)
+                    continue;
+
+                var capturedCommand = vibeCommand;
+
+                var subscription = plugin.EmoteGuard.SubscribeToFiredEmoteCommand(
+                    capturedCommand.HonorificTriggerCommand,
+                    _ => ApplyHonorificTitleForCommand(capturedCommand));
+
+                honorificEmoteSubscriptions.Add(subscription);
+            }
+        }
+
+        private void ClearHonorificEmoteSubscriptions()
+        {
+            foreach (var subscription in honorificEmoteSubscriptions)
+            {
+                try
+                {
+                    subscription.Dispose();
+                }
+                catch
+                {
+                    // Best-effort cleanup.
+                }
+            }
+
+            honorificEmoteSubscriptions.Clear();
         }
     }
 }
