@@ -118,6 +118,7 @@ public class MainWindow : Window, IDisposable
             DrawFeaturesRow("Moodle Enforcer", configuration.MoodleEnforcerEnabled, plugin.MoodleEnforcer.IsActive);
             DrawFeaturesRow("Penumbra Enforcer", configuration.PenumbraEnforcerEnabled, plugin.PenumbraEnforcer.IsActive);
             DrawFeaturesRow("Honorific Enforcer", configuration.HonorificEnforcerEnabled, plugin.HonorificEnforcer.IsActive);
+            DrawFeaturesRow("Cammy Enforcer", configuration.CammyEnforcerEnabled, plugin.CammyEnforcer.IsActive);
             DrawFeaturesRow("C+ Enforcer", configuration.CustomizePlusEnforcerEnabled, plugin.CustomizePlusEnforcer.IsActive);
             DrawFeaturesRow("Emote Enforcer", configuration.EmoteEnforcerEnabled, plugin.EmoteEnforcer.IsActive);
             DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled, plugin.RandomZapSender.IsActive);

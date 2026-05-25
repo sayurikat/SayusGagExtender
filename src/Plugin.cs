@@ -46,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
     public API.GagSpeak.GagSpeakChatMonitorApi GagSpeakChatMonitorApi { get; private set; }
     public API.GagSpeak.GagSpeakGagsApi GagSpeakGagsApi { get; private set; }
     public API.HonorificApi HonorificApi { get; private set; }
+    public API.CammyApi CammyApi { get; private set; }
     public CharacterHelper CharacterHelper { get; set; }
     public EmoteGuard EmoteGuard { get; set; }
     public AutoAttackKiller AutoAttackKiller { get; set; }
@@ -71,6 +72,7 @@ public sealed class Plugin : IDalamudPlugin
     public FatigueHandler FatigueHandler { get; set; }
     public HonorificManager HonorificManager { get; private set; }
     public HonorificEnforcer HonorificEnforcer { get; set; }
+    public CammyEnforcer CammyEnforcer { get; set; }
 
 
 
@@ -137,6 +139,7 @@ public sealed class Plugin : IDalamudPlugin
         this.GagSpeakGagsApi = new GagSpeakGagsApi(this, GagSpeakContext);
         this.Chat2Api = new API.Chat2Api(this);
         this.HonorificApi = new API.HonorificApi(this);
+        this.CammyApi = new API.CammyApi(this);
 
         Utils = new Utils(Instance);
         FriendListHelper = new FriendListHelper(Instance);
@@ -164,6 +167,7 @@ public sealed class Plugin : IDalamudPlugin
         FatigueHandler = new FatigueHandler(Instance);
         HonorificManager = new HonorificManager(Instance);
         HonorificEnforcer = new HonorificEnforcer(Instance);
+        CammyEnforcer = new CammyEnforcer(Instance);
 
         if (Configuration.OpenMainWindowOnStartup)
         {
@@ -219,6 +223,7 @@ public sealed class Plugin : IDalamudPlugin
         FatigueHandler?.Dispose(); 
         HonorificManager?.Dispose();
         HonorificEnforcer?.Dispose();
+        CammyEnforcer?.Dispose();
 
 
         GagSpeakRestraintSetApi?.Dispose();
@@ -229,6 +234,7 @@ public sealed class Plugin : IDalamudPlugin
         PenumbraApi?.Dispose();
         CustomizePlusApi.Dispose();
         HonorificApi?.Dispose();
+        CammyApi?.Dispose();
 
 
         CommandManager.RemoveHandler(CommandName);

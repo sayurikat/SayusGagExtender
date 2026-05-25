@@ -39,7 +39,9 @@ partial class ConfigWindow
 
             configuration.Save();
         }
-
+        ImGui.Spacing();
+        ImGui.Text("Permenent Honorific titles by controller is always 500 priority");
+        ImGui.Text("Temporary Honorific titles by controller is always 600 priority");
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -70,7 +72,7 @@ partial class ConfigWindow
                 ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.2f, 1.0f, 0.2f, 1.0f));
             }
 
-            var headerOpen = ImGui.CollapsingHeader($"{displayName} P:{titleConfig.HonorificPriority}###honorific-enforcer-entry-{i}");
+            var headerOpen = ImGui.CollapsingHeader($"{displayName}  |  Priority {titleConfig.HonorificPriority}###honorific-enforcer-entry-{i}");
 
             if (plugin.HonorificEnforcer.IsActive &&
                 string.Equals(displayName, titleConfig.HonorificTitle, StringComparison.Ordinal))
@@ -132,7 +134,7 @@ partial class ConfigWindow
                     // Updating Honorific IPC on every keypress can steal focus.
                     plugin.HonorificEnforcer.MarkConfigDirty(delayApply: true);
                 }
-
+                
                 ImGui.Spacing();
                 ImGui.Separator();
                 ImGui.Spacing();

@@ -2,6 +2,7 @@ using Dalamud.Configuration;
 using Dalamud.Game.Text;
 using System;
 using System.Collections.Generic;
+using static SayusGagExtender.CammyEnforcer;
 using static SayusGagExtender.HonorificEnforcer;
 using static SayusGagExtender.MoodleEnforcer;
 using static SayusGagExtender.PenumbraEnforcer;
@@ -175,6 +176,11 @@ public class Configuration : IPluginConfiguration
 
 
 
+
+
+    public bool CammyEnforcerEnabled { get; set; } = false;
+    public List<CammyEnforcerConfig> CammyEnforcerPresets { get; set; } = new();
+    public string CammyEnforcerDefaultPresetName { get; set; } = string.Empty;
 
 
 
