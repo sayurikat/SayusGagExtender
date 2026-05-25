@@ -110,13 +110,13 @@ namespace SayusGagExtender
         {
             try
             {
-                plugin.EmoteGuard?.QueueGuardedEmote("/bm");
+                //plugin.EmoteGuard?.QueueGuardedEmote("/bm");
 
                 // If you later decide guarded queue is too slow, test this instead:
                 // Plugin.CommandManager.ProcessCommand("/bm");
                 //
                 // Or this native path:
-                // ExecuteNativeCommand("/bm");
+                plugin.Utils.ExecuteNativeCommand("/bm");
             }
             catch (Exception ex)
             {

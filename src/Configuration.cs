@@ -176,6 +176,8 @@ public class Configuration : IPluginConfiguration
 
 
 
+    public bool XivMessengerManagerEnabled { get; set; } = false;
+
 
 
     public bool CammyEnforcerEnabled { get; set; } = false;

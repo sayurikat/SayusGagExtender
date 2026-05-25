@@ -124,6 +124,7 @@ public class MainWindow : Window, IDisposable
             DrawFeaturesRow("Auto Zap", configuration.AutoZapEnabled, plugin.RandomZapSender.IsActive);
             DrawFeaturesRow("Auto Vibe", configuration.AutoVibeEnabled, plugin.RandomVibeSender.IsActive);
             DrawFeaturesRow("Chat2 Blindfold Feature", configuration.Chat2BlindfoldFeatureEnable, plugin.BlindfoldMonitor.IsActive);
+            DrawFeaturesRow("XIVMessenger Feature", configuration.XivMessengerManagerEnabled, plugin.XIVMessengerManager.IsActive);
             DrawFeaturesRow("GagSpeak Mirror", configuration.GagSpeakRestraintCloner, plugin.MirrorGagSpeak.IsActive);
         }
     }

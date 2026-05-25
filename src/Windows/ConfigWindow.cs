@@ -35,6 +35,7 @@ public partial class ConfigWindow : Window, IDisposable
         GagSpeakMirror,
         HonorificEnforcer,
         CammnyEnforcer,
+        XIVMessenger,
     }
 
     public ConfigWindow(Plugin plugin) : base("Sayu's Gag Extender Config###SayusGagExtenderConfig")
@@ -94,6 +95,7 @@ public partial class ConfigWindow : Window, IDisposable
         DrawNavigationItem("Shock Collar", ConfigTab.ShockCollar);
         DrawNavigationItem("Vibrator", ConfigTab.Vibrator);
         DrawNavigationItem("Chat2", ConfigTab.Chat2);
+        DrawNavigationItem("XIVMessenger", ConfigTab.XIVMessenger);
         DrawNavigationItem("GagSpeak Mirror", ConfigTab.GagSpeakMirror);
 
         ImGui.EndChild();
@@ -170,6 +172,10 @@ public partial class ConfigWindow : Window, IDisposable
 
             case ConfigTab.Chat2:
                 DrawChat2Tab();
+                break;
+
+            case ConfigTab.XIVMessenger:
+                DrawXIVMessengerTab();
                 break;
 
             case ConfigTab.GagSpeakMirror:
