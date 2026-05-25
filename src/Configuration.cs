@@ -171,7 +171,7 @@ public class Configuration : IPluginConfiguration
 
 
 
-
+    public string RemotePermanentHonorificTitleJson { get; set; } = string.Empty;
 
 
 

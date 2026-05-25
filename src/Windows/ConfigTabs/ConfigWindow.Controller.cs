@@ -89,6 +89,9 @@ namespace SayusGagExtender.Windows
             ImGui.Text("sge mountlimit [day/hour] [count] → How many times a mount can be used per day/hour, or: sge mountlimit unlimited");
             ImGui.Text("sge teleportlimit [day/hour] [count] → How many times a teleport can be used per day/hour, or: sge teleportlimit unlimited");
             ImGui.Text("sge joblimit [day/hour] [count] → How many times jobs can be changed per day/hour, or: sge joblimit unlimited");
+            ImGui.Text("sge settitle [title] → Sets permanent Honorific title");
+            ImGui.Text("sge settemptitle [seconds] [title] → Sets temporary Honorific title");
+            ImGui.Text("sge cleartitle → Clears the permanent remote Honorific title");
         }
 
         private void DrawRemoteAcceptedChannels()

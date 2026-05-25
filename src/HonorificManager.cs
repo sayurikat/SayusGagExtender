@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using Dalamud.Bindings.ImGui;
 using Newtonsoft.Json;
 using System.Numerics;
+using Dalamud.Game.ClientState.Conditions;
 
 namespace SayusGagExtender;
 
@@ -377,10 +378,16 @@ float priorityWidth = 50f)
         var wantedChanged = !JsonEquals(wantedTitleJson, newWantedJson);
         wantedTitleJson = newWantedJson;
 
-        dirty = false;
-
-        if (!plugin.HonorificApi.IsAvailable())
+        // Important:
+        // Do not clear dirty until we know it is safe to touch Honorific.
+        // This lets other systems submit requests during login/loading screens.
+        if (!CanUseHonorificApiNow())
+        {
+            dirty = true;
             return;
+        }
+
+        dirty = false;
 
         if (!string.IsNullOrWhiteSpace(wantedTitleJson))
         {
@@ -403,6 +410,33 @@ float priorityWidth = 50f)
             return;
 
         RestoreOriginalTitle();
+    }
+    private bool CanUseHonorificApiNow()
+    {
+        try
+        {
+            if (!plugin.HonorificApi.IsAvailable())
+                return false;
+
+            if (Plugin.ObjectTable.LocalPlayer == null)
+                return false;
+
+            if (Plugin.Condition.Any(
+                    ConditionFlag.BetweenAreas,
+                    ConditionFlag.BetweenAreas51,
+                    ConditionFlag.WatchingCutscene,
+                    ConditionFlag.WatchingCutscene78,
+                    ConditionFlag.OccupiedInCutSceneEvent))
+            {
+                return false;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private HonorificTitleRequest? GetWinningRequest(DateTime now)
@@ -461,7 +495,7 @@ float priorityWidth = 50f)
     {
         try
         {
-            if (!plugin.HonorificApi.IsAvailable())
+            if (!CanUseHonorificApiNow())
                 return;
 
             if (!originalTitleCaptured)

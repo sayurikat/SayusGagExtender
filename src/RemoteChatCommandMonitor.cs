@@ -1,12 +1,16 @@
 using Dalamud.Game.Chat;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
 using ECommons;
 using Lumina.Data.Parsing.Layer;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using static SayusGagExtender.Configuration;
@@ -20,13 +24,30 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
     private readonly SemaphoreSlim tellSendLock = new(1, 1);
 
+    private const int RemoteHonorificPriority = 500;
+    private const int RemoteHonorificTempPriority = 600;
+
+    private bool hasSubmittedRemoteTitleRequest;
+    private string lastSubmittedRemoteTitleJson = string.Empty;
+
     public bool IsActive => plugin.Configuration.RemoteChatCommandsEnabled;
 
+    private enum RemoteStatusType
+    {
+        Zap,
+        Vibe,
+        Mount,
+        Teleport,
+        Job,
+        Title,
+    }
     public RemoteChatCommandMonitor(Plugin plugin)
     {
         this.plugin = plugin;
 
         Plugin.ChatGui.ChatMessage += OnChatMessage;
+
+        ApplySavedRemotePermanentTitle();
     }
 
     public void Dispose()
@@ -54,6 +75,9 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 "commands: sge mountlimit [day/hour] [count] → How many times a mount can be used per day/hour, or: sge mountlimit unlimited",
                 "commands: sge teleportlimit [day/hour] [count] → How many times a teleport can be used per day/hour, or: sge teleportlimit unlimited",
                 "commands: sge joblimit [day/hour] [count] → How many times jobs can be changed per day/hour, or: sge joblimit unlimited",
+                "commands: sge settitle [title] → Sets permanent Honorific title",
+                "commands: sge settemptitle [seconds] [title] → Sets temporary Honorific title",
+                "commands: sge cleartitle → Clears the permanent remote Honorific title",
             ]);
 
             return;
@@ -62,13 +86,13 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
         if (args.StartsWith("status", StringComparison.OrdinalIgnoreCase))
         {
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
+            _ = SendTellLinesAsync(senderName, senderWorld, [
                 Status(RemoteStatusType.Zap),
                 Status(RemoteStatusType.Vibe),
                 Status(RemoteStatusType.Mount),
                 Status(RemoteStatusType.Teleport),
                 Status(RemoteStatusType.Job),
+                Status(RemoteStatusType.Title),
             ]);
 
             return;
@@ -455,22 +479,87 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
             return;
         }
+        if (arguments[0].Equals("settitle", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
+        {
+            var title = arguments[1].Trim();
+            var json = BuildRemoteTitleJsonFromCurrent(title);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                _ = SendTellLinesAsync(senderName, senderWorld, [
+                    "failed to build Honorific title.",
+                    ]);
+                return;
+            }
+            ApplyRemotePermanentTitleJson(json);
+            _ = SendTellLinesAsync(senderName, senderWorld, [
+                Status(RemoteStatusType.Title), 
+            ]);
+            return;
+
+
+
+            _ = SendTellLinesAsync(senderName, senderWorld,
+                [
+                    "cannot recognize command, to set Honorific title, use: sge settitle [title]",
+                Status(RemoteStatusType.Zap),
+            ]);
+
+            return;
+            
+        }
+        if (arguments[0].Equals("settemptitle", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 3)
+        {
+
+            if (!int.TryParse(arguments[1], out int seconds))
+            {
+                _ = SendTellLinesAsync(senderName, senderWorld, [
+                    "seconds not recognized, use: sge settemptitle [seconds] [title]",
+                    ]);
+                return;
+            }
+            var title = arguments[2].Trim();
+            var json = BuildRemoteTitleJsonFromCurrent(title);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                _ = SendTellLinesAsync(senderName, senderWorld, [
+                    "failed to build temporary Honorific title.",
+                    ]);
+                return;
+            }
+            plugin.HonorificManager.SetTitle(json, TimeSpan.FromSeconds(seconds), RemoteHonorificTempPriority, this);
+            _ = SendTellLinesAsync(senderName, senderWorld, [
+                $"Temporary Honorific title set to: {title} for {seconds}s, temp title cannot be cancelled or removed before timer expires."
+                //, Status(RemoteStatusType.Title), 
+            ]);
+            return;
+
+
+            _ = SendTellLinesAsync(senderName, senderWorld,
+                [
+                    "cannot recognize command, to set temporary title, use: sge settemptitle [seconds] [title]",
+                Status(RemoteStatusType.Zap),
+            ]);
+
+            return;
+        }
+        if (arguments[0].Equals("cleartitle", StringComparison.OrdinalIgnoreCase))
+        {
+            RecallRemotePermanentTitleRequest();
+            _ = SendTellLinesAsync(senderName, senderWorld, [
+                Status(RemoteStatusType.Title),
+            ]); 
+            return;
+        }
 
 
         _ = SendTellLinesAsync(senderName, senderWorld,
             [
-                "commands: sge help → for a list of commands",
-            ]);
+                "cannot recognize command, to display all commands, use: sge help",
+        ]);
     }
 
-    private enum RemoteStatusType
-    {
-        Zap,
-        Vibe,
-        Mount,
-        Teleport,
-        Job,
-    }
     private string Status(RemoteStatusType type)
     {
         return type switch
@@ -489,6 +578,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
             RemoteStatusType.Job =>
                 $"status: sge joblimit [day/hour] [count] → {(plugin.Configuration.JobSwitchQuotaActions < 0 ? "unlimited" : plugin.Configuration.JobSwitchQuotaActions)} per {plugin.Configuration.JobSwitchQuotaWindow.ToString()} [Locked]",
+            RemoteStatusType.Title =>
+                $"status: sge settitle [title] → {GetRemotePermanentTitleDisplay()} [Priority:{RemoteHonorificPriority}] [Locked]",
 
             _ => "status: unknown",
         };
@@ -688,6 +779,134 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         finally
         {
             tellSendLock.Release();
+        }
+    }
+    private void ApplySavedRemotePermanentTitle()
+    {
+        var json = plugin.Configuration.RemotePermanentHonorificTitleJson;
+
+        if (string.IsNullOrWhiteSpace(json))
+            return;
+
+        _ = Plugin.Framework.RunOnFrameworkThread(() =>
+        {
+            if (disposed)
+                return;
+
+            ApplyRemotePermanentTitleJson(json);
+        });
+    }
+
+    private void ApplyRemotePermanentTitleJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            RecallRemotePermanentTitleRequest();
+            return;
+        }
+
+        _ = Plugin.Framework.RunOnFrameworkThread(() =>
+        {
+            if (disposed)
+                return;
+
+            if (hasSubmittedRemoteTitleRequest &&
+                string.Equals(lastSubmittedRemoteTitleJson, json, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            plugin.HonorificManager.SetTitle(
+                json,
+                RemoteHonorificPriority,
+                this);
+
+            hasSubmittedRemoteTitleRequest = true;
+            lastSubmittedRemoteTitleJson = json;
+        });
+    }
+
+    private void RecallRemotePermanentTitleRequest()
+    {
+        _ = Plugin.Framework.RunOnFrameworkThread(() =>
+        {
+            plugin.HonorificManager.RecallTitle(this);
+
+            hasSubmittedRemoteTitleRequest = false;
+            lastSubmittedRemoteTitleJson = string.Empty;
+        });
+    }
+
+    private string BuildRemoteTitleJsonFromCurrent(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return string.Empty;
+
+        title = title.Trim();
+
+        if (title.Length > API.HonorificApi.MaxTitleLength)
+            title = title[..API.HonorificApi.MaxTitleLength];
+
+        var currentJson = string.Empty;
+
+        try
+        {
+            if (plugin.HonorificApi.IsAvailable() &&
+                Plugin.ObjectTable.LocalPlayer != null &&
+                !Plugin.Condition.Any(
+                    ConditionFlag.BetweenAreas,
+                    ConditionFlag.BetweenAreas51,
+                    ConditionFlag.WatchingCutscene,
+                    ConditionFlag.WatchingCutscene78,
+                    ConditionFlag.OccupiedInCutSceneEvent))
+            {
+                currentJson = plugin.HonorificApi.GetLocalTitleJson();
+            }
+        }
+        catch
+        {
+            currentJson = string.Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentJson))
+        {
+            try
+            {
+                var token = JObject.Parse(currentJson);
+                token["Title"] = title;
+                return token.ToString(Newtonsoft.Json.Formatting.None);
+            }
+            catch
+            {
+                // Fall through to blank/default JSON.
+            }
+        }
+
+        return plugin.HonorificManager.BuildTitleJson(
+            title,
+            new Vector3(1f, 1f, 1f),
+            new Vector3(0f, 0f, 0f));
+    }
+
+    private string GetRemotePermanentTitleDisplay()
+    {
+        var json = plugin.Configuration.RemotePermanentHonorificTitleJson;
+
+        if (string.IsNullOrWhiteSpace(json))
+            return "none";
+        
+        try
+        {
+            var token = JObject.Parse(json);
+            var title = token["Title"]?.ToString();
+
+            return string.IsNullOrWhiteSpace(title)
+                ? "set"
+                : title;
+        }
+        catch
+        {
+            return "set";
         }
     }
 }
