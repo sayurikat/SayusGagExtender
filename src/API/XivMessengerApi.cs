@@ -1,23 +1,24 @@
-using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 
 namespace SayusGagExtender.API;
 
 public sealed class XivMessengerApi : IDisposable
 {
-    private const string InternalName = "Messenger";
+    private const int DefaultInputMaxLength = 15000;
 
     private readonly DalamudReflector reflector;
-
     private object? cachedPlugin;
+
+    private readonly Dictionary<object, int> originalInputMaxLengths =
+        new(ReferenceComparer.Instance);
 
     private static readonly BindingFlags Flags =
         BindingFlags.Instance |
+        BindingFlags.Static |
         BindingFlags.Public |
         BindingFlags.NonPublic;
 
@@ -31,32 +32,59 @@ public sealed class XivMessengerApi : IDisposable
 
     public void Dispose()
     {
+        ToggleTextInput(true);
         reflector.Dispose();
     }
 
     public bool IsWindowOpen()
     {
-        if (!TryGetMessengerPlugin(out var messenger))
-            return false;
+        var foundWindow = false;
 
-        foreach (var entry in WalkObjectGraph(messenger, maxDepth: 6))
+        foreach (var chatWindow in GetChatWindows())
         {
-            if (TryReadWindowOpen(entry.Value, entry.Path, out var isOpen) && isOpen)
+            foundWindow = true;
+
+            if (TryGetBool(chatWindow, "IsOpen", out var isOpen) && isOpen)
                 return true;
         }
+
+        if (!foundWindow)
+            Plugin.Log.Verbose("[XivMessengerApi] IsWindowOpen: no chat windows found.");
 
         return false;
     }
 
     public bool CloseWindow()
     {
-        if (!TryGetMessengerPlugin(out var messenger))
-            return false;
-
         var changed = false;
+        var foundWindow = false;
 
-        foreach (var entry in WalkObjectGraph(messenger, maxDepth: 6))
-            changed |= TryCloseWindow(entry.Value, entry.Path);
+        foreach (var chatWindow in GetChatWindows())
+        {
+            foundWindow = true;
+
+            if (!TryGetBool(chatWindow, "IsOpen", out var isOpen))
+            {
+                Plugin.Log.Warning($"[XivMessengerApi] CloseWindow: window has no readable IsOpen. Type={chatWindow.GetType().FullName}");
+                continue;
+            }
+
+            if (!isOpen)
+                continue;
+
+            if (TrySetBool(chatWindow, "IsOpen", false))
+            {
+                changed = true;
+                Plugin.Log.Information("[XivMessengerApi] Closed XIM chat window.");
+            }
+            else
+            {
+                Plugin.Log.Warning($"[XivMessengerApi] CloseWindow: failed to set IsOpen=false. Type={chatWindow.GetType().FullName}");
+            }
+        }
+
+        if (!foundWindow)
+            Plugin.Log.Warning("[XivMessengerApi] CloseWindow: no chat windows found.");
 
         return changed;
     }
@@ -68,38 +96,361 @@ public sealed class XivMessengerApi : IDisposable
 
     public bool TryIsTextInputEnabled(out bool enabled)
     {
-        enabled = false;
+        enabled = true;
 
-        if (!TryGetMessengerPlugin(out var messenger))
-            return false;
+        var foundInput = false;
 
-        foreach (var entry in WalkObjectGraph(messenger, maxDepth: 6))
+        foreach (var input in GetInputs())
         {
-            if (TryReadTextInputEnabled(entry.Value, entry.Path, out enabled))
-                return true;
+            foundInput = true;
+
+            if (TryGetInt(input, "MaxLength", out var maxLength))
+            {
+                if (maxLength <= 0)
+                {
+                    enabled = false;
+                    return true;
+                }
+
+                continue;
+            }
+
+            Plugin.Log.Warning($"[XivMessengerApi] TryIsTextInputEnabled: input has no readable MaxLength. Type={input.GetType().FullName}");
         }
 
-        return false;
+        return foundInput;
     }
 
     public bool ToggleTextInput(bool enabled)
     {
-        if (!TryGetMessengerPlugin(out var messenger))
-            return false;
+        var applied = false;
+        var foundInput = false;
 
-        if (TryInvokeTextInputSetter(messenger, enabled))
-            return true;
-
-        foreach (var entry in WalkObjectGraph(messenger, maxDepth: 6))
+        foreach (var input in GetInputs())
         {
-            if (TrySetTextInputEnabled(entry.Value, entry.Path, enabled))
-            {
-                TrySaveConfig(messenger);
-                return true;
-            }
+            foundInput = true;
+            applied |= SetInputEnabled(input, enabled);
         }
 
-        return false;
+        if (!foundInput)
+            Plugin.Log.Warning($"[XivMessengerApi] ToggleTextInput({enabled}): no input objects found.");
+
+        return applied;
+    }
+
+    public void DebugPrint()
+    {
+        if (!TryGetMessengerPlugin(out var messenger))
+        {
+            Plugin.ChatGui.PrintError("XIM debug: Messenger plugin not found.");
+            return;
+        }
+
+        var assembly = messenger.GetType().Assembly;
+
+        Plugin.ChatGui.Print($"XIM debug: plugin={messenger.GetType().FullName}");
+        Plugin.ChatGui.Print($"XIM debug: asm={assembly.GetName().Name}");
+
+        var serviceHolder =
+            assembly.GetType("Messenger.S") ??
+            FindTypeWithStaticMember(assembly, "MessageProcessor");
+
+        Plugin.ChatGui.Print($"XIM debug: serviceHolder={serviceHolder?.FullName ?? "null"}");
+
+        var messageProcessor = serviceHolder == null
+            ? null
+            : GetStaticFieldOrProperty(serviceHolder, "MessageProcessor");
+
+        Plugin.ChatGui.Print($"XIM debug: messageProcessor={messageProcessor?.GetType().FullName ?? "null"}");
+
+        var chats = messageProcessor == null
+            ? null
+            : GetFieldOrProperty(messageProcessor, "Chats");
+
+        Plugin.ChatGui.Print($"XIM debug: chats={chats?.GetType().FullName ?? "null"}");
+
+        if (chats != null)
+        {
+            var count = TryGetCount(chats, out var chatCount)
+                ? chatCount.ToString()
+                : "unknown";
+
+            Plugin.ChatGui.Print($"XIM debug: chatsCount={count}");
+        }
+
+        var historyCount = 0;
+        var windowCount = 0;
+        var openCount = 0;
+        var inputCount = 0;
+        var maxLengthReadableCount = 0;
+
+        foreach (var history in GetMessageHistories())
+        {
+            historyCount++;
+
+            Plugin.ChatGui.Print($"XIM debug: history[{historyCount}]={history.GetType().FullName}");
+
+            var window = GetFieldOrProperty(history, "ChatWindow");
+            if (window == null)
+            {
+                Plugin.ChatGui.Print("XIM debug:   ChatWindow=null/missing");
+                DebugPrintLikelyMembers(history, "Window");
+                continue;
+            }
+
+            windowCount++;
+
+            var isOpenText = TryGetBool(window, "IsOpen", out var isOpen)
+                ? isOpen.ToString()
+                : "unreadable";
+
+            if (isOpen)
+                openCount++;
+
+            Plugin.ChatGui.Print($"XIM debug:   window={window.GetType().FullName}, IsOpen={isOpenText}");
+
+            var input = GetFieldOrProperty(window, "Input");
+            if (input == null)
+            {
+                Plugin.ChatGui.Print("XIM debug:   Input=null/missing");
+                DebugPrintLikelyMembers(window, "Input");
+                continue;
+            }
+
+            inputCount++;
+
+            var maxLengthText = TryGetInt(input, "MaxLength", out var maxLength)
+                ? maxLength.ToString()
+                : "unreadable";
+
+            if (TryGetInt(input, "MaxLength", out _))
+                maxLengthReadableCount++;
+
+            Plugin.ChatGui.Print($"XIM debug:   input={input.GetType().FullName}, MaxLength={maxLengthText}");
+
+            DebugPrintLikelyMembers(input, "Text");
+            DebugPrintLikelyMembers(input, "Length");
+        }
+
+        Plugin.ChatGui.Print(
+            $"XIM debug: histories={historyCount}, windows={windowCount}, open={openCount}, inputs={inputCount}, maxLengthReadable={maxLengthReadableCount}");
+    }
+
+    public void DebugPrintAssemblySearch()
+    {
+        if (!TryGetMessengerPlugin(out var messenger))
+        {
+            Plugin.ChatGui.PrintError("XIM debug: Messenger plugin not found.");
+            return;
+        }
+
+        var assembly = messenger.GetType().Assembly;
+
+        Plugin.ChatGui.Print($"XIM debug search: asm={assembly.GetName().Name}");
+
+        foreach (var type in assembly.GetTypes())
+        {
+            var name = type.FullName ?? type.Name;
+
+            if (!name.Contains("Message", StringComparison.OrdinalIgnoreCase) &&
+                !name.Contains("Chat", StringComparison.OrdinalIgnoreCase) &&
+                !name.Contains("Window", StringComparison.OrdinalIgnoreCase) &&
+                !name.EndsWith(".S", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            Plugin.ChatGui.Print($"XIM type: {name}");
+
+            foreach (var field in type.GetFields(Flags))
+            {
+                if (LooksRelevant(field.Name) || LooksRelevant(field.FieldType.FullName ?? field.FieldType.Name))
+                    Plugin.ChatGui.Print($"  field {field.FieldType.Name} {field.Name}");
+            }
+
+            foreach (var property in type.GetProperties(Flags))
+            {
+                if (property.GetIndexParameters().Length > 0)
+                    continue;
+
+                if (LooksRelevant(property.Name) || LooksRelevant(property.PropertyType.FullName ?? property.PropertyType.Name))
+                    Plugin.ChatGui.Print($"  prop {property.PropertyType.Name} {property.Name}");
+            }
+        }
+    }
+
+    private bool SetInputEnabled(object input, bool enabled)
+    {
+        var maxLengthField = input.GetType().GetField("MaxLength", Flags);
+        var maxLengthProperty = input.GetType().GetProperty("MaxLength", Flags);
+
+        if (maxLengthField == null && maxLengthProperty == null)
+        {
+            Plugin.Log.Warning($"[XivMessengerApi] SetInputEnabled: MaxLength field/property missing. Type={input.GetType().FullName}");
+            return false;
+        }
+
+        if (!originalInputMaxLengths.ContainsKey(input))
+        {
+            var original = TryGetInt(input, "MaxLength", out var current)
+                ? current
+                : DefaultInputMaxLength;
+
+            if (original <= 0)
+                original = DefaultInputMaxLength;
+
+            originalInputMaxLengths[input] = original;
+        }
+
+        try
+        {
+            if (enabled)
+            {
+                var restore = originalInputMaxLengths.TryGetValue(input, out var original)
+                    ? original
+                    : DefaultInputMaxLength;
+
+                if (TrySetInt(input, "MaxLength", restore))
+                {
+                    Plugin.Log.Verbose($"[XivMessengerApi] Restored XIM input MaxLength={restore}.");
+                    return true;
+                }
+
+                return false;
+            }
+
+            ClearInputText(input);
+
+            if (TrySetInt(input, "MaxLength", 0))
+            {
+                Plugin.Log.Verbose("[XivMessengerApi] Disabled XIM input MaxLength=0.");
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Warning(ex, "[XivMessengerApi] Failed to toggle XIM input.");
+            return false;
+        }
+    }
+
+    private static void ClearInputText(object input)
+    {
+        foreach (var name in new[] { "Text", "CurrentText", "InputText", "Message" })
+        {
+            var field = input.GetType().GetField(name, Flags);
+            if (field != null && field.FieldType == typeof(string))
+            {
+                field.SetValue(input, string.Empty);
+                return;
+            }
+
+            var property = input.GetType().GetProperty(name, Flags);
+            if (property != null &&
+                property.PropertyType == typeof(string) &&
+                property.SetMethod != null)
+            {
+                property.SetValue(input, string.Empty);
+                return;
+            }
+        }
+    }
+
+    private IEnumerable<object> GetChatWindows()
+    {
+        foreach (var history in GetMessageHistories())
+        {
+            var chatWindow = GetFieldOrProperty(history, "ChatWindow");
+
+            if (chatWindow != null)
+            {
+                yield return chatWindow;
+                continue;
+            }
+
+            // Fallback: if the field name changed, find likely window object.
+            foreach (var memberValue in GetObjectMemberValues(history))
+            {
+                var typeName = memberValue.GetType().FullName ?? memberValue.GetType().Name;
+
+                if (!typeName.Contains("Window", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (HasBoolMember(memberValue, "IsOpen"))
+                    yield return memberValue;
+            }
+        }
+    }
+
+    private IEnumerable<object> GetInputs()
+    {
+        foreach (var chatWindow in GetChatWindows())
+        {
+            var input = GetFieldOrProperty(chatWindow, "Input");
+
+            if (input != null)
+            {
+                yield return input;
+                continue;
+            }
+
+            // Fallback: if the field name changed, find likely input object.
+            foreach (var memberValue in GetObjectMemberValues(chatWindow))
+            {
+                var typeName = memberValue.GetType().FullName ?? memberValue.GetType().Name;
+
+                if (typeName.Contains("Input", StringComparison.OrdinalIgnoreCase) ||
+                    HasIntMember(memberValue, "MaxLength"))
+                {
+                    yield return memberValue;
+                }
+            }
+        }
+    }
+
+    private IEnumerable<object> GetMessageHistories()
+    {
+        if (!TryGetMessengerPlugin(out var messenger))
+        {
+            Plugin.Log.Warning("[XivMessengerApi] Messenger plugin not found.");
+            yield break;
+        }
+
+        var assembly = messenger.GetType().Assembly;
+
+        var serviceHolder =
+            assembly.GetType("Messenger.S") ??
+            FindTypeWithStaticMember(assembly, "MessageProcessor");
+
+        if (serviceHolder == null)
+        {
+            Plugin.Log.Warning("[XivMessengerApi] Could not find XIM service holder type with MessageProcessor.");
+            yield break;
+        }
+
+        var messageProcessor = GetStaticFieldOrProperty(serviceHolder, "MessageProcessor");
+
+        if (messageProcessor == null)
+        {
+            Plugin.Log.Warning($"[XivMessengerApi] {serviceHolder.FullName}.MessageProcessor is null or missing.");
+            yield break;
+        }
+
+        var chats = GetFieldOrProperty(messageProcessor, "Chats");
+
+        if (chats == null)
+        {
+            Plugin.Log.Warning($"[XivMessengerApi] Could not find Chats on {messageProcessor.GetType().FullName}.");
+            yield break;
+        }
+
+        foreach (var value in EnumerateValues(chats))
+        {
+            if (value != null)
+                yield return value;
+        }
     }
 
     private bool TryGetMessengerPlugin(out object plugin)
@@ -110,428 +461,314 @@ public sealed class XivMessengerApi : IDisposable
             return true;
         }
 
-        if (reflector.TryGetDalamudPlugin(
-                InternalName,
-                out IDalamudPlugin? instance,
-                suppressErrors: true,
-                ignoreCache: false) &&
-            instance != null)
+        foreach (var name in new[]
+                 {
+                     "Messenger",
+                     "XIV Instant Messenger",
+                     "XIVInstantMessenger",
+                 })
         {
-            cachedPlugin = instance;
-            plugin = instance;
-            return true;
+            if (reflector.TryGetDalamudPlugin(
+                    name,
+                    out IDalamudPlugin? instance,
+                    suppressErrors: true,
+                    ignoreCache: true) &&
+                instance != null)
+            {
+                cachedPlugin = instance;
+                plugin = instance;
+
+                Plugin.Log.Information($"[XivMessengerApi] Found XIM plugin via '{name}', type={instance.GetType().FullName}.");
+                return true;
+            }
         }
 
         plugin = null!;
         return false;
     }
 
-    private static bool TryReadWindowOpen(object obj, string path, out bool isOpen)
+    private static IEnumerable<object?> EnumerateValues(object collectionLike)
     {
-        isOpen = false;
-
-        if (obj is Window window)
+        if (collectionLike is IDictionary dictionary)
         {
-            isOpen = window.IsOpen;
-            return true;
+            foreach (DictionaryEntry entry in dictionary)
+                yield return entry.Value;
+
+            yield break;
         }
 
+        var values = GetFieldOrProperty(collectionLike, "Values") as IEnumerable;
+
+        if (values != null)
+        {
+            foreach (var value in values)
+                yield return value;
+
+            yield break;
+        }
+
+        if (collectionLike is IEnumerable enumerable && collectionLike is not string)
+        {
+            foreach (var value in enumerable)
+                yield return value;
+        }
+    }
+
+    private static Type? FindTypeWithStaticMember(Assembly assembly, string memberName)
+    {
+        foreach (var type in assembly.GetTypes())
+        {
+            if (type.GetField(memberName, Flags) != null)
+                return type;
+
+            if (type.GetProperty(memberName, Flags) != null)
+                return type;
+        }
+
+        return null;
+    }
+
+    private static object? GetStaticFieldOrProperty(Type type, string name)
+    {
+        try
+        {
+            var field = type.GetField(name, Flags);
+            if (field != null)
+                return field.GetValue(null);
+
+            var property = type.GetProperty(name, Flags);
+            if (property != null && property.GetIndexParameters().Length == 0)
+                return property.GetValue(null);
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static object? GetFieldOrProperty(object obj, string name)
+    {
         var type = obj.GetType();
 
-        if (!LooksLikeWindow(type, path))
-            return false;
-
-        foreach (var member in GetBoolMembers(type))
+        try
         {
-            if (!string.Equals(member.Name, "IsOpen", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(member.Name, "Open", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(member.Name, "Visible", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(member.Name, "IsVisible", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
+            var field = type.GetField(name, Flags);
+            if (field != null)
+                return field.GetValue(obj);
 
-            if (TryGetBool(member, obj, out isOpen))
-                return true;
+            var property = type.GetProperty(name, Flags);
+            if (property != null && property.GetIndexParameters().Length == 0)
+                return property.GetValue(obj);
+        }
+        catch
+        {
+            return null;
         }
 
-        return false;
+        return null;
     }
 
-    private static bool TryCloseWindow(object obj, string path)
+    private static IEnumerable<object> GetObjectMemberValues(object obj)
     {
-        if (obj is Window window)
-        {
-            if (!window.IsOpen)
-                return false;
-
-            window.IsOpen = false;
-            return true;
-        }
-
         var type = obj.GetType();
 
-        if (!LooksLikeWindow(type, path))
-            return false;
-
-        var changed = false;
-
-        foreach (var member in GetBoolMembers(type))
+        foreach (var field in type.GetFields(Flags))
         {
-            if (!CanSet(member))
+            if (field.FieldType.IsValueType || field.FieldType == typeof(string))
                 continue;
 
-            if (!string.Equals(member.Name, "IsOpen", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(member.Name, "Open", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(member.Name, "Visible", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(member.Name, "IsVisible", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (TryGetBool(member, obj, out var current) && current)
-            {
-                changed |= TrySetBool(member, obj, false);
-            }
-        }
-
-        TryInvokeNoArg(obj, "Close");
-        TryInvokeNoArg(obj, "Hide");
-
-        return changed;
-    }
-
-    private static bool TryReadTextInputEnabled(object obj, string path, out bool enabled)
-    {
-        enabled = false;
-
-        foreach (var member in GetBoolMembers(obj.GetType()))
-        {
-            if (!LooksLikeTextInputMember(member.Name, obj.GetType(), path))
-                continue;
-
-            if (!TryGetBool(member, obj, out var raw))
-                continue;
-
-            enabled = IsNegativeName(member.Name) ? !raw : raw;
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TrySetTextInputEnabled(object obj, string path, bool enabled)
-    {
-        foreach (var member in GetBoolMembers(obj.GetType()))
-        {
-            if (!CanSet(member))
-                continue;
-
-            if (!LooksLikeTextInputMember(member.Name, obj.GetType(), path))
-                continue;
-
-            var raw = IsNegativeName(member.Name) ? !enabled : enabled;
-
-            if (TrySetBool(member, obj, raw))
-                return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryInvokeTextInputSetter(object obj, bool enabled)
-    {
-        foreach (var methodName in new[]
-                 {
-                     "SetTextInputEnabled",
-                     "SetInputEnabled",
-                     "ToggleTextInput",
-                     "ToggleInput",
-                     "SetTextBoxEnabled",
-                 })
-        {
-            var method = obj.GetType().GetMethod(methodName, Flags);
-
-            if (method == null)
-                continue;
-
-            var parameters = method.GetParameters();
-
-            if (parameters.Length != 1 || parameters[0].ParameterType != typeof(bool))
-                continue;
+            object? value;
 
             try
             {
-                method.Invoke(obj, [enabled]);
-                return true;
+                value = field.GetValue(obj);
             }
             catch
             {
-                return false;
+                continue;
             }
+
+            if (value != null)
+                yield return value;
+        }
+
+        foreach (var property in type.GetProperties(Flags))
+        {
+            if (property.GetIndexParameters().Length > 0)
+                continue;
+
+            if (property.PropertyType.IsValueType || property.PropertyType == typeof(string))
+                continue;
+
+            object? value;
+
+            try
+            {
+                value = property.GetValue(obj);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (value != null)
+                yield return value;
+        }
+    }
+
+    private static bool TryGetBool(object obj, string name, out bool value)
+    {
+        value = false;
+
+        var raw = GetFieldOrProperty(obj, name);
+        if (raw is not bool boolValue)
+            return false;
+
+        value = boolValue;
+        return true;
+    }
+
+    private static bool TrySetBool(object obj, string name, bool value)
+    {
+        var type = obj.GetType();
+
+        try
+        {
+            var field = type.GetField(name, Flags);
+            if (field != null && field.FieldType == typeof(bool) && !field.IsInitOnly)
+            {
+                field.SetValue(obj, value);
+                return true;
+            }
+
+            var property = type.GetProperty(name, Flags);
+            if (property != null &&
+                property.PropertyType == typeof(bool) &&
+                property.SetMethod != null)
+            {
+                property.SetValue(obj, value);
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
         }
 
         return false;
     }
 
-    private static void TrySaveConfig(object obj)
+    private static bool TryGetInt(object obj, string name, out int value)
     {
-        foreach (var methodName in new[]
-                 {
-                     "Save",
-                     "SaveConfig",
-                     "SaveConfiguration",
-                 })
-        {
-            if (TryInvokeNoArg(obj, methodName))
-                return;
-        }
+        value = 0;
 
-        foreach (var entry in WalkObjectGraph(obj, maxDepth: 3))
-        {
-            if (entry.Value.GetType().Name.Contains("Config", StringComparison.OrdinalIgnoreCase) &&
-                TryInvokeNoArg(entry.Value, "Save"))
-            {
-                return;
-            }
-        }
+        var raw = GetFieldOrProperty(obj, name);
+        if (raw is not int intValue)
+            return false;
+
+        value = intValue;
+        return true;
     }
 
-    private static bool TryInvokeNoArg(object obj, string methodName)
+    private static bool TrySetInt(object obj, string name, int value)
     {
-        var method = obj.GetType().GetMethod(methodName, Flags);
-
-        if (method == null || method.GetParameters().Length != 0)
-            return false;
+        var type = obj.GetType();
 
         try
         {
-            method.Invoke(obj, null);
-            return true;
+            var field = type.GetField(name, Flags);
+            if (field != null && field.FieldType == typeof(int) && !field.IsInitOnly)
+            {
+                field.SetValue(obj, value);
+                return true;
+            }
+
+            var property = type.GetProperty(name, Flags);
+            if (property != null &&
+                property.PropertyType == typeof(int) &&
+                property.SetMethod != null)
+            {
+                property.SetValue(obj, value);
+                return true;
+            }
         }
         catch
         {
             return false;
         }
+
+        return false;
     }
 
-    private static bool LooksLikeWindow(Type type, string path)
+    private static bool HasBoolMember(object obj, string name)
     {
-        return type.Name.Contains("Window", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("Window", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("Windows", StringComparison.OrdinalIgnoreCase);
+        return TryGetBool(obj, name, out _);
     }
 
-    private static bool LooksLikeTextInputMember(string memberName, Type ownerType, string path)
+    private static bool HasIntMember(object obj, string name)
     {
-        if (memberName.Contains("TextInput", StringComparison.OrdinalIgnoreCase) ||
-            memberName.Contains("TextBox", StringComparison.OrdinalIgnoreCase))
+        return TryGetInt(obj, name, out _);
+    }
+
+    private static bool TryGetCount(object obj, out int count)
+    {
+        count = 0;
+
+        var raw = GetFieldOrProperty(obj, "Count");
+
+        if (raw is int intCount)
         {
+            count = intCount;
             return true;
         }
 
-        if (!memberName.Contains("Input", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return ownerType.Name.Contains("Config", StringComparison.OrdinalIgnoreCase) ||
-               ownerType.Name.Contains("Setting", StringComparison.OrdinalIgnoreCase) ||
-               ownerType.Name.Contains("Messenger", StringComparison.OrdinalIgnoreCase) ||
-               ownerType.Name.Contains("Window", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("Config", StringComparison.OrdinalIgnoreCase) ||
-               path.Contains("Setting", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsNegativeName(string name)
-    {
-        return name.Contains("Disable", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Disabled", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Block", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Blocked", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Lock", StringComparison.OrdinalIgnoreCase) ||
-               name.Contains("Locked", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static IEnumerable<MemberInfo> GetBoolMembers(Type type)
-    {
-        foreach (var property in type.GetProperties(Flags))
+        if (obj is ICollection collection)
         {
-            if (property.GetIndexParameters().Length == 0 &&
-                property.PropertyType == typeof(bool))
-            {
-                yield return property;
-            }
+            count = collection.Count;
+            return true;
         }
+
+        return false;
+    }
+
+    private static void DebugPrintLikelyMembers(object obj, string filter)
+    {
+        var type = obj.GetType();
 
         foreach (var field in type.GetFields(Flags))
         {
-            if (field.FieldType == typeof(bool))
-                yield return field;
-        }
-    }
-
-    private static bool CanSet(MemberInfo member)
-    {
-        return member switch
-        {
-            PropertyInfo property => property.SetMethod != null,
-            FieldInfo field => !field.IsInitOnly,
-            _ => false,
-        };
-    }
-
-    private static bool TryGetBool(MemberInfo member, object obj, out bool value)
-    {
-        value = false;
-
-        try
-        {
-            switch (member)
+            if (field.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                field.FieldType.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                (field.FieldType.FullName?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false))
             {
-                case PropertyInfo property:
-                    value = (bool)property.GetValue(obj)!;
-                    return true;
-
-                case FieldInfo field:
-                    value = (bool)field.GetValue(obj)!;
-                    return true;
-
-                default:
-                    return false;
+                Plugin.ChatGui.Print($"XIM debug:     field {field.FieldType.Name} {field.Name}");
             }
         }
-        catch
-        {
-            return false;
-        }
-    }
 
-    private static bool TrySetBool(MemberInfo member, object obj, bool value)
-    {
-        try
-        {
-            switch (member)
-            {
-                case PropertyInfo property:
-                    property.SetValue(obj, value);
-                    return true;
-
-                case FieldInfo field:
-                    field.SetValue(obj, value);
-                    return true;
-
-                default:
-                    return false;
-            }
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static IEnumerable<(object Value, string Path)> WalkObjectGraph(object root, int maxDepth)
-    {
-        var visited = new HashSet<object>(ReferenceComparer.Instance);
-        var queue = new Queue<(object Value, string Path, int Depth)>();
-
-        queue.Enqueue((root, root.GetType().Name, 0));
-        visited.Add(root);
-
-        while (queue.Count > 0)
-        {
-            var current = queue.Dequeue();
-            yield return (current.Value, current.Path);
-
-            if (current.Depth >= maxDepth)
-                continue;
-
-            var type = current.Value.GetType();
-
-            if (ShouldSkipType(type))
-                continue;
-
-            if (current.Value is IEnumerable enumerable && current.Value is not string)
-            {
-                var count = 0;
-
-                foreach (var item in enumerable)
-                {
-                    if (item == null)
-                        continue;
-
-                    if (++count > 200)
-                        break;
-
-                    if (ShouldSkipType(item.GetType()))
-                        continue;
-
-                    if (visited.Add(item))
-                        queue.Enqueue((item, $"{current.Path}[]", current.Depth + 1));
-                }
-            }
-
-            foreach (var member in GetObjectMembers(type))
-            {
-                object? value;
-
-                try
-                {
-                    value = member switch
-                    {
-                        PropertyInfo property => property.GetValue(current.Value),
-                        FieldInfo field => field.GetValue(current.Value),
-                        _ => null,
-                    };
-                }
-                catch
-                {
-                    continue;
-                }
-
-                if (value == null)
-                    continue;
-
-                if (ShouldSkipType(value.GetType()))
-                    continue;
-
-                if (visited.Add(value))
-                    queue.Enqueue((value, $"{current.Path}.{member.Name}", current.Depth + 1));
-            }
-        }
-    }
-
-    private static IEnumerable<MemberInfo> GetObjectMembers(Type type)
-    {
         foreach (var property in type.GetProperties(Flags))
         {
-            if (property.GetIndexParameters().Length == 0 &&
-                property.PropertyType != typeof(string) &&
-                !property.PropertyType.IsValueType)
-            {
-                yield return property;
-            }
-        }
+            if (property.GetIndexParameters().Length > 0)
+                continue;
 
-        foreach (var field in type.GetFields(Flags))
-        {
-            if (field.FieldType != typeof(string) &&
-                !field.FieldType.IsValueType)
+            if (property.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                property.PropertyType.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                (property.PropertyType.FullName?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false))
             {
-                yield return field;
+                Plugin.ChatGui.Print($"XIM debug:     prop {property.PropertyType.Name} {property.Name}");
             }
         }
     }
 
-    private static bool ShouldSkipType(Type type)
+    private static bool LooksRelevant(string text)
     {
-        if (type.IsPrimitive || type.IsEnum || type == typeof(string))
-            return true;
-
-        var ns = type.Namespace ?? string.Empty;
-
-        return ns.StartsWith("System.Reflection", StringComparison.OrdinalIgnoreCase) ||
-               ns.StartsWith("System.Runtime", StringComparison.OrdinalIgnoreCase) ||
-               ns.StartsWith("System.Threading", StringComparison.OrdinalIgnoreCase);
+        return text.Contains("Message", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("Chat", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("Window", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("Input", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("Length", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("Text", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class ReferenceComparer : IEqualityComparer<object>

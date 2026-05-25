@@ -107,12 +107,13 @@ public sealed class XIVMessengerManager : IDisposable
 
     private void EnforceWindowClosed()
     {
+        //Plugin.ChatGui.Print($" xiv Window {plugin.XivMessengerApi.IsWindowOpen()}");
         if (!IsClosedByChatHidden && !IsClosedByBlindfold)
             return;
-
+        
         if (!plugin.XivMessengerApi.IsWindowOpen())
             return;
-
+        Plugin.ChatGui.Print("Blocking Window");
         plugin.XivMessengerApi.CloseWindow();
     }
 
@@ -120,11 +121,19 @@ public sealed class XIVMessengerManager : IDisposable
     {
         var wantedEnabled = !IsTextInputBlocked;
 
-        if (wantedEnabled == lastWantedTextInputEnabled)
+        if (!wantedEnabled)
+        {
+            // Keep applying while blocked, because XIM can create new ChatWindow/Input objects later.
+            plugin.XivMessengerApi.ToggleTextInput(false);
+            lastWantedTextInputEnabled = false;
+            return;
+        }
+
+        if (lastWantedTextInputEnabled)
             return;
 
-        if (plugin.XivMessengerApi.ToggleTextInput(wantedEnabled))
-            lastWantedTextInputEnabled = wantedEnabled;
+        if (plugin.XivMessengerApi.ToggleTextInput(true))
+            lastWantedTextInputEnabled = true;
     }
 
     private void ReleaseTextInputIfNeeded()
