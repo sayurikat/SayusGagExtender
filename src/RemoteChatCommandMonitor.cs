@@ -481,7 +481,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         }
         if (arguments[0].Equals("settitle", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
         {
-            var title = arguments[1].Trim();
+
+            var title = string.Join(" ", arguments.Skip(1)).Trim();
             var json = BuildRemoteTitleJsonFromCurrent(title);
 
             if (string.IsNullOrWhiteSpace(json))
@@ -518,7 +519,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     ]);
                 return;
             }
-            var title = arguments[2].Trim();
+            var title = string.Join(" ", arguments.Skip(2)).Trim();
             var json = BuildRemoteTitleJsonFromCurrent(title);
 
             if (string.IsNullOrWhiteSpace(json))
@@ -816,10 +817,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 return;
             }
 
-            plugin.HonorificManager.SetTitle(
-                json,
-                RemoteHonorificPriority,
-                this);
+            plugin.Configuration.RemotePermanentHonorificTitleJson = json;
+            plugin.HonorificManager.SetTitle(json, RemoteHonorificPriority, this);
 
             hasSubmittedRemoteTitleRequest = true;
             lastSubmittedRemoteTitleJson = json;
@@ -830,6 +829,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     {
         _ = Plugin.Framework.RunOnFrameworkThread(() =>
         {
+
+            plugin.Configuration.RemotePermanentHonorificTitleJson = string.Empty;
             plugin.HonorificManager.RecallTitle(this);
 
             hasSubmittedRemoteTitleRequest = false;
