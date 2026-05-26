@@ -11,9 +11,13 @@ public partial class ConfigWindow
     private int rouletteSelectedAddIndex;
     private string rouletteSearchText = string.Empty;
     private string rouletteIntervalSecondsText = string.Empty;
+    private readonly Dictionary<string, Guid> stagedRouletteMoodleSelections = new();
+    private readonly Dictionary<string, string> rouletteMoodleSearchText = new();
 
     private void DrawRouletteTab()
     {
+        RefreshMoodleBlockOptionsIfNeeded();
+
         ImGui.BeginDisabled();
         var remoteSet = configuration.JobRouletteRemoteSet;
         if (ImGui.Checkbox("Remote Set", ref remoteSet))
@@ -48,12 +52,16 @@ public partial class ConfigWindow
 
         DrawRouletteGearsetWhitelist();
 
-        
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        DrawRouletteEffects();
     }
 
     private void DrawRouletteMainSettings()
     {
-        
+
         var enabled = configuration.JobRouletteEnabled;
         if (ImGui.Checkbox("Enable Job Roulette", ref enabled))
         {
@@ -305,6 +313,232 @@ public partial class ConfigWindow
             configuration.Save();
         }
     }
+
+    private void DrawRouletteEffects()
+    {
+        ImGui.Text("Roulette Effects");
+        ImGui.TextWrapped("Applies while Job Roulette is enabled and at least one gearset is whitelisted.");
+
+        ImGui.Spacing();
+
+        DrawSingleRouletteEffectEditor("Job Roulette active", "job-roulette-active-effect", configuration.JobRouletteEffect);
+
+        ImGui.Spacing();
+
+        if (ImGui.Button("Refresh Moodle list##roulette-effects"))
+            _ = RefreshMoodleBlockOptionsAsync(force: true);
+
+        if (moodleBlockOptionsLoading)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled("Loading Moodles...");
+        }
+    }
+
+    private void DrawSingleRouletteEffectEditor(string label, string controlId, Configuration.JobRouletteEffectConfig config)
+    {
+        ImGui.PushID(controlId);
+
+        if (ImGui.CollapsingHeader($"{label}##header", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            ImGui.Indent();
+
+            DrawRouletteEffectMoodleEditor(controlId, config);
+
+            ImGui.Spacing();
+
+            DrawRouletteEffectHonorificEditor(config);
+
+            ImGui.Unindent();
+        }
+
+        ImGui.PopID();
+    }
+
+    private void DrawRouletteEffectMoodleEditor(string controlId, Configuration.JobRouletteEffectConfig config)
+    {
+        ImGui.TextUnformatted("Moodle");
+
+        var displayName = GetCurrentRouletteMoodleDisplayName(config.MoodleId, config.MoodleName);
+
+        stagedRouletteMoodleSelections.TryGetValue(controlId, out var stagedId);
+
+        var stagedPreview = stagedId != Guid.Empty && moodleBlockOptions.TryGetValue(stagedId, out var stagedName) ? stagedName : displayName;
+
+        const float selectedRowWidth = 300f;
+
+        if (config.MoodleId != Guid.Empty)
+        {
+            var ctrlHeld = ImGui.GetIO().KeyCtrl;
+
+            ImGui.Indent();
+
+            ImGui.PushID($"{controlId}-selected-{config.MoodleId}");
+
+            if (DrawGagSpeakItem(displayName, selectedRowWidth, ctrlHeld))
+            {
+                config.MoodleId = Guid.Empty;
+                config.MoodleName = string.Empty;
+                configuration.Save();
+
+                stagedRouletteMoodleSelections.Remove(controlId);
+                rouletteMoodleSearchText[controlId] = string.Empty;
+            }
+
+            ImGui.PopID();
+
+            ImGui.Unindent();
+        }
+        else
+        {
+            ImGui.TextDisabled("No Moodle selected.");
+        }
+
+        ImGui.SetNextItemWidth(300);
+
+        if (ImGui.BeginCombo($"##{controlId}-moodle-combo", stagedPreview))
+        {
+            if (!rouletteMoodleSearchText.TryGetValue(controlId, out var searchText))
+                searchText = string.Empty;
+
+            if (ImGui.IsWindowAppearing())
+                ImGui.SetKeyboardFocusHere();
+
+            ImGui.SetNextItemWidth(-1);
+
+            if (ImGui.InputText($"##{controlId}-moodle-search", ref searchText, 128))
+                rouletteMoodleSearchText[controlId] = searchText;
+
+            ImGui.Separator();
+
+            if (ImGui.Selectable($"None##{controlId}-none", config.MoodleId == Guid.Empty))
+            {
+                stagedRouletteMoodleSelections[controlId] = Guid.Empty;
+                rouletteMoodleSearchText[controlId] = string.Empty;
+                ImGui.CloseCurrentPopup();
+            }
+
+            ImGui.Separator();
+
+            var filteredMoodles = moodleBlockOptions
+                .Where(x => string.IsNullOrWhiteSpace(searchText) || x.Value.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            foreach (var moodle in filteredMoodles)
+            {
+                var isSelected = moodle.Key == config.MoodleId;
+                var isStaged = moodle.Key == stagedId;
+
+                if (ImGui.Selectable($"{moodle.Value}##{controlId}-{moodle.Key}", isSelected || isStaged))
+                {
+                    stagedRouletteMoodleSelections[controlId] = moodle.Key;
+                    rouletteMoodleSearchText[controlId] = string.Empty;
+                    ImGui.CloseCurrentPopup();
+                }
+
+                if (isSelected)
+                    ImGui.SetItemDefaultFocus();
+            }
+
+            if (moodleBlockOptions.Count == 0)
+                ImGui.TextDisabled(moodleBlockOptionsLoading ? "Loading Moodles..." : "No Moodles found. Click Refresh Moodle list.");
+            else if (filteredMoodles.Length == 0)
+                ImGui.TextDisabled("No matching Moodles.");
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.SameLine();
+
+        var stagedValid = stagedId == Guid.Empty || moodleBlockOptions.ContainsKey(stagedId);
+        var disableSetButton = !stagedRouletteMoodleSelections.ContainsKey(controlId) || !stagedValid;
+
+        if (disableSetButton)
+            ImGui.BeginDisabled();
+
+        if (ImGui.Button($"Set##{controlId}-moodle-set"))
+        {
+            if (stagedId == Guid.Empty)
+            {
+                config.MoodleId = Guid.Empty;
+                config.MoodleName = string.Empty;
+            }
+            else if (moodleBlockOptions.TryGetValue(stagedId, out var selectedName))
+            {
+                config.MoodleId = stagedId;
+                config.MoodleName = selectedName;
+            }
+
+            configuration.Save();
+
+            stagedRouletteMoodleSelections.Remove(controlId);
+            rouletteMoodleSearchText[controlId] = string.Empty;
+        }
+
+        if (disableSetButton)
+            ImGui.EndDisabled();
+    }
+
+    private void DrawRouletteEffectHonorificEditor(Configuration.JobRouletteEffectConfig config)
+    {
+        ImGui.TextUnformatted("Honorific");
+
+        var title = config.HonorificTitle;
+        var color = config.HonorificColor;
+        var glow = config.HonorificGlow;
+        var sourceJson = config.HonorificSourceJson;
+        var priority = config.HonorificPriority;
+
+        if (plugin.HonorificManager.DrawPermanentTitleConfigEditors(ref title, ref color, ref glow, ref sourceJson, ref priority, titleWidth: 160f, priorityWidth: 50f))
+        {
+            config.HonorificTitle = title;
+            config.HonorificColor = color;
+            config.HonorificGlow = glow;
+            config.HonorificSourceJson = sourceJson;
+            config.HonorificPriority = priority;
+
+            configuration.Save();
+        }
+
+        ImGui.SameLine();
+
+        var ctrlHeld = ImGui.GetIO().KeyCtrl;
+        if (!ctrlHeld)
+            ImGui.BeginDisabled();
+
+        if (ImGui.SmallButton("Clear##honorific"))
+        {
+            config.HonorificTitle = string.Empty;
+            config.HonorificColor = new Vector3(1f, 1f, 1f);
+            config.HonorificGlow = new Vector3(0f, 0f, 0f);
+            config.HonorificSourceJson = string.Empty;
+            config.HonorificPriority = 0;
+
+            configuration.Save();
+        }
+
+        if (!ctrlHeld)
+            ImGui.EndDisabled();
+
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(ctrlHeld ? "Clear this Honorific title" : "Hold CTRL to clear");
+    }
+
+    private string GetCurrentRouletteMoodleDisplayName(Guid id, string savedName)
+    {
+        if (id == Guid.Empty)
+            return "None";
+
+        if (moodleBlockOptions.TryGetValue(id, out var currentName))
+            return currentName;
+
+        if (!string.IsNullOrWhiteSpace(savedName))
+            return $"{savedName} (missing)";
+
+        return $"{id} (missing)";
+    }
+
 
     private static bool RouletteGearsetConfigMatches(
         Configuration.JobRouletteGearsetConfig config,

@@ -50,6 +50,11 @@ public unsafe sealed class JobManager : IDisposable
 
     private Guid requestedQuotaRunningMoodleId = Guid.Empty;
     private Guid requestedQuotaEmptyMoodleId = Guid.Empty;
+    private Guid requestedRouletteMoodleId = Guid.Empty;
+
+    private string lastSubmittedRouletteHonorificJson = string.Empty;
+    private int lastSubmittedRouletteHonorificPriority = -1;
+    private bool hasSubmittedRouletteHonorificRequest;
 
     private DateTime jobSwitchCountCooldown = DateTime.MinValue;
 
@@ -108,6 +113,7 @@ public unsafe sealed class JobManager : IDisposable
         Plugin.Framework.Update -= OnFrameworkUpdate;
 
         RemoveQuotaMoodleIfApplied();
+        RemoveRouletteEffectIfApplied();
 
         equipGearsetHook.Disable();
         equipGearsetHook.Dispose();
@@ -297,12 +303,15 @@ public unsafe sealed class JobManager : IDisposable
         var now = DateTime.UtcNow;
         var nowMs = Environment.TickCount64;
 
+        UpdateRouletteEffectState();
+
         if (!Enabled && !IsQuotaEnabled() && !RouletteEnabled)
         {
             wasBlockingActive = false;
             quotaLockCaptureDueUtc = DateTime.MinValue;
             pendingRouletteSwitch = false;
             RemoveQuotaMoodleIfApplied();
+            RemoveRouletteEffectIfApplied();
 
             if (IsPlayerReadyForGearsetAccess())
             {
@@ -1125,6 +1134,83 @@ public unsafe sealed class JobManager : IDisposable
     {
         plugin.Configuration.JobSwitchQuotaActionLogUtc ??= new List<DateTime>();
     }
+
+    private void UpdateRouletteEffectState()
+    {
+        var config = plugin.Configuration.JobRouletteEffect;
+        var shouldBeActive = RouletteEnabled && plugin.Configuration.JobRouletteWhitelistedGearsets.Count > 0;
+
+        SetRouletteMoodleRequest(shouldBeActive ? config.MoodleId : Guid.Empty);
+        SetRouletteHonorificRequest(shouldBeActive ? config : null);
+    }
+
+    private void SetRouletteMoodleRequest(Guid wantedMoodleId)
+    {
+        if (requestedRouletteMoodleId == wantedMoodleId)
+            return;
+
+        if (requestedRouletteMoodleId != Guid.Empty)
+        {
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(requestedRouletteMoodleId, "JobManager.JobRoulette");
+            requestedRouletteMoodleId = Guid.Empty;
+        }
+
+        if (wantedMoodleId == Guid.Empty)
+            return;
+
+        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, "JobManager.JobRoulette");
+        requestedRouletteMoodleId = wantedMoodleId;
+    }
+
+    private void SetRouletteHonorificRequest(JobRouletteEffectConfig? config)
+    {
+        if (config == null)
+        {
+            RemoveRouletteHonorificRequest();
+            return;
+        }
+
+        var json = BuildRouletteHonorificJson(config);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            RemoveRouletteHonorificRequest();
+            return;
+        }
+
+        if (hasSubmittedRouletteHonorificRequest && lastSubmittedRouletteHonorificPriority == config.HonorificPriority && string.Equals(lastSubmittedRouletteHonorificJson, json, StringComparison.Ordinal))
+            return;
+
+        plugin.HonorificManager.SetTitle(json, config.HonorificPriority, this);
+        hasSubmittedRouletteHonorificRequest = true;
+        lastSubmittedRouletteHonorificJson = json;
+        lastSubmittedRouletteHonorificPriority = config.HonorificPriority;
+    }
+
+    private string BuildRouletteHonorificJson(JobRouletteEffectConfig config)
+    {
+        if (!string.IsNullOrWhiteSpace(config.HonorificSourceJson))
+            return config.HonorificSourceJson;
+
+        return plugin.HonorificManager.BuildTitleJson(config.HonorificTitle, config.HonorificColor, config.HonorificGlow);
+    }
+
+    private void RemoveRouletteHonorificRequest()
+    {
+        if (!hasSubmittedRouletteHonorificRequest)
+            return;
+
+        plugin.HonorificManager.RecallTitle(this);
+        hasSubmittedRouletteHonorificRequest = false;
+        lastSubmittedRouletteHonorificJson = string.Empty;
+        lastSubmittedRouletteHonorificPriority = -1;
+    }
+
+    private void RemoveRouletteEffectIfApplied()
+    {
+        SetRouletteMoodleRequest(Guid.Empty);
+        RemoveRouletteHonorificRequest();
+    }
+
 
     private void UpdateQuotaMoodleState()
     {

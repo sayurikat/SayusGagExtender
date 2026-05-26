@@ -968,11 +968,11 @@ public partial class ConfigWindow
     {
         return status switch
         {
-            FatigueTracker.FatigueStatusLevel.Fresh => "OK",
-            FatigueTracker.FatigueStatusLevel.Straining => "Slightly tired",
-            FatigueTracker.FatigueStatusLevel.Burning => "Exhausted",
-            FatigueTracker.FatigueStatusLevel.Stalled => "Drained",
-            FatigueTracker.FatigueStatusLevel.Broken => "Worn out",
+            FatigueTracker.FatigueStatusLevel.Fresh => "Fresh",
+            FatigueTracker.FatigueStatusLevel.Straining => "Strained",
+            FatigueTracker.FatigueStatusLevel.Burning => "Burning",
+            FatigueTracker.FatigueStatusLevel.Stalled => "Stalled",
+            FatigueTracker.FatigueStatusLevel.Broken => "Broken",
             _ => "Inactive",
         };
     }

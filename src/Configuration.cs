@@ -215,6 +215,19 @@ public class Configuration : IPluginConfiguration
         public byte ClassJobId { get; set; }
         public string JobName { get; set; } = string.Empty;
     }
+    [Serializable]
+    public sealed class JobRouletteEffectConfig
+    {
+        public Guid MoodleId { get; set; } = Guid.Empty;
+        public string MoodleName { get; set; } = string.Empty;
+        public string HonorificTitle { get; set; } = string.Empty;
+        public System.Numerics.Vector3 HonorificColor { get; set; } = new(1f, 1f, 1f);
+        public System.Numerics.Vector3 HonorificGlow { get; set; } = new(0f, 0f, 0f);
+        public string HonorificSourceJson { get; set; } = string.Empty;
+        public int HonorificPriority { get; set; } = 0;
+    }
+
+    public JobRouletteEffectConfig JobRouletteEffect { get; set; } = new();
 
 
 
