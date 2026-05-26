@@ -309,8 +309,20 @@ public class Configuration : IPluginConfiguration
         public int JobRouletteWhitelistedGearsetCount { get; set; } = -1;
         //public int JobRouletteIntervalMinutes { get; set; } = 0;
         public string RemoteTitle { get; set; } = string.Empty;
+        public ControllerHonorificTitleConfig HonorificTitle { get; set; } = new();
     }
 
+
+
+
+    [Serializable]
+    public sealed class ControllerHonorificTitleConfig
+    {
+        public string Json { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public System.Numerics.Vector3 Color { get; set; } = new(1f, 1f, 1f);
+        public System.Numerics.Vector3 Glow { get; set; } = new(0f, 0f, 0f);
+    }
 
 
 

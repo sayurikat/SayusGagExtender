@@ -422,4 +422,8 @@ public sealed class Plugin : IDalamudPlugin
     {
         ControllerWindow.RefreshUserInputState(name, world);
     }
+    public void SetControllerTempHonorificInputState(string name, string world, string json)
+    {
+        ControllerWindow.SetTempHonorificInputState(name, world, json);
+    }
 }

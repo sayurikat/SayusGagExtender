@@ -9,6 +9,7 @@ using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using Lumina.Data.Parsing.Layer;
 using Newtonsoft.Json.Linq;
+using SayusGagExtender.Windows;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -38,6 +39,13 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
     private const byte RemotePackageTypeStatus = 1;
     private const int RemoteStatusPackageVersion = 1;
+    private const byte RemotePackageTypeSetPermanentTitle = 2;
+    private const byte RemotePackageTypeSetTemporaryTitle = 3;
+    private const byte RemotePackageTypeCloneCurrentTitleRequest = 4;
+    private const byte RemotePackageTypeCloneCurrentTitleResponse = 5;
+    private const byte RemotePackageTypeCloneCurrentTempTitleRequest = 6;
+    private const byte RemotePackageTypeCloneCurrentTempTitleResponse = 7;
+    private const int RemoteTitlePackageVersion = 1;
     private readonly RemotePackageTransport packageTransport = new();
 
 
@@ -870,12 +878,130 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 return;
             }
 
+            if (package.PackageType == RemotePackageTypeSetPermanentTitle)
+            {
+                HandleSetPermanentTitlePackage(package, senderName, senderWorld);
+                return;
+            }
+
+            if (package.PackageType == RemotePackageTypeSetTemporaryTitle)
+            {
+                HandleSetTemporaryTitlePackage(package, senderName, senderWorld);
+                return;
+            }
+
+            if (package.PackageType == RemotePackageTypeCloneCurrentTitleRequest)
+            {
+                HandleCloneCurrentTitleRequestPackage(package, senderName, senderWorld);
+                return;
+            }
+
+            if (package.PackageType == RemotePackageTypeCloneCurrentTitleResponse)
+            {
+                HandleCloneCurrentTitleResponsePackage(package, senderName, senderWorld);
+                return;
+            }
+            if (package.PackageType == RemotePackageTypeCloneCurrentTempTitleRequest)
+            {
+                HandleCloneCurrentTempTitleRequestPackage(package, senderName, senderWorld);
+                return;
+            }
+
+            if (package.PackageType == RemotePackageTypeCloneCurrentTempTitleResponse)
+            {
+                HandleCloneCurrentTempTitleResponsePackage(package, senderName, senderWorld);
+                return;
+            }
+
             Plugin.Log.Warning($"Unknown remote package type {package.PackageType} from {senderName}@{senderWorld}.");
         }
         catch (Exception ex)
         {
             Plugin.Log.Error(ex, $"Failed to handle remote package from {senderName}@{senderWorld}.");
         }
+    }
+    private void HandleSetPermanentTitlePackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsAllowedSender(senderName, senderWorld)) return;
+        var version = package.ReadInt();
+        if (version != RemoteTitlePackageVersion) return;
+        var json = package.ReadString();
+        ApplyRemotePermanentTitleJson(json);
+        ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, hidden: true, prefix: GetRemotePrefix());
+    }
+    private void HandleSetTemporaryTitlePackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsAllowedSender(senderName, senderWorld)) return;
+        var version = package.ReadInt();
+        if (version != RemoteTitlePackageVersion) return;
+        var seconds = package.ReadInt();
+        var json = package.ReadString();
+        if (string.IsNullOrWhiteSpace(json)) return;
+        plugin.HonorificManager.SetTitle(json, TimeSpan.FromSeconds(Math.Max(1, seconds)), RemoteHonorificTempPriority, this);
+        ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, hidden: true, prefix: GetRemotePrefix());
+    }
+    private void HandleCloneCurrentTitleRequestPackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsAllowedSender(senderName, senderWorld)) return;
+        var version = package.ReadInt();
+        if (version != RemoteTitlePackageVersion) return;
+        var json = string.Empty;
+
+        try
+        {
+            if (plugin.HonorificApi.IsAvailable())
+                json = plugin.HonorificApi.GetLocalTitleJson();
+        }
+        catch
+        {
+            json = string.Empty;
+        }
+
+        var response = new RemotePackage(RemotePackageTypeCloneCurrentTitleResponse);
+        response.WriteInt(RemoteTitlePackageVersion);
+        response.WriteString(json);
+        _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(response, GetRemotePrefix()));
+    }
+    private void HandleCloneCurrentTitleResponsePackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsControlledUser(senderName, senderWorld)) return;
+        var version = package.ReadInt();
+        if (version != RemoteTitlePackageVersion) return;
+        var json = package.ReadString();
+        var user = GetOrCreateControlledUser(senderName, senderWorld);
+        ApplyControllerHonorificJson(user, json);
+        plugin.Configuration.Save();
+        plugin.RefreshControllerUserInputState(senderName, senderWorld);
+    }
+    private void HandleCloneCurrentTempTitleRequestPackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsAllowedSender(senderName, senderWorld)) return;
+        var version = package.ReadInt();
+        if (version != RemoteTitlePackageVersion) return;
+        var json = string.Empty;
+
+        try
+        {
+            if (plugin.HonorificApi.IsAvailable())
+                json = plugin.HonorificApi.GetLocalTitleJson();
+        }
+        catch
+        {
+            json = string.Empty;
+        }
+
+        var response = new RemotePackage(RemotePackageTypeCloneCurrentTempTitleResponse);
+        response.WriteInt(RemoteTitlePackageVersion);
+        response.WriteString(json);
+        _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(response, GetRemotePrefix()));
+    }
+    private void HandleCloneCurrentTempTitleResponsePackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsControlledUser(senderName, senderWorld)) return;
+        var version = package.ReadInt();
+        if (version != RemoteTitlePackageVersion) return;
+        var json = package.ReadString();
+        plugin.SetControllerTempHonorificInputState(senderName, senderWorld, json);
     }
     private bool TryApplyRemoteStatusPackage(RemotePackage package, string senderName, string senderWorld)
     {
@@ -917,6 +1043,11 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         plugin.RefreshControllerUserInputState(senderName, senderWorld);
         return true;
     }
+    private string GetRemotePrefix()
+    {
+        var prefix = plugin.Configuration.RemoteChatCommandPrefix;
+        return string.IsNullOrWhiteSpace(prefix) ? "sge" : prefix.Trim();
+    }
     private bool IsControlledUser(string senderName, string senderWorld)
     {
         return plugin.Configuration.ControllerUsers.Any(user => IsSameCharacter(user.Name, user.World, senderName, senderWorld));
@@ -944,7 +1075,6 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         if (Enum.IsDefined(typeof(QuotaWindow), value)) return (QuotaWindow)value;
         return QuotaWindow.Hour;
     }
-
     private bool IsAllowedSender(string senderName, string senderWorld)
     {
         return string.Equals(
@@ -1170,4 +1300,41 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             return "set";
         }
     }
+    private static void ApplyControllerHonorificJson(Configuration.ControllerUserConfig user, string json)
+    {
+        user.HonorificTitle.Json = json ?? string.Empty;
+        user.HonorificTitle.Title = GetHonorificJsonTitle(json);
+        user.HonorificTitle.Color = ReadHonorificVector(json, "Color", new Vector3(1f, 1f, 1f));
+        user.HonorificTitle.Glow = ReadHonorificVector(json, "Glow", new Vector3(0f, 0f, 0f));
+    }
+    private static string GetHonorificJsonTitle(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
+
+        try
+        {
+            var token = JObject.Parse(json);
+            return token["Title"]?.ToString() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+    private static Vector3 ReadHonorificVector(string json, string property, Vector3 fallback)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return fallback;
+
+        try
+        {
+            var value = JObject.Parse(json)[property];
+            if (value == null) return fallback;
+            return new Vector3(value["X"]?.Value<float>() ?? fallback.X, value["Y"]?.Value<float>() ?? fallback.Y, value["Z"]?.Value<float>() ?? fallback.Z);
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+
 }

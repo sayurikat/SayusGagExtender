@@ -36,7 +36,7 @@ public sealed class RemotePackageTransport
             var start = i * chunkSize;
             var length = Math.Min(chunkSize, encoded.Length - start);
             var chunk = encoded.Substring(start, length);
-            lines.Add($"{CommandPrefix}:{id}:{part}/{total}:{chunk}");
+            lines.Add($"{prefix}::{CommandPrefix}:{id}:{part}/{total}:{chunk}");
         }
 
         return lines;

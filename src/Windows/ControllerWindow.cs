@@ -1,6 +1,7 @@
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Text;
 using Dalamud.Interface.Windowing;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -18,6 +19,7 @@ public class ControllerWindow : Window, IDisposable
     private string newUserWorld = string.Empty;
     private readonly Dictionary<string, ControllerUserInputState> inputStates = new();
     private DateTime commandButtonsDisabledUntilUtc = DateTime.MinValue;
+    private readonly RemotePackageTransport packageTransport = new();
 
     private sealed class ControllerUserInputState
     {
@@ -32,7 +34,12 @@ public class ControllerWindow : Window, IDisposable
         public string TitleTemp = string.Empty;
         public int MountWindow = 0;
         public int TeleportWindow = 0;
-        public int JobWindow = 0;
+        public int JobWindow = 0; 
+        public Vector3 TitleColor = new(1f, 1f, 1f);
+        public Vector3 TitleGlow = new(0f, 0f, 0f);
+        public Vector3 TitleTempColor = new(1f, 1f, 1f);
+        public Vector3 TitleTempGlow = new(0f, 0f, 0f);
+        public string TitleTempSourceJson = string.Empty;
     }
     private XivChatType selectedRemoteChannelToAdd = XivChatType.TellIncoming;
 
@@ -234,9 +241,9 @@ public class ControllerWindow : Window, IDisposable
             DrawCacheRow("Last package", FormatLastStatus(user.LastStatusUtc));
             DrawCacheRow("Auto Zap", $"{FormatEnabled(user.AutoZapEnabled)}, {user.AutoZapCount}/hour, {FormatBlank(user.AutoZapWhen)}");
             DrawCacheRow("Auto Vibe", $"{FormatEnabled(user.AutoVibeEnabled)}, {user.AutoVibeCount}/hour, {FormatBlank(user.AutoVibeWhen)}");
-            DrawCacheRow("Mount limit", FormatQuota(user.MountQuotaEnabled, user.MountQuotaActions, user.MountQuotaWindow));
-            DrawCacheRow("Teleport limit", FormatQuota(user.TeleportQuotaEnabled, user.TeleportQuotaActions, user.TeleportQuotaWindow));
-            DrawCacheRow("Job limit", FormatQuota(user.JobQuotaEnabled, user.JobQuotaActions, user.JobQuotaWindow));
+            DrawCacheRow("Mount limit", FormatQuota(user.MountQuotaEnabled, user.MountQuotaActions, user.MountQuotaUsed, user.MountQuotaWindow));
+            DrawCacheRow("Teleport limit", FormatQuota(user.TeleportQuotaEnabled, user.TeleportQuotaActions, user.TeleportQuotaUsed, user.TeleportQuotaWindow));
+            DrawCacheRow("Job limit", FormatQuota(user.JobQuotaEnabled, user.JobQuotaActions, user.JobQuotaUsed, user.JobQuotaWindow));
             DrawCacheRow("Job roulette", FormatJobRouletteStatus(user));
             DrawCacheRow("Remote title", string.IsNullOrWhiteSpace(user.RemoteTitle) ? "None" : user.RemoteTitle);
             ImGui.EndTable();
@@ -310,22 +317,54 @@ public class ControllerWindow : Window, IDisposable
     private void DrawTitleCommands(Configuration.ControllerUserConfig user, ControllerUserInputState state)
     {
         ImGui.TextUnformatted("Honorific Title");
+        var permanentChanged = false;
         ImGui.SetNextItemWidth(260);
-        ImGui.InputText("Title", ref state.Title, 128);
-        if (CommandButton("Set Permanent Title")) SendCommand(user, $"settitle {state.Title.Trim()}");
+        if (ImGui.InputText("Title", ref state.Title, 128)) permanentChanged = true;
+        if (state.Title.Length > API.HonorificApi.MaxTitleLength) state.Title = state.Title[..API.HonorificApi.MaxTitleLength];
         ImGui.SameLine();
-        if (CommandButton("Clear Title")) SendCommand(user, "cleartitle");
+        if (ImGui.ColorEdit3("Color##PermanentTitleColor", ref state.TitleColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel)) permanentChanged = true;
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Honorific title color");
+        ImGui.SameLine();
+        if (ImGui.ColorEdit3("Glow##PermanentTitleGlow", ref state.TitleGlow, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel)) permanentChanged = true;
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Honorific glow color");
+
+        if (permanentChanged) SavePermanentHonorificEditorState(user, state);
+
+        ImGui.SameLine();
+        if (CommandButton("Clone Current")) SendCloneCurrentHonorificRequest(user);
+
+
+        if (CommandButton("Set Permanent Title")) SendPermanentHonorificTitle(user, state);
+        ImGui.SameLine();
+        if (CommandButton("Clear Title")) ClearPermanentHonorificTitle(user);
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Temporary Honorific Title");
 
         ImGui.SetNextItemWidth(260);
         ImGui.InputText("TitleTemp", ref state.TitleTemp, 128);
+        if (state.TitleTemp.Length > API.HonorificApi.MaxTitleLength) state.TitleTemp = state.TitleTemp[..API.HonorificApi.MaxTitleLength];
+        ImGui.SameLine();
+        ImGui.ColorEdit3("Color##TempTitleColor", ref state.TitleTempColor, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel);
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Temporary Honorific title color");
+        ImGui.SameLine();
+        ImGui.ColorEdit3("Glow##TempTitleGlow", ref state.TitleTempGlow, ImGuiColorEditFlags.NoInputs | ImGuiColorEditFlags.NoLabel);
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Temporary Honorific glow color");
 
+        ImGui.SameLine();
+        if (CommandButton("Clone Current Temp")) SendCloneCurrentTempHonorificRequest(user);
+
+        if (CommandButton("Set Temporary Title")) SendTemporaryHonorificTitle(user, state);
+        ImGui.SameLine();
         ImGui.SetNextItemWidth(90);
         ImGui.InputInt("Seconds", ref state.TempTitleSeconds);
-        if (CommandButton("Set Temporary Title")) SendCommand(user, $"settemptitle {Math.Max(1, state.TempTitleSeconds)} {state.TitleTemp.Trim()}");
-
-
     }
-
+    private void SendCloneCurrentTempHonorificRequest(Configuration.ControllerUserConfig user)
+    {
+        var package = new RemotePackage(6);
+        package.WriteInt(1);
+        SendPackage(user, package);
+    }
     private void DrawCacheRow(string label, string value)
     {
         ImGui.TableNextRow();
@@ -333,6 +372,68 @@ public class ControllerWindow : Window, IDisposable
         ImGui.TextUnformatted(label);
         ImGui.TableSetColumnIndex(1);
         ImGui.TextUnformatted(value);
+    }
+    private void SendPermanentHonorificTitle(Configuration.ControllerUserConfig user, ControllerUserInputState state)
+    {
+        SavePermanentHonorificEditorState(user, state);
+        var package = new RemotePackage(2);
+        package.WriteInt(1);
+        package.WriteString(user.HonorificTitle.Json);
+        SendPackage(user, package);
+    }
+    private void SendTemporaryHonorificTitle(Configuration.ControllerUserConfig user, ControllerUserInputState state)
+    {
+        var json = BuildHonorificJson(state.TitleTempSourceJson, state.TitleTemp, state.TitleTempColor, state.TitleTempGlow);
+        if (string.IsNullOrWhiteSpace(json)) return;
+        var package = new RemotePackage(3);
+        package.WriteInt(1);
+        package.WriteInt(Math.Max(1, state.TempTitleSeconds));
+        package.WriteString(json);
+        SendPackage(user, package);
+    }
+    private void SendCloneCurrentHonorificRequest(Configuration.ControllerUserConfig user)
+    {
+        var package = new RemotePackage(4);
+        package.WriteInt(1);
+        SendPackage(user, package);
+    }
+    private void ClearPermanentHonorificTitle(Configuration.ControllerUserConfig user)
+    {
+        user.HonorificTitle.Json = string.Empty;
+        user.HonorificTitle.Title = string.Empty;
+        user.HonorificTitle.Color = new Vector3(1f, 1f, 1f);
+        user.HonorificTitle.Glow = new Vector3(0f, 0f, 0f);
+        configuration.Save();
+        RefreshUserInputState(user.Name, user.World);
+        SendCommand(user, "cleartitle");
+    }
+    private void SavePermanentHonorificEditorState(Configuration.ControllerUserConfig user, ControllerUserInputState state)
+    {
+        user.HonorificTitle.Title = state.Title.Trim();
+        user.HonorificTitle.Color = state.TitleColor;
+        user.HonorificTitle.Glow = state.TitleGlow;
+        user.HonorificTitle.Json = BuildHonorificJson(user.HonorificTitle.Json, state.Title, state.TitleColor, state.TitleGlow);
+        configuration.Save();
+    }
+    private void SendPackage(Configuration.ControllerUserConfig user, RemotePackage package)
+    {
+        if (string.IsNullOrWhiteSpace(user.Name) || string.IsNullOrWhiteSpace(user.World)) return;
+        var prefix = string.IsNullOrWhiteSpace(configuration.RemoteChatCommandPrefix) ? "sge" : configuration.RemoteChatCommandPrefix.Trim();
+
+        foreach (var line in packageTransport.BuildTellLines(package, prefix))
+        {
+            var command = $"/t {user.Name}@{user.World} {line}";
+
+            if (command.Length > 500)
+            {
+                Plugin.ChatGui.PrintError("Controller package line is too long for chat.");
+                return;
+            }
+
+            plugin.Utils.ExecuteNativeCommand(command);
+        }
+
+        commandButtonsDisabledUntilUtc = DateTime.UtcNow.AddSeconds(2);
     }
     private static bool HighlightButton(string label, bool highlighted)
     {
@@ -464,11 +565,14 @@ public class ControllerWindow : Window, IDisposable
         return string.IsNullOrWhiteSpace(value) ? "Unknown" : value;
     }
 
-    private static string FormatQuota(bool enabled, int count, Configuration.QuotaWindow window)
+    private static string FormatQuota(bool enabled, int count, int used, Configuration.QuotaWindow window)
     {
-        if (!enabled) return "Disabled";
-        if (count < 0) return "Unlimited";
-        return $"{count} per {window.ToString().ToLowerInvariant()}";
+        used = Math.Max(0, used);
+
+        if (!enabled) return $"Disabled";
+        if (count < 0) return $"Unlimited";
+
+        return $"{used}/{count} used this {window.ToString().ToLowerInvariant()}";
     }
 
 
@@ -671,7 +775,20 @@ public class ControllerWindow : Window, IDisposable
         if (user == null) return;
 
         var key = GetUserKey(user);
-        inputStates[key] = CreateInputStateFromUser(user);
+        inputStates.TryGetValue(key, out var oldState);
+
+        var newState = CreateInputStateFromUser(user);
+
+        if (oldState != null)
+        {
+            newState.TitleTemp = oldState.TitleTemp;
+            newState.TitleTempColor = oldState.TitleTempColor;
+            newState.TitleTempGlow = oldState.TitleTempGlow;
+            newState.TitleTempSourceJson = oldState.TitleTempSourceJson;
+            newState.TempTitleSeconds = oldState.TempTitleSeconds;
+        }
+
+        inputStates[key] = newState;
     }
     private ControllerUserInputState CreateInputStateFromUser(Configuration.ControllerUserConfig user)
     {
@@ -687,6 +804,9 @@ public class ControllerWindow : Window, IDisposable
         state.MountWindow = user.MountQuotaWindow == Configuration.QuotaWindow.Day ? 1 : 0;
         state.TeleportWindow = user.TeleportQuotaWindow == Configuration.QuotaWindow.Day ? 1 : 0;
         state.JobWindow = user.JobQuotaWindow == Configuration.QuotaWindow.Day ? 1 : 0;
+        state.Title = string.IsNullOrWhiteSpace(user.HonorificTitle.Title) ? GetHonorificJsonTitle(user.HonorificTitle.Json) : user.HonorificTitle.Title;
+        state.TitleColor = user.HonorificTitle.Color;
+        state.TitleGlow = user.HonorificTitle.Glow;
         return state;
     }
     private static bool IsSameCharacter(string leftName, string leftWorld, string rightName, string rightWorld)
@@ -730,4 +850,93 @@ public class ControllerWindow : Window, IDisposable
 
         return utc.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
     }
+
+
+
+
+
+
+
+
+
+
+
+
+    private static string BuildHonorificJson(string sourceJson, string title, Vector3 color, Vector3 glow)
+    {
+        title = title.Trim();
+
+        if (string.IsNullOrWhiteSpace(title))
+            return string.Empty;
+
+        if (title.Length > API.HonorificApi.MaxTitleLength)
+            title = title[..API.HonorificApi.MaxTitleLength];
+
+        JObject token;
+
+        try
+        {
+            token = string.IsNullOrWhiteSpace(sourceJson) ? new JObject() : JObject.Parse(sourceJson);
+        }
+        catch
+        {
+            token = new JObject();
+        }
+
+        token["Title"] = title;
+        token["IsPrefix"] ??= false;
+        token["Color"] = CreateVectorToken(color);
+        token["Glow"] = CreateVectorToken(glow);
+
+        return token.ToString(Newtonsoft.Json.Formatting.None);
+    }
+    private static JObject CreateVectorToken(Vector3 value)
+    {
+        return new JObject { ["X"] = value.X, ["Y"] = value.Y, ["Z"] = value.Z };
+    }
+    private static string GetHonorificJsonTitle(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
+
+        try
+        {
+            var token = JObject.Parse(json);
+            return token["Title"]?.ToString() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+    private static Vector3 ReadHonorificVector(string json, string property, Vector3 fallback)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return fallback;
+
+        try
+        {
+            var value = JObject.Parse(json)[property];
+            if (value == null) return fallback;
+            return new Vector3(value["X"]?.Value<float>() ?? fallback.X, value["Y"]?.Value<float>() ?? fallback.Y, value["Z"]?.Value<float>() ?? fallback.Z);
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
+    public void SetTempHonorificInputState(string name, string world, string json)
+    {
+        var user = configuration.ControllerUsers.FirstOrDefault(user => IsSameCharacter(user.Name, user.World, name, world));
+        if (user == null) return;
+        var state = GetInputState(user);
+        state.TitleTemp = GetHonorificJsonTitle(json);
+        state.TitleTempColor = ReadHonorificVector(json, "Color", new Vector3(1f, 1f, 1f));
+        state.TitleTempGlow = ReadHonorificVector(json, "Glow", new Vector3(0f, 0f, 0f));
+        state.TitleTempSourceJson = json ?? string.Empty;
+    }
+
+
+
+
+
+
 }

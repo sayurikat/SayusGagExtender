@@ -244,6 +244,8 @@ public sealed class FatigueTracker : IDisposable
 
         LastSpeed = delta / seconds;
 
+        IsResting = IsRestingState();
+
         if (delta < MinDelta)
         {
             ResetRuntimeFlags();
@@ -280,7 +282,7 @@ public sealed class FatigueTracker : IDisposable
         HasPeloton = movementKind == MovementKind.Peloton;
         IsJogging = movementKind == MovementKind.Jog;
         IsMounted = movementKind == MovementKind.Mount;
-        IsResting = false;
+        //IsResting = false;
 
         ApplyMovementFatigue(delta, movementKind, LastSpeed);
 
