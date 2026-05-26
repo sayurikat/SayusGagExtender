@@ -1056,7 +1056,7 @@ public unsafe sealed class JobManager : IDisposable
         };
     }
 
-    private int GetUsedQuotaCount()
+    public int GetUsedQuotaCount()
     {
         if (!IsQuotaEnabled())
             return 0;

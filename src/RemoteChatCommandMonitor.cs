@@ -34,6 +34,11 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     private bool hasSubmittedRemoteTitleRequest;
     private string lastSubmittedRemoteTitleJson = string.Empty;
 
+    private const byte RemotePackageTypeStatus = 1;
+    private const int RemoteStatusPackageVersion = 1;
+    private readonly RemotePackageTransport packageTransport = new();
+
+
     public bool IsActive => plugin.Configuration.RemoteChatCommandsEnabled;
     private enum RemoteCommandPrefixMode
     {
@@ -291,17 +296,13 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     {
         if (string.IsNullOrWhiteSpace(command.Args))
         {
-            Plugin.ChatGui.PrintError(
-                isHidden
-                    ? "Remote SGE hidden command ignored: missing command."
-                    : "Remote SGE command ignored: missing command.");
+            Plugin.ChatGui.PrintError(isHidden ? "Remote SGE hidden command ignored: missing command." : "Remote SGE command ignored: missing command.");
 
             return;
         }
 
-        Plugin.Log.Information(
-            $"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " +
-            $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
+        Plugin.Log.Information($"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " + $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
+        Plugin.ChatGui.Print($"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " + $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
 
         HandleSgeCommand(
             command.Args,
@@ -334,6 +335,15 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             return;
         }
 
+        var prefix = plugin.Configuration.RemoteChatCommandPrefix;
+        if (string.IsNullOrWhiteSpace(prefix))
+            prefix = "sge";
+
+        if (args.StartsWith("statuspack", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(BuildRemoteStatusPackage(), prefix));
+            return;
+        }
 
         if (args.StartsWith("status", StringComparison.OrdinalIgnoreCase))
         {
@@ -349,8 +359,17 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
             return;
         }
+        
 
         string[] arguments = args.Split(' ');
+
+        packageTransport.ClearOldPendingPackages();
+
+        if (packageTransport.TryReceive(args, out var receivedPackage))
+        {
+            HandleRemotePackage(receivedPackage, type, senderName, senderWorld);
+            return;
+        }
 
         // Convenience: "sge jobroulette 0" means stop roulette.
         // Keep the actual stop handling in the normal stopjobroulette branch below.
@@ -879,7 +898,63 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     }
 
 
+    private RemotePackage BuildRemoteStatusPackage()
+    {
+        var package = new RemotePackage(RemotePackageTypeStatus);
 
+        package.WriteInt(RemoteStatusPackageVersion);
+
+        package.WriteBool(plugin.Configuration.AutoZapEnabled);
+        package.WriteInt(plugin.Configuration.AutoZapCount);
+        package.WriteInt((int)plugin.Configuration.AutoZapWhen);
+        package.WriteBool(plugin.Configuration.AutoZapCountControllerLocked);
+
+        package.WriteBool(plugin.Configuration.AutoVibeEnabled);
+        package.WriteInt(plugin.Configuration.AutoVibeCount);
+        package.WriteInt((int)plugin.Configuration.AutoVibeWhen);
+        package.WriteBool(plugin.Configuration.AutoVibeCountControllerLocked);
+
+        package.WriteBool(plugin.Configuration.MountQuotaEnabled);
+        package.WriteInt(plugin.Configuration.MountQuotaActions);
+        package.WriteInt((int)plugin.Configuration.MountQuotaWindow);
+        package.WriteInt(plugin.MountBlocker.GetUsedQuotaCount());
+
+        package.WriteBool(plugin.Configuration.TeleportQuotaEnabled);
+        package.WriteInt(plugin.Configuration.TeleportQuotaActions);
+        package.WriteInt((int)plugin.Configuration.TeleportQuotaWindow);
+        package.WriteInt(plugin.TeleportBlocker.GetUsedQuotaCount());
+
+        package.WriteBool(plugin.Configuration.JobSwitchQuotaEnabled);
+        package.WriteInt(plugin.Configuration.JobSwitchQuotaActions);
+        package.WriteInt((int)plugin.Configuration.JobSwitchQuotaWindow);
+        package.WriteInt(plugin.JobManager.GetUsedQuotaCount());
+
+        package.WriteBool(plugin.Configuration.JobRouletteEnabled);
+        package.WriteBool(plugin.Configuration.JobRouletteRemoteSet);
+        package.WriteTimeSpan(plugin.Configuration.JobRouletteInterval);
+        package.WriteDateTimeUtc(plugin.Configuration.NextScheduledJobSwitch);
+        package.WriteInt(plugin.Configuration.JobRouletteWhitelistedGearsets?.Count ?? 0);
+
+        package.WriteString(GetRemotePermanentTitleDisplay());
+        package.WriteString("extra content to force multi package");
+        package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+        package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+        package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+        package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+
+        return package;
+    }
+
+    private void HandleRemotePackage(RemotePackage package, XivChatType type, string senderName, string senderWorld)
+    {
+        if (package.PackageType == RemotePackageTypeStatus)
+        {
+            Plugin.Log.Information($"Received remote status package from {senderName}@{senderWorld}.");
+            return;
+        }
+
+        Plugin.Log.Warning($"Unknown remote package type {package.PackageType} from {senderName}@{senderWorld}.");
+    }
 
 
     private bool IsAllowedSender(string senderName, string senderWorld)

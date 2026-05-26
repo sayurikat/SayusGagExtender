@@ -228,7 +228,7 @@ public unsafe sealed class MountBlocker : IDisposable
         };
     }
 
-    private int GetUsedQuotaCount()
+    public int GetUsedQuotaCount()
     {
         if (!this.IsQuotaEnabled())
             return 0;

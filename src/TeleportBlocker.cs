@@ -198,7 +198,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
         };
     }
 
-    private int GetUsedQuotaCount()
+    public int GetUsedQuotaCount()
     {
         if (!this.IsQuotaEnabled())
             return 0;
