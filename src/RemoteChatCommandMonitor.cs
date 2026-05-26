@@ -803,12 +803,11 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         }
         if (arguments[0].Equals("cleartitle", StringComparison.OrdinalIgnoreCase))
         {
-            plugin.Configuration.RemotePermanentHonorificTitleJson = "";
-            plugin.HonorificManager.RecallTitle(this);
+            RecallRemotePermanentTitleRequest();
             ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, hidden: isHidden, prefix: prefix);
             return;
         }
-    
+
         msq = [$"cannot recognize command, to display all commands, use: sge help"];
         ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.None, msq, hidden: false);
         return;
@@ -1211,6 +1210,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             }
 
             plugin.Configuration.RemotePermanentHonorificTitleJson = json;
+            plugin.Configuration.Save();
+
             plugin.HonorificManager.SetTitle(json, RemoteHonorificPriority, this);
 
             hasSubmittedRemoteTitleRequest = true;
@@ -1221,8 +1222,12 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     {
         _ = Plugin.Framework.RunOnFrameworkThread(() =>
         {
+            if (disposed)
+                return;
 
             plugin.Configuration.RemotePermanentHonorificTitleJson = string.Empty;
+            plugin.Configuration.Save();
+
             plugin.HonorificManager.RecallTitle(this);
 
             hasSubmittedRemoteTitleRequest = false;

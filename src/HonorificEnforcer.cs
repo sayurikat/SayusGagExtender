@@ -29,8 +29,8 @@ public sealed class HonorificEnforcer : IDisposable
         public string HonorificTitle { get; set; } = string.Empty;
         public Vector3 HonorificColor { get; set; } = new(1.0f, 1.0f, 1.0f);
         public Vector3 HonorificGlow { get; set; } = new(0.0f, 0.0f, 0.0f);
+        public string HonorificSourceJson { get; set; } = string.Empty;
         public int HonorificPriority { get; set; } = 100;
-
         public List<GagSpeakItem> RestraintSets { get; set; } = new();
         public List<GagSpeakItem> Restrictions { get; set; } = new();
         public List<GagSpeakItem> Gags { get; set; } = new();
@@ -120,10 +120,7 @@ public sealed class HonorificEnforcer : IDisposable
             return;
         }
 
-        var json = plugin.HonorificManager.BuildTitleJson(
-            winner.HonorificTitle,
-            winner.HonorificColor,
-            winner.HonorificGlow);
+        var json = plugin.HonorificManager.BuildTitleJson(winner.HonorificSourceJson, winner.HonorificTitle, winner.HonorificColor, winner.HonorificGlow);
 
         if (string.IsNullOrWhiteSpace(json))
         {

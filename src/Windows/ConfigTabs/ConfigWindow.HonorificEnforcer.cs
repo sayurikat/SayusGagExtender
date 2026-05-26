@@ -119,22 +119,21 @@ partial class ConfigWindow
                 var honorificTitle = titleConfig.HonorificTitle;
                 var honorificColor = titleConfig.HonorificColor;
                 var honorificGlow = titleConfig.HonorificGlow;
+                var honorificSourceJson = titleConfig.HonorificSourceJson;
                 var honorificPriority = titleConfig.HonorificPriority;
-
-                if (plugin.HonorificManager.DrawPermanentTitleConfigEditors(ref honorificTitle, ref honorificColor, ref honorificGlow, ref honorificPriority, titleWidth: 180f, priorityWidth: 60f))
+                if (plugin.HonorificManager.DrawPermanentTitleConfigEditors(ref honorificTitle, ref honorificColor, ref honorificGlow, ref honorificSourceJson, ref honorificPriority, titleWidth: 180f, priorityWidth: 60f))
                 {
                     titleConfig.HonorificTitle = honorificTitle.Trim();
                     titleConfig.HonorificColor = honorificColor;
                     titleConfig.HonorificGlow = honorificGlow;
+                    titleConfig.HonorificSourceJson = honorificSourceJson;
                     titleConfig.HonorificPriority = honorificPriority;
-
                     configuration.Save();
-
                     // Important: do not Enforce() directly here.
                     // Updating Honorific IPC on every keypress can steal focus.
                     plugin.HonorificEnforcer.MarkConfigDirty(delayApply: true);
                 }
-                
+
                 ImGui.Spacing();
                 ImGui.Separator();
                 ImGui.Spacing();

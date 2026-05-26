@@ -310,31 +310,126 @@ float priorityWidth = 50f)
 
         return changed;
     }
-    public string BuildTitleJson(
-        string title,
-        Vector3 color,
-        Vector3 glow,
-        bool isPrefix = false)
+    public bool DrawPermanentTitleConfigEditors(ref string title, ref Vector3 color, ref Vector3 glow, ref string sourceJson, ref int priority, float titleWidth = 120f, float priorityWidth = 50f)
     {
-        if (string.IsNullOrWhiteSpace(title))
-            return string.Empty;
+        var changed = DrawPermanentTitleConfigEditors(ref title, ref color, ref glow, ref priority, titleWidth, priorityWidth);
 
-        title = title.Trim();
+        ImGui.SameLine();
 
-        if (title.Length > API.HonorificApi.MaxTitleLength)
-            title = title[..API.HonorificApi.MaxTitleLength];
-
-        var titleData = new HonorificTitleData
+        if (ImGui.Button("Clone Current"))
         {
-            Title = title,
-            IsPrefix = isPrefix,
-            Color = color,
-            Glow = glow,
-        };
+            if (TryCloneCurrentTitleDesign(out var clonedTitle, out var clonedColor, out var clonedGlow, out var clonedJson))
+            {
+                title = clonedTitle;
+                color = clonedColor;
+                glow = clonedGlow;
+                sourceJson = clonedJson;
+                changed = true;
+            }
+        }
 
-        return JsonConvert.SerializeObject(titleData);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Clone the current Honorific title, including hidden design data.");
+
+        if (changed)
+            sourceJson = BuildTitleJson(sourceJson, title, color, glow);
+
+        return changed;
+    }
+    public bool TryCloneCurrentTitleDesign(out string title, out Vector3 color, out Vector3 glow, out string sourceJson)
+    {
+        title = string.Empty;
+        color = new Vector3(1f, 1f, 1f);
+        glow = new Vector3(0f, 0f, 0f);
+        sourceJson = string.Empty;
+
+        if (!CanUseHonorificApiNow())
+            return false;
+
+        try
+        {
+            sourceJson = plugin.HonorificApi.GetLocalTitleJson();
+
+            if (string.IsNullOrWhiteSpace(sourceJson))
+                return false;
+
+            title = GetHonorificJsonTitle(sourceJson);
+            color = ReadHonorificVector(sourceJson, "Color", color);
+            glow = ReadHonorificVector(sourceJson, "Glow", glow);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Warning(ex, "Failed to clone current Honorific title design.");
+            return false;
+        }
+    }
+    public string BuildTitleJson(string title, Vector3 color, Vector3 glow, bool isPrefix = false)
+    {
+        return BuildTitleJson(string.Empty, title, color, glow, isPrefix);
     }
 
+    public string BuildTitleJson(string sourceJson, string title, Vector3 color, Vector3 glow, bool isPrefix = false)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return string.Empty;
+        title = title.Trim();
+        if (title.Length > API.HonorificApi.MaxTitleLength) title = title[..API.HonorificApi.MaxTitleLength];
+
+        JObject token;
+
+        try
+        {
+            token = string.IsNullOrWhiteSpace(sourceJson) ? new JObject() : JObject.Parse(sourceJson);
+        }
+        catch
+        {
+            token = new JObject();
+        }
+
+        token["Title"] = title;
+        token["IsPrefix"] ??= isPrefix;
+        token["Color"] = CreateVectorToken(color);
+        token["Glow"] = CreateVectorToken(glow);
+
+        return token.ToString(Formatting.None);
+    }
+
+    private static JObject CreateVectorToken(Vector3 value)
+    {
+        return new JObject { ["X"] = value.X, ["Y"] = value.Y, ["Z"] = value.Z };
+    }
+
+    private static string GetHonorificJsonTitle(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
+
+        try
+        {
+            var token = JObject.Parse(json);
+            return token["Title"]?.ToString() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static Vector3 ReadHonorificVector(string json, string property, Vector3 fallback)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return fallback;
+
+        try
+        {
+            var value = JObject.Parse(json)[property];
+            if (value == null) return fallback;
+            return new Vector3(value["X"]?.Value<float>() ?? fallback.X, value["Y"]?.Value<float>() ?? fallback.Y, value["Z"]?.Value<float>() ?? fallback.Z);
+        }
+        catch
+        {
+            return fallback;
+        }
+    }
     private sealed class HonorificTitleData
     {
         public string Title { get; set; } = string.Empty;
