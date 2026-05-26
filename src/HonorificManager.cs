@@ -149,15 +149,7 @@ public sealed class HonorificManager : IDisposable
 
         RestoreOriginalTitle();
     }
-    public bool DrawTitleConfigEditors(
-ref string title,
-ref Vector3 color,
-ref Vector3 glow,
-ref int durationSeconds,
-ref int priority,
-float titleWidth = 120f,
-float durationWidth = 50f,
-float priorityWidth = 50f)
+    public bool DrawTitleConfigEditors(ref string title, ref Vector3 color, ref Vector3 glow, ref int durationSeconds, ref int priority, float titleWidth = 120f, float durationWidth = 50f, float priorityWidth = 50f)
     {
         var changed = false;
 
@@ -241,13 +233,7 @@ float priorityWidth = 50f)
 
         return changed;
     }
-    public bool DrawPermanentTitleConfigEditors(
-    ref string title,
-    ref Vector3 color,
-    ref Vector3 glow,
-    ref int priority,
-    float titleWidth = 120f,
-    float priorityWidth = 50f)
+    public bool DrawPermanentTitleConfigEditors(ref string title, ref Vector3 color, ref Vector3 glow, ref int priority, float titleWidth = 120f, float priorityWidth = 50f)
     {
         var changed = false;
 
@@ -429,13 +415,6 @@ float priorityWidth = 50f)
         {
             return fallback;
         }
-    }
-    private sealed class HonorificTitleData
-    {
-        public string Title { get; set; } = string.Empty;
-        public bool IsPrefix { get; set; }
-        public Vector3? Color { get; set; }
-        public Vector3? Glow { get; set; }
     }
     private void OnFrameworkUpdate(IFramework framework)
     {

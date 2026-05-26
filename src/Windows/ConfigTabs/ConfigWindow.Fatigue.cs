@@ -56,6 +56,13 @@ public partial class ConfigWindow
         ImGui.Separator();
         ImGui.Spacing();
 
+
+        DrawFatigueOptions();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
         DrawFatigueEffects();
     }
 
@@ -777,12 +784,7 @@ public partial class ConfigWindow
         return false;
     }
 
-    private bool DrawIntInput(
-    string label,
-    ref int value,
-    int min,
-    int max,
-    string tooltip)
+    private bool DrawIntInput(string label, ref int value, int min, int max, string tooltip)
     {
         ImGui.SetNextItemWidth(90);
 
@@ -974,6 +976,21 @@ public partial class ConfigWindow
             _ => "Inactive",
         };
     }
+
+    public void DrawFatigueOptions()
+    {
+        ImGui.Text("Fatigue Options");
+        ImGui.Spacing();
+
+        var fatigueSitOnceOnStop = configuration.FatigueSitOnceOnStop;
+        if (ImGui.Checkbox("Sit on forced stop", ref fatigueSitOnceOnStop))
+        {
+            configuration.FatigueSitOnceOnStop = fatigueSitOnceOnStop;
+            configuration.Save();
+        }
+    }
+        
+
     private void DrawFatigueEffects()
     {
         ImGui.Text("Fatigue Effects");
@@ -1198,19 +1215,15 @@ public partial class ConfigWindow
         var title = config.HonorificTitle;
         var color = config.HonorificColor;
         var glow = config.HonorificGlow;
+        var sourceJson = config.HonorificSourceJson;
         var priority = config.HonorificPriority;
 
-        if (plugin.HonorificManager.DrawPermanentTitleConfigEditors(
-                ref title,
-                ref color,
-                ref glow,
-                ref priority,
-                titleWidth: 160f,
-                priorityWidth: 50f))
+        if (plugin.HonorificManager.DrawPermanentTitleConfigEditors(ref title, ref color, ref glow, ref sourceJson, ref priority, titleWidth: 160f, priorityWidth: 50f))
         {
             config.HonorificTitle = title;
             config.HonorificColor = color;
             config.HonorificGlow = glow;
+            config.HonorificSourceJson = sourceJson;
             config.HonorificPriority = priority;
 
             configuration.Save();
@@ -1227,6 +1240,7 @@ public partial class ConfigWindow
             config.HonorificTitle = string.Empty;
             config.HonorificColor = new Vector3(1f, 1f, 1f);
             config.HonorificGlow = new Vector3(0f, 0f, 0f);
+            config.HonorificSourceJson = string.Empty;
             config.HonorificPriority = 0;
 
             configuration.Save();

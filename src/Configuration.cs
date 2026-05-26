@@ -125,7 +125,7 @@ public class Configuration : IPluginConfiguration
     // A force state turns on at its threshold, then only releases once fatigue
     // drops below threshold - this tolerance.
     public float FatigueReleaseTolerance { get; set; } = 0.05f;
-
+    public bool FatigueSitOnceOnStop { get; set; } = false;
 
     // Restriction list with stackable factors.
     public List<FatigueTracker.FatigueRestrictionConfig> FatigueRestrictions { get; set; } = new();
@@ -158,6 +158,7 @@ public class Configuration : IPluginConfiguration
         public System.Numerics.Vector3 HonorificColor { get; set; } = new(1f, 1f, 1f);
         public System.Numerics.Vector3 HonorificGlow { get; set; } = new(0f, 0f, 0f);
         public int HonorificPriority { get; set; } = 0;
+        public string HonorificSourceJson { get; set; } = string.Empty;
     }
 
     public FatigueEffectConfig FatigueEnabledEffect { get; set; } = new();

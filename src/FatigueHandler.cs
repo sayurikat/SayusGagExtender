@@ -148,8 +148,12 @@ public sealed class FatigueHandler : IDisposable
 
         stopBlockRequested = true;
         plugin.MovementBlocker?.RequestBlock(SourceName);
-
         MaybePrintStatus("Fatigue: movement stopped.");
+
+        if (plugin.Configuration.FatigueSitOnceOnStop)
+        {
+            plugin.EmoteGuard?.QueueGuardedEmote("/groundsit");
+        }
     }
 
     private void ClearStopBlock()

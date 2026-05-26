@@ -244,13 +244,11 @@ public sealed class FatigueTracker : IDisposable
 
         LastSpeed = delta / seconds;
 
-        IsResting = IsRestingState();
 
         if (delta < MinDelta)
         {
             ResetRuntimeFlags();
             LastSpeed = 0;
-
             var resting = IsRestingState();
             IsResting = resting;
 
@@ -266,10 +264,11 @@ public sealed class FatigueTracker : IDisposable
             {
                 Recover(seconds, resting: false);
             }
-
             MaybeSave();
             return;
         }
+
+        
 
         UpdateSpeedRecorder(delta, seconds, LastSpeed);
 
@@ -282,7 +281,13 @@ public sealed class FatigueTracker : IDisposable
         HasPeloton = movementKind == MovementKind.Peloton;
         IsJogging = movementKind == MovementKind.Jog;
         IsMounted = movementKind == MovementKind.Mount;
-        //IsResting = false;
+
+        if (movementKind == MovementKind.Mount)
+        {
+            Recover(seconds, resting: true);
+            MaybeSave();
+            return;
+        }
 
         ApplyMovementFatigue(delta, movementKind, LastSpeed);
 
@@ -644,6 +649,7 @@ public sealed class FatigueTracker : IDisposable
         IsSprinting = false;
         HasPeloton = false;
         IsResting = false;
+        IsMounted = false;
         LastSpeed = 0;
     }
 
@@ -825,10 +831,7 @@ public sealed class FatigueTracker : IDisposable
             return;
         }
 
-        var json = plugin.HonorificManager.BuildTitleJson(
-            winner.HonorificTitle,
-            winner.HonorificColor,
-            winner.HonorificGlow);
+        var json = plugin.HonorificManager.BuildTitleJson(winner.HonorificSourceJson, winner.HonorificTitle, winner.HonorificColor, winner.HonorificGlow);
 
         if (string.IsNullOrWhiteSpace(json))
         {
