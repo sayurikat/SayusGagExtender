@@ -229,6 +229,81 @@ public class ControllerWindow : Window, IDisposable
         ImGui.Text("sge settitle [title] → Sets permanent Honorific title");
         ImGui.Text("sge settemptitle [seconds] [title] → Sets temporary Honorific title");
         ImGui.Text("sge cleartitle → Clears the permanent remote Honorific title");
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        DrawPuppeteerAliasesSection(user);
+    }
+
+    private void DrawPuppeteerAliasesSection(Configuration.ControllerUserConfig user)
+    {
+        ImGui.TextUnformatted("Puppeteer Aliases");
+        ImGui.SameLine();
+        if (CommandButton("Request Aliases")) SendPuppeteerAliasesRequest(user);
+        ImGui.TextDisabled($"Last alias package: {FormatLastStatus(user.LastPuppeteerAliasesUtc)}");
+
+        var channel = user.PuppeteerAliasChatType;
+        if (!RemoteChannelOptions.Contains(channel)) channel = XivChatType.TellIncoming;
+        var channelPreview = GetRemoteChannelLabel(channel);
+        ImGui.SetNextItemWidth(160);
+        if (ImGui.BeginCombo("Chat kind##PuppeteerAliasChatKind", channelPreview))
+        {
+            foreach (var option in RemoteChannelOptions)
+            {
+                var selected = option == channel;
+                if (ImGui.Selectable($"{GetRemoteChannelLabel(option)}##puppeteer-alias-chat-{option}", selected))
+                {
+                    user.PuppeteerAliasChatType = option;
+                    configuration.Save();
+                    ImGui.CloseCurrentPopup();
+                }
+                if (selected) ImGui.SetItemDefaultFocus();
+            }
+            ImGui.EndCombo();
+        }
+
+        ImGui.SameLine();
+        var triggerPrefix = user.PuppeteerAliasTriggerPrefix ?? string.Empty;
+        ImGui.SetNextItemWidth(220);
+        if (ImGui.InputTextWithHint("Trigger prefix", "optional text before alias trigger", ref triggerPrefix, 128))
+        {
+            user.PuppeteerAliasTriggerPrefix = triggerPrefix;
+            configuration.Save();
+        }
+
+        var aliases = user.PuppeteerAliases ?? new List<Configuration.ControllerPuppeteerAliasConfig>();
+        if (aliases.Count == 0)
+        {
+            ImGui.TextDisabled("No aliases cached for this user yet.");
+            return;
+        }
+
+        if (!ImGui.BeginTable("ControllerPuppeteerAliasTable", 5, ImGuiTableFlags.SizingStretchProp | ImGuiTableFlags.RowBg | ImGuiTableFlags.BordersInnerH | ImGuiTableFlags.Resizable)) return;
+        ImGui.TableSetupColumn("Folder", ImGuiTableColumnFlags.WidthStretch, 1.0f);
+        ImGui.TableSetupColumn("Name", ImGuiTableColumnFlags.WidthStretch, 1.0f);
+        ImGui.TableSetupColumn("Trigger", ImGuiTableColumnFlags.WidthStretch, 1.0f);
+        ImGui.TableSetupColumn("Note", ImGuiTableColumnFlags.WidthStretch, 1.2f);
+        ImGui.TableSetupColumn("Send", ImGuiTableColumnFlags.WidthFixed, 110);
+        ImGui.TableHeadersRow();
+
+        for (var i = 0; i < aliases.Count; i++)
+        {
+            var alias = aliases[i];
+            ImGui.TableNextRow();
+            ImGui.TableSetColumnIndex(0);
+            ImGui.TextUnformatted(string.IsNullOrWhiteSpace(alias.Folder) ? "<root>" : alias.Folder);
+            ImGui.TableSetColumnIndex(1);
+            ImGui.TextUnformatted(alias.Name ?? string.Empty);
+            ImGui.TableSetColumnIndex(2);
+            ImGui.TextUnformatted(alias.Trigger ?? string.Empty);
+            ImGui.TableSetColumnIndex(3);
+            ImGui.TextWrapped(alias.Note ?? string.Empty);
+            ImGui.TableSetColumnIndex(4);
+            if (CommandButton($"Send command##send-puppeteer-alias-{i}")) SendPuppeteerAliasCommand(user, alias);
+        }
+
+        ImGui.EndTable();
     }
 
     private void DrawCachedStatus(Configuration.ControllerUserConfig user)
@@ -364,6 +439,65 @@ public class ControllerWindow : Window, IDisposable
         var package = new RemotePackage(6);
         package.WriteInt(1);
         SendPackage(user, package);
+    }
+    private void SendPuppeteerAliasesRequest(Configuration.ControllerUserConfig user)
+    {
+        var package = new RemotePackage(8);
+        package.WriteInt(1);
+        SendPackage(user, package);
+    }
+    private void SendPuppeteerAliasCommand(Configuration.ControllerUserConfig user, Configuration.ControllerPuppeteerAliasConfig alias)
+    {
+        var trigger = alias.Trigger?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(trigger)) return;
+        var prefix = user.PuppeteerAliasTriggerPrefix?.Trim() ?? string.Empty;
+        var message = string.IsNullOrWhiteSpace(prefix) ? trigger : $"{prefix} {trigger}";
+        var command = BuildChatCommand(user, user.PuppeteerAliasChatType, message);
+        if (string.IsNullOrWhiteSpace(command)) return;
+        if (command.Length > 500)
+        {
+            Plugin.ChatGui.PrintError("Puppeteer alias command is too long for chat.");
+            return;
+        }
+        plugin.Utils.ExecuteNativeCommand(command);
+        commandButtonsDisabledUntilUtc = DateTime.UtcNow.AddSeconds(1);
+    }
+    private static string BuildChatCommand(Configuration.ControllerUserConfig user, XivChatType channel, string message)
+    {
+        message = message.Trim();
+        if (string.IsNullOrWhiteSpace(message)) return string.Empty;
+        if (channel == XivChatType.TellIncoming) return string.IsNullOrWhiteSpace(user.Name) || string.IsNullOrWhiteSpace(user.World) ? string.Empty : $"/t {user.Name}@{user.World} {message}";
+        var slash = GetChatSlashCommand(channel);
+        return string.IsNullOrWhiteSpace(slash) ? string.Empty : $"{slash} {message}";
+    }
+    private static string GetChatSlashCommand(XivChatType channel)
+    {
+        return channel switch
+        {
+            XivChatType.CrossLinkShell1 => "/cwl1",
+            XivChatType.CrossLinkShell2 => "/cwl2",
+            XivChatType.CrossLinkShell3 => "/cwl3",
+            XivChatType.CrossLinkShell4 => "/cwl4",
+            XivChatType.CrossLinkShell5 => "/cwl5",
+            XivChatType.CrossLinkShell6 => "/cwl6",
+            XivChatType.CrossLinkShell7 => "/cwl7",
+            XivChatType.CrossLinkShell8 => "/cwl8",
+            XivChatType.Party => "/p",
+            XivChatType.Alliance => "/a",
+            XivChatType.FreeCompany => "/fc",
+            XivChatType.Ls1 => "/l1",
+            XivChatType.Ls2 => "/l2",
+            XivChatType.Ls3 => "/l3",
+            XivChatType.Ls4 => "/l4",
+            XivChatType.Ls5 => "/l5",
+            XivChatType.Ls6 => "/l6",
+            XivChatType.Ls7 => "/l7",
+            XivChatType.Ls8 => "/l8",
+            XivChatType.Say => "/s",
+            XivChatType.Yell => "/y",
+            XivChatType.Shout => "/sh",
+            _ => string.Empty,
+        };
     }
     private void DrawCacheRow(string label, string value)
     {

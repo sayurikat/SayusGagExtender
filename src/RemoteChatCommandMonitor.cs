@@ -45,7 +45,10 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     private const byte RemotePackageTypeCloneCurrentTitleResponse = 5;
     private const byte RemotePackageTypeCloneCurrentTempTitleRequest = 6;
     private const byte RemotePackageTypeCloneCurrentTempTitleResponse = 7;
+    private const byte RemotePackageTypePuppeteerAliasesRequest = 8;
+    private const byte RemotePackageTypePuppeteerAliasesResponse = 9;
     private const int RemoteTitlePackageVersion = 1;
+    private const int RemotePuppeteerAliasesPackageVersion = 1;
     private readonly RemotePackageTransport packageTransport = new();
 
 
@@ -912,6 +915,18 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 return;
             }
 
+            if (package.PackageType == RemotePackageTypePuppeteerAliasesRequest)
+            {
+                HandlePuppeteerAliasesRequestPackage(package, senderName, senderWorld);
+                return;
+            }
+
+            if (package.PackageType == RemotePackageTypePuppeteerAliasesResponse)
+            {
+                HandlePuppeteerAliasesResponsePackage(package, senderName, senderWorld);
+                return;
+            }
+
             Plugin.Log.Warning($"Unknown remote package type {package.PackageType} from {senderName}@{senderWorld}.");
         }
         catch (Exception ex)
@@ -1001,6 +1016,79 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         if (version != RemoteTitlePackageVersion) return;
         var json = package.ReadString();
         plugin.SetControllerTempHonorificInputState(senderName, senderWorld, json);
+    }
+    private void HandlePuppeteerAliasesRequestPackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsAllowedSender(senderName, senderWorld)) return;
+        var version = package.ReadInt();
+        if (version != RemotePuppeteerAliasesPackageVersion) return;
+        var aliases = BuildPuppeteerAliasesForController(senderName);
+        var response = new RemotePackage(RemotePackageTypePuppeteerAliasesResponse);
+        response.WriteInt(RemotePuppeteerAliasesPackageVersion);
+        response.WriteString(aliases.ToString(Newtonsoft.Json.Formatting.None));
+        _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(response, GetRemotePrefix()));
+    }
+    private void HandlePuppeteerAliasesResponsePackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsControlledUser(senderName, senderWorld)) return;
+        var version = package.ReadInt();
+        if (version != RemotePuppeteerAliasesPackageVersion) return;
+        var json = package.ReadString();
+        var user = GetOrCreateControlledUser(senderName, senderWorld);
+        user.PuppeteerAliases = ParsePuppeteerAliasesResponse(json);
+        user.LastPuppeteerAliasesUtc = DateTime.UtcNow;
+        plugin.Configuration.Save();
+    }
+    private JArray BuildPuppeteerAliasesForController(string controllerName)
+    {
+        var result = new JArray();
+
+        try
+        {
+            var aliases = plugin.GagSpeakPuppeteerAliasesApi.GetAliases();
+            foreach (var alias in aliases)
+            {
+                if (!alias.Enabled) continue;
+                if (!AliasAllowsController(alias, controllerName)) continue;
+                var note = alias.Id != Guid.Empty && plugin.Configuration.GagSpeakPuppeteerAliasNotes.TryGetValue(alias.Id, out var savedNote) ? savedNote : string.Empty;
+                result.Add(new JObject { ["Folder"] = alias.FolderPath ?? string.Empty, ["Name"] = alias.Name ?? string.Empty, ["Trigger"] = alias.TriggerCommand ?? string.Empty, ["Note"] = note ?? string.Empty });
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Failed to build Puppeteer alias response package.");
+        }
+
+        return result;
+    }
+    private static bool AliasAllowsController(API.GagSpeak.GagSpeakPuppeteerAliasesApi.PuppeteerAliasInfo alias, string controllerName)
+    {
+        if (string.IsNullOrWhiteSpace(controllerName)) return false;
+        return alias.WhitelistedNames.Any(x => string.Equals(x?.Trim(), controllerName.Trim(), StringComparison.OrdinalIgnoreCase)) || alias.WhitelistedPlayerNames.Any(x => string.Equals(x?.Trim(), controllerName.Trim(), StringComparison.OrdinalIgnoreCase)) || alias.WhitelistedUids.Any(x => string.Equals(x?.Trim(), controllerName.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+    private static List<Configuration.ControllerPuppeteerAliasConfig> ParsePuppeteerAliasesResponse(string json)
+    {
+        var result = new List<Configuration.ControllerPuppeteerAliasConfig>();
+
+        if (string.IsNullOrWhiteSpace(json)) return result;
+
+        try
+        {
+            foreach (var token in JArray.Parse(json).OfType<JObject>())
+            {
+                result.Add(new Configuration.ControllerPuppeteerAliasConfig { Folder = token["Folder"]?.ToString() ?? string.Empty, Name = token["Name"]?.ToString() ?? string.Empty, Trigger = token["Trigger"]?.ToString() ?? string.Empty, Note = token["Note"]?.ToString() ?? string.Empty });
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Failed to parse Puppeteer alias response package.");
+        }
+
+        return result
+            .Where(x => !string.IsNullOrWhiteSpace(x.Trigger))
+            .OrderBy(x => x.Folder, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
     private bool TryApplyRemoteStatusPackage(RemotePackage package, string senderName, string senderWorld)
     {

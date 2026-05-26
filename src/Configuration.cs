@@ -327,6 +327,22 @@ public class Configuration : IPluginConfiguration
         //public int JobRouletteIntervalMinutes { get; set; } = 0;
         public string RemoteTitle { get; set; } = string.Empty;
         public ControllerHonorificTitleConfig HonorificTitle { get; set; } = new();
+        public DateTime LastPuppeteerAliasesUtc { get; set; } = DateTime.MinValue;
+        public List<ControllerPuppeteerAliasConfig> PuppeteerAliases { get; set; } = new();
+        public XivChatType PuppeteerAliasChatType { get; set; } = XivChatType.TellIncoming;
+        public string PuppeteerAliasTriggerPrefix { get; set; } = string.Empty;
+    }
+
+
+
+
+    [Serializable]
+    public sealed class ControllerPuppeteerAliasConfig
+    {
+        public string Folder { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Trigger { get; set; } = string.Empty;
+        public string Note { get; set; } = string.Empty;
     }
 
 

@@ -34,6 +34,7 @@ namespace SayusGagExtender.API.GagSpeak
             public bool IsValid { get; set; } = false;
             public List<string> WhitelistedUids { get; set; } = new();
             public List<string> WhitelistedNames { get; set; } = new();
+            public List<string> WhitelistedPlayerNames { get; set; } = new();
         }
 
         public List<PuppeteerAliasInfo> GetAliases()
@@ -82,7 +83,8 @@ namespace SayusGagExtender.API.GagSpeak
                         IgnoreCase = GetPropertyValue(alias, "IgnoreCase") is bool ignoreCase && ignoreCase,
                         IsValid = InvokeBool(alias, "ValidAlias"),
                         WhitelistedUids = whitelist,
-                        WhitelistedNames = whitelist.Select(ResolveKinksterNameOrUid).ToList()
+                        WhitelistedNames = whitelist.Select(ResolveKinksterNameOrUid).ToList(),
+                        WhitelistedPlayerNames = whitelist.Select(ResolveKinksterPlayerName).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
                     });
                 }
             }
@@ -200,6 +202,31 @@ namespace SayusGagExtender.API.GagSpeak
             {
                 return uid;
             }
+        }
+
+        private string ResolveKinksterPlayerName(string uid)
+        {
+            try
+            {
+                var kinksters = context.TryResolveServiceByTypeName("KinksterManager");
+                var allKinksters = GetObjectMember(kinksters!, "_allKinksters") as IEnumerable;
+                if (allKinksters == null) return string.Empty;
+
+                foreach (var entry in allKinksters)
+                {
+                    var key = GetObjectMember(entry, "Key");
+                    var value = GetObjectMember(entry, "Value");
+                    var keyUid = GetStringMember(key!, "UID") ?? string.Empty;
+                    if (!string.Equals(keyUid, uid, StringComparison.OrdinalIgnoreCase)) continue;
+                    return GetStringMember(value!, "PlayerName") ?? string.Empty;
+                }
+            }
+            catch
+            {
+                return string.Empty;
+            }
+
+            return string.Empty;
         }
 
         private static List<string> GetStringSet(object source, string propertyName)
