@@ -36,6 +36,7 @@ public partial class ConfigWindow : Window, IDisposable
         HonorificEnforcer,
         CammnyEnforcer,
         XIVMessenger,
+        PuppeteerAliases,
         Roulette,
     }
 
@@ -99,6 +100,7 @@ public partial class ConfigWindow : Window, IDisposable
         DrawNavigationItem("Chat2", ConfigTab.Chat2);
         DrawNavigationItem("XIVMessenger", ConfigTab.XIVMessenger);
         DrawNavigationItem("GagSpeak Mirror", ConfigTab.GagSpeakMirror);
+        DrawNavigationItem("Puppeteer Aliases", ConfigTab.PuppeteerAliases);
 
         ImGui.EndChild();
 
@@ -187,6 +189,10 @@ public partial class ConfigWindow : Window, IDisposable
             case ConfigTab.GagSpeakMirror:
                 DrawGagSpeakMirrorTab();
                 break;
+
+            case ConfigTab.PuppeteerAliases:
+                DrawPuppeteerAliasesTab();
+                break;
         }
 
         ImGui.EndChild();
@@ -220,6 +226,7 @@ public partial class ConfigWindow : Window, IDisposable
             ConfigTab.Vibrator => "Vibrator",
             ConfigTab.Chat2 => "Chat2",
             ConfigTab.GagSpeakMirror => "GagSpeak Mirror",
+            ConfigTab.PuppeteerAliases => "Puppeteer Aliases",
             _ => "Settings",
         };
     }

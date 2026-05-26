@@ -180,6 +180,9 @@ public class Configuration : IPluginConfiguration
     public bool XivMessengerManagerEnabled { get; set; } = false;
 
 
+    public Dictionary<Guid, string> GagSpeakPuppeteerAliasNotes { get; set; } = new();
+
+
 
     public bool CammyEnforcerEnabled { get; set; } = false;
     public List<CammyEnforcerConfig> CammyEnforcerPresets { get; set; } = new();
