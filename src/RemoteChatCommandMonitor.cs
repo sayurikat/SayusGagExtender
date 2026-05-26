@@ -3,7 +3,10 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
+using Dalamud.Hooking;
 using ECommons;
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using Lumina.Data.Parsing.Layer;
 using Newtonsoft.Json.Linq;
 using System;
@@ -11,12 +14,11 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Dalamud.Hooking;
-using FFXIVClientStructs.FFXIV.Client.System.String;
-using FFXIVClientStructs.FFXIV.Client.UI.Misc;
-using System.Runtime.InteropServices;
+using static FFXIVClientStructs.FFXIV.Client.Game.StatusManager.Delegates;
 using static SayusGagExtender.Configuration;
 
 namespace SayusGagExtender;
@@ -47,6 +49,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     }
     private enum RemoteStatusType
     {
+        None,
         Zap,
         Vibe,
         Mount,
@@ -97,34 +100,53 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             Plugin.Log.Error(ex, "Failed to dispose RemoteChatCommandMonitor PrintMessage detour.");
         }
     }
-    
-    private string Status(RemoteStatusType type)
+
+    private void ReturnStatusUpdate(string senderName, string senderWorld, RemoteStatusType? type = null, string[]? messages = null, bool hidden = false, string prefix = "")
     {
-        return type switch
+        if (hidden)
         {
-            RemoteStatusType.Zap =>
-                $"status: sge zapcount [count] → {plugin.Configuration.AutoZapCount} [{(plugin.Configuration.AutoZapEnabled ? "Enabled" : "Disabled")}] [When:{plugin.Configuration.AutoZapWhen.ToString()}] {(plugin.Configuration.AutoZapCountControllerLocked ? "[Locked]" : "")}",
+            _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(BuildRemoteStatusPackage(), prefix));
+            return;
+        }
 
-            RemoteStatusType.Vibe =>
-                $"status: sge vibecount [count] → {plugin.Configuration.AutoVibeCount} [{(plugin.Configuration.AutoVibeEnabled ? "Enabled" : "Disabled")}] [When:{plugin.Configuration.AutoVibeWhen.ToString()}] {(plugin.Configuration.AutoVibeCountControllerLocked ? "[Locked]" : "")}",
+        string[] msqOutput = [];
 
-            RemoteStatusType.Mount =>
-                $"status: sge mountlimit [day/hour] [count] → {(plugin.Configuration.MountQuotaActions < 0 ? "unlimited" : plugin.Configuration.MountQuotaActions)} per {plugin.Configuration.MountQuotaWindow.ToString()} [Locked]",
+        if (type == null || type == RemoteStatusType.Zap)
+        {
+            msqOutput.Add($"status: sge zapcount [count] → {plugin.Configuration.AutoZapCount} [{(plugin.Configuration.AutoZapEnabled ? "Enabled" : "Disabled")}] [When:{plugin.Configuration.AutoZapWhen.ToString()}] {(plugin.Configuration.AutoZapCountControllerLocked ? "[Locked]" : "")}");
+        }
+        if (type == null || type == RemoteStatusType.Vibe)
+        {
+            msqOutput.Add($"status: sge vibecount [count] → {plugin.Configuration.AutoVibeCount} [{(plugin.Configuration.AutoVibeEnabled ? "Enabled" : "Disabled")}] [When:{plugin.Configuration.AutoVibeWhen.ToString()}] {(plugin.Configuration.AutoVibeCountControllerLocked ? "[Locked]" : "")}");
+        }
+        if (type == null || type == RemoteStatusType.Mount)
+        {
+            msqOutput.Add($"status: sge mountlimit [day/hour] [count] → {(plugin.Configuration.MountQuotaActions < 0 ? "unlimited" : plugin.Configuration.MountQuotaActions)} per {plugin.Configuration.MountQuotaWindow.ToString()} [Locked]");
+        }
+        if (type == null || type == RemoteStatusType.Teleport)
+        {
+            msqOutput.Add($"status: sge teleportlimit [day/hour] [count] → {(plugin.Configuration.TeleportQuotaActions < 0 ? "unlimited" : plugin.Configuration.TeleportQuotaActions)} per {plugin.Configuration.TeleportQuotaWindow.ToString()} [Locked]");
+        }
+        if (type == null || type == RemoteStatusType.Job)
+        {
+            msqOutput.Add($"status: sge joblimit [day/hour] [count] → {(plugin.Configuration.JobSwitchQuotaActions < 0 ? "unlimited" : plugin.Configuration.JobSwitchQuotaActions)} per {plugin.Configuration.JobSwitchQuotaWindow.ToString()} [Locked]");
+        }
+        if (type == null || type == RemoteStatusType.Roulette)
+        {
+            msqOutput.Add(BuildRouletteStatus());
+        }
+        if (type == null || type == RemoteStatusType.Mount)
+        {
+            msqOutput.Add($"status: sge settitle [title] → {GetRemotePermanentTitleDisplay()} [Priority:{RemoteHonorificPriority}] [Locked]");
+        }
+        if (messages != null)
+        {
+            msqOutput.Add(messages);
+        }
 
-            RemoteStatusType.Teleport =>
-                $"status: sge teleportlimit [day/hour] [count] → {(plugin.Configuration.TeleportQuotaActions < 0 ? "unlimited" : plugin.Configuration.TeleportQuotaActions)} per {plugin.Configuration.TeleportQuotaWindow.ToString()} [Locked]",
 
-            RemoteStatusType.Job =>
-                $"status: sge joblimit [day/hour] [count] → {(plugin.Configuration.JobSwitchQuotaActions < 0 ? "unlimited" : plugin.Configuration.JobSwitchQuotaActions)} per {plugin.Configuration.JobSwitchQuotaWindow.ToString()} [Locked]",
-
-            RemoteStatusType.Roulette =>
-                BuildRouletteStatus(),
-
-            RemoteStatusType.Title =>
-                $"status: sge settitle [title] → {GetRemotePermanentTitleDisplay()} [Priority:{RemoteHonorificPriority}] [Locked]",
-
-            _ => "status: unknown",
-        };
+        _ = SendTellLinesAsync(senderName, senderWorld, msqOutput);
+        return;
     }
     private string BuildRouletteStatus()
     {
@@ -226,33 +248,16 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     private bool TryGetRemoteCommand(XivChatType type, SeString sender, SeString message, RemoteCommandPrefixMode prefixMode, out ParsedRemoteCommand command)
     {
         command = default;
-
-        if (!plugin.Configuration.RemoteChatCommandsEnabled)
-            return false;
-
-        if (type == XivChatType.None)
-            return false;
-
-        if (!plugin.Configuration.RemoteAcceptedChannels.Contains(type))
-            return false;
-
+        if (!plugin.Configuration.RemoteChatCommandsEnabled) return false;
+        if (type == XivChatType.None) return false;
+        if (!plugin.Configuration.RemoteAcceptedChannels.Contains(type)) return false;
         var messageText = message.TextValue?.Trim();
-        if (string.IsNullOrWhiteSpace(messageText))
-            return false;
-
+        if (string.IsNullOrWhiteSpace(messageText)) return false;
         var prefix = plugin.Configuration.RemoteChatCommandPrefix;
-        if (string.IsNullOrWhiteSpace(prefix))
-            prefix = "sge";
-
-        if (!TryStripRemoteCommandPrefix(messageText, prefix, prefixMode, out var args))
-            return false;
-
-        if (!TryGetSenderCharacter(sender, out var senderName, out var senderWorld))
-            return false;
-
-        if (!IsAllowedSender(senderName, senderWorld))
-            return false;
-
+        if (string.IsNullOrWhiteSpace(prefix)) prefix = "sge";
+        if (!TryStripRemoteCommandPrefix(messageText, prefix, prefixMode, out var args)) return false;
+        if (!TryGetSenderCharacter(sender, out var senderName, out var senderWorld)) return false;
+        if (!IsAllowedSender(senderName, senderWorld) && !IsControlledUser(senderName, senderWorld)) return false;
         command = new ParsedRemoteCommand(type, senderName, senderWorld, args);
         return true;
     }
@@ -304,14 +309,24 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         Plugin.Log.Information($"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " + $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
         Plugin.ChatGui.Print($"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " + $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
 
-        HandleSgeCommand(
-            command.Args,
-            command.Type,
-            command.SenderName,
-            command.SenderWorld);
+        HandleSgeCommand(command.Args, command.Type, command.SenderName, command.SenderWorld, isHidden);
     }
-    private void HandleSgeCommand(string args, XivChatType type, string senderName, string senderWorld)
+    private void HandleSgeCommand(string args, XivChatType type, string senderName, string senderWorld, bool isHidden)
     {
+        packageTransport.ClearOldPendingPackages();
+
+        if (packageTransport.TryReceive(args, out var receivedPackage))
+        {
+            HandleRemotePackage(receivedPackage, type, senderName, senderWorld);
+            return;
+        }
+
+        if (!IsAllowedSender(senderName, senderWorld))
+        {
+            Plugin.Log.Information($"Ignoring commands from non-controller message from {senderName}@{senderWorld}: {args}");
+            return;
+        }
+
         if (args.StartsWith("help", StringComparison.OrdinalIgnoreCase))
         {
             _ = SendTellLinesAsync(senderName, senderWorld,
@@ -341,36 +356,19 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
         if (args.StartsWith("statuspack", StringComparison.OrdinalIgnoreCase))
         {
-            _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(BuildRemoteStatusPackage(), prefix));
+            ReturnStatusUpdate(senderName, senderWorld, hidden:true, prefix: prefix);
             return;
         }
 
         if (args.StartsWith("status", StringComparison.OrdinalIgnoreCase))
         {
-            _ = SendTellLinesAsync(senderName, senderWorld, [
-                Status(RemoteStatusType.Zap),
-                Status(RemoteStatusType.Vibe),
-                Status(RemoteStatusType.Mount),
-                Status(RemoteStatusType.Teleport),
-                Status(RemoteStatusType.Job),
-                Status(RemoteStatusType.Roulette),
-                Status(RemoteStatusType.Title),
-            ]);
-
+            ReturnStatusUpdate(senderName, senderWorld, hidden: false);
             return;
         }
         
 
         string[] arguments = args.Split(' ');
-
-        packageTransport.ClearOldPendingPackages();
-
-        if (packageTransport.TryReceive(args, out var receivedPackage))
-        {
-            HandleRemotePackage(receivedPackage, type, senderName, senderWorld);
-            return;
-        }
-
+        string[] msq = [];
         // Convenience: "sge jobroulette 0" means stop roulette.
         // Keep the actual stop handling in the normal stopjobroulette branch below.
         if (arguments.Length >= 2 &&
@@ -388,11 +386,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 plugin.Configuration.AutoZapWhen = RandomZapSender.OperateWhen.Always;
                 plugin.Configuration.AutoZapEnabled = true;
                 plugin.Configuration.Save();
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    $"Autozap will always run, regardless of where you are. <me> can never change this.",
-                    Status(RemoteStatusType.Zap),
-                ]);
+                msq = [$"Autozap will always run, regardless of where you are. <me> can never change this."];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Zap, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
             if (arguments[1].Equals("distant", StringComparison.OrdinalIgnoreCase))
@@ -400,11 +395,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 plugin.Configuration.AutoZapWhen = RandomZapSender.OperateWhen.Distant;
                 plugin.Configuration.AutoZapEnabled = true;
                 plugin.Configuration.Save();
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    $"Autozap will only run when you are out of range. <me> can never change this.",
-                    Status(RemoteStatusType.Zap),
-                ]);
+                msq = [$"Autozap will only run when you are out of range. <me> can never change this."];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Zap, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
             if (arguments[1].Equals("offline", StringComparison.OrdinalIgnoreCase))
@@ -412,21 +404,13 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 plugin.Configuration.AutoZapWhen = RandomZapSender.OperateWhen.Offline;
                 plugin.Configuration.AutoZapEnabled = true;
                 plugin.Configuration.Save();
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    $"Autozap will only run when you are offline. <me> can never change this.",
-                    Status(RemoteStatusType.Zap),
-                ]);
+                msq = [$"Autozap will only run when you are offline. <me> can never change this."];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Zap, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
 
-
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, set when Autozap feature will be active with: sge autovibe [always/distant/offline]",
-                Status(RemoteStatusType.Zap),
-            ]);
-
+            msq = [$"cannot recognize command, set when Autozap feature will be active with: sge autozap [always/distant/offline]"];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Zap, msq, hidden: isHidden, prefix: prefix);
             return;
         }
         if (arguments[0].Equals("autovibe", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
@@ -436,11 +420,9 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 plugin.Configuration.AutoVibeWhen = RandomVibeSender.OperateWhen.Always;
                 plugin.Configuration.AutoVibeEnabled = true;
                 plugin.Configuration.Save();
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    $"Autovibe will always run, regardless of where you are. <me> can never change this.",
-                    Status(RemoteStatusType.Vibe),
-                ]);
+
+                msq = [$"Autovibe will always run, regardless of where you are. <me> can never change this."];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Vibe, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
             if (arguments[1].Equals("distant", StringComparison.OrdinalIgnoreCase))
@@ -448,11 +430,9 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 plugin.Configuration.AutoVibeWhen = RandomVibeSender.OperateWhen.Distant;
                 plugin.Configuration.AutoVibeEnabled = true;
                 plugin.Configuration.Save();
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    $"Autovibe will only run when you are out of range. <me> can never change this.",
-                    Status(RemoteStatusType.Zap),
-                ]);
+
+                msq = [$"Autovibe will only run when you are out of range. <me> can never change this."];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Vibe, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
             if (arguments[1].Equals("offline", StringComparison.OrdinalIgnoreCase))
@@ -460,21 +440,13 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 plugin.Configuration.AutoVibeWhen = RandomVibeSender.OperateWhen.Offline;
                 plugin.Configuration.AutoVibeEnabled = true;
                 plugin.Configuration.Save();
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    $"Autovibe will only run when you are offline. <me> can never change this.",
-                    Status(RemoteStatusType.Zap),
-                ]);
+                msq = [$"Autovibe will only run when you are offline. <me> can never change this."];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Vibe, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
 
-
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, set when Autovibe feature will be active with: sge autovibe [always/distant/offline]",
-                Status(RemoteStatusType.Zap),
-            ]);
-
+            msq = [$"cannot recognize command, set when Autovibe feature will be active with: sge autovibe [always/distant/offline]"];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Vibe, msq, hidden: isHidden, prefix: prefix);
             return;
         }
 
@@ -489,11 +461,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 {
                     plugin.Configuration.AutoZapCountControllerLocked = false;
                     plugin.Configuration.Save();
-                    _ = SendTellLinesAsync(senderName, senderWorld,
-                    [
-                        //$"Zaps per hour settings released.",
-                        Status(RemoteStatusType.Zap),
-                    ]);
+                    ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Zap, hidden: isHidden, prefix: prefix);
                     return;
                 }
                 if (count >= 0)
@@ -502,22 +470,15 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     plugin.Configuration.AutoZapCount = count;
                     plugin.Configuration.AutoZapCountControllerLocked = true;
                     plugin.Configuration.Save();
-                    _ = SendTellLinesAsync(senderName, senderWorld,
-                    [
-                        //$"Zaps per hour changed to {plugin.Configuration.AutoZapCount}",
-                        Status(RemoteStatusType.Zap),
-                        $"<me> cannot change this or disable the feature unless you unlock the setting with: sge zapcount unlock",
-                    ]);
+                    msq = [$"<me> cannot change this or disable the feature unless you unlock the setting with: sge zapcount unlock"];
+                    ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Zap, msq, hidden: isHidden, prefix: prefix);
                     return;
                 }
             }
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, to set desired zaps per hour, use: sge zapcount [count]",
-                Status(RemoteStatusType.Zap),
-            ]);
-
+            msq = [$"cannot recognize command, to set desired zaps per hour, use: sge zapcount [count]"];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Zap, msq, hidden: isHidden, prefix: prefix);
             return;
+
         }
         if (arguments[0].Equals("vibecount", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
         {
@@ -530,11 +491,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 {
                     plugin.Configuration.AutoVibeCountControllerLocked = false;
                     plugin.Configuration.Save();
-                    _ = SendTellLinesAsync(senderName, senderWorld,
-                    [
-                        //$"Zaps per hour settings released.",
-                        Status(RemoteStatusType.Vibe),
-                    ]);
+
+                    ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Vibe, hidden: isHidden, prefix: prefix);
                     return;
                 }
                 if (count >= 0)
@@ -543,21 +501,15 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     plugin.Configuration.AutoVibeCount = count;
                     plugin.Configuration.AutoVibeCountControllerLocked = true;
                     plugin.Configuration.Save();
-                    _ = SendTellLinesAsync(senderName, senderWorld,
-                    [
-                        //$"Vibes per hour changed to {plugin.Configuration.AutoVibeCount}",
-                        Status(RemoteStatusType.Vibe),
-                        $"<me> cannot change this or disable the feature unless you unlock the setting with: sge vibecount unlock",
-                    ]);
+
+                    msq = [$"<me> cannot change this or disable the feature unless you unlock the setting with: sge vibecount unlock"];
+                    ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Vibe, msq, hidden: isHidden, prefix: prefix);
                     return;
                 }
             }
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, to set desired vibes per hour, use: sge vibecount [count]",
-                Status(RemoteStatusType.Vibe),
-            ]);
 
+            msq = [$"cannot recognize command, to set desired vibes per hour, use: sge vibecount [count]"];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Vibe, msq, hidden: isHidden, prefix: prefix);
             return;
         }
 
@@ -607,22 +559,16 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     validParameter = true;
                 }
 
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    Status(RemoteStatusType.Mount),
-                    $"<me> can never change this. To remove limit, use: sge mountlimit unlimited",
-                ]);
+                msq = [$"<me> can never change this. To remove limit, use: sge mountlimit unlimited"];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Mount, msq, hidden: isHidden, prefix: prefix);
 
                 if (validParameter)
                     return;
 
             }
 
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, to limit number of mount usage, use: sge mountlimit [day/hour] [count]]",
-                Status(RemoteStatusType.Mount),
-            ]);
+            msq = [$"cannot recognize command, to limit number of mount usage, use: sge mountlimit [day/hour] [count]"];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Mount, msq, hidden: isHidden, prefix: prefix);
 
             return;
         }
@@ -675,22 +621,15 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     validParameter = true;
                 }
 
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    Status(RemoteStatusType.Teleport),
-            $"<me> can never change this. To remove limit, use: sge teleportlimit unlimited",
-        ]);
+                msq = [$"<me> can never change this. To remove limit, use: sge teleportlimit unlimited"];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Teleport, msq, hidden: isHidden, prefix: prefix);
 
                 if (validParameter)
                     return;
             }
 
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, to limit number of teleport usage, use: sge teleportlimit [day/hour] [count]",
-        Status(RemoteStatusType.Teleport),
-    ]);
-
+            msq = [$"cannot recognize command, to limit number of mount usage, use: sge teleportlimit [day/hour] [count]"];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Teleport, msq, hidden: isHidden, prefix: prefix);
             return;
         }
         if (arguments[0].Equals("joblimit", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
@@ -742,22 +681,15 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     validParameter = true;
                 }
 
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                        Status(RemoteStatusType.Job),
-                    $"<me> can never change this. To remove limit, use: sge joblimit unlimited",
-                ]);
+                msq = [$"<me> can never change this. To remove limit, use: sge joblimit unlimited"];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Job, msq, hidden: isHidden, prefix: prefix);
 
                 if (validParameter)
                     return;
             }
 
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, to limit number of job switches, use: sge joblimit [day/hour] [count]",
-                Status(RemoteStatusType.Job),
-            ]);
-
+            msq = [$"cannot recognize command, to limit number of mount usage, use: sge joblimit [day/hour] [count]"];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Job, msq, hidden: isHidden, prefix: prefix);
             return;
         }
         if (arguments[0].Equals("jobroulette", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
@@ -766,11 +698,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             {
                 if (intervalMinutes < 1)
                 {
-                    _ = SendTellLinesAsync(senderName, senderWorld,
-                    [
-                        "cannot start job roulette with interval less than 1 minute, to enable job roulette, use: sge jobroulette [minutes]",
-                        Status(RemoteStatusType.Roulette),
-                    ]);
+                    msq = [$"cannot start job roulette with interval less than 1 minute, to enable job roulette, use: sge jobroulette [minutes]"];
+                    ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Roulette, msq, hidden: isHidden, prefix: prefix);
                     return;
                 }
 
@@ -786,20 +715,13 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 plugin.Configuration.NextScheduledJobSwitch = DateTime.UtcNow + interval;
                 plugin.Configuration.Save();
 
-                _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    $"Job roulette enabled with interval {FormatTimeSpan(interval)}. Job roulettes will also consume <me>'s Quota",
-                    Status(RemoteStatusType.Roulette),
-                ]);
+                msq = [$"Job roulette enabled with interval {FormatTimeSpan(interval)}. Job roulettes will also consume <me>'s Quota"];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Roulette, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
 
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, to enable job roulette, use: sge jobroulette [minutes]",
-                Status(RemoteStatusType.Roulette),
-            ]);
-
+            msq = [$"cannot recognize command, to enable job roulette, use: sge jobroulette [minutes]"];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Roulette, msq, hidden: isHidden, prefix: prefix);
             return;
         }
         if (arguments[0].Equals("stopjobroulette", StringComparison.OrdinalIgnoreCase))
@@ -808,10 +730,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             plugin.Configuration.NextScheduledJobSwitch = DateTime.MinValue;
             plugin.Configuration.Save();
 
-            _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                Status(RemoteStatusType.Roulette),
-            ]);
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Roulette, hidden: isHidden, prefix: prefix);
             return;
         }
 
@@ -823,25 +742,12 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
             if (string.IsNullOrWhiteSpace(json))
             {
-                _ = SendTellLinesAsync(senderName, senderWorld, [
-                    "failed to build Honorific title.",
-                    ]);
+                msq = [$"failed to build Honorific title."];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
             ApplyRemotePermanentTitleJson(json);
-            _ = SendTellLinesAsync(senderName, senderWorld, [
-                Status(RemoteStatusType.Title),
-            ]);
-            return;
-
-
-
-            _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    "cannot recognize command, to set Honorific title, use: sge settitle [title]",
-                Status(RemoteStatusType.Zap),
-            ]);
-
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, hidden: isHidden, prefix: prefix);
             return;
 
         }
@@ -850,9 +756,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
             if (!int.TryParse(arguments[1], out int seconds))
             {
-                _ = SendTellLinesAsync(senderName, senderWorld, [
-                    "seconds not recognized, use: sge settemptitle [seconds] [title]",
-                    ]);
+                msq = [$"seconds not recognized, use: sge settemptitle [seconds] [title]"];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
             var title = string.Join(" ", arguments.Skip(2)).Trim();
@@ -860,41 +765,27 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
             if (string.IsNullOrWhiteSpace(json))
             {
-                _ = SendTellLinesAsync(senderName, senderWorld, [
-                    "failed to build temporary Honorific title.",
-                    ]);
+                msq = [$"failed to build temporary Honorific title."];
+                ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, msq, hidden: isHidden, prefix: prefix);
                 return;
             }
             plugin.HonorificManager.SetTitle(json, TimeSpan.FromSeconds(seconds), RemoteHonorificTempPriority, this);
-            _ = SendTellLinesAsync(senderName, senderWorld, [
-                $"Temporary Honorific title set to: {title} for {seconds}s, temp title cannot be cancelled or removed before timer expires."
-                //, Status(RemoteStatusType.Title), 
-            ]);
+            msq = [$"Temporary Honorific title set to: {title} for {seconds}s, temp title cannot be cancelled or removed before timer expires."];
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, msq, hidden: isHidden, prefix: prefix);
             return;
 
-
-            _ = SendTellLinesAsync(senderName, senderWorld,
-                [
-                    "cannot recognize command, to set temporary title, use: sge settemptitle [seconds] [title]",
-                Status(RemoteStatusType.Zap),
-            ]);
-
-            return;
         }
         if (arguments[0].Equals("cleartitle", StringComparison.OrdinalIgnoreCase))
         {
-            RecallRemotePermanentTitleRequest();
-            _ = SendTellLinesAsync(senderName, senderWorld, [
-                Status(RemoteStatusType.Title),
-            ]);
+            plugin.Configuration.RemotePermanentHonorificTitleJson = "";
+            plugin.HonorificManager.RecallTitle(this);
+            ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Title, hidden: isHidden, prefix: prefix);
             return;
         }
-
-
-        _ = SendTellLinesAsync(senderName, senderWorld,
-            [
-                "cannot recognize command, to display all commands, use: sge help",
-        ]);
+    
+        msq = [$"cannot recognize command, to display all commands, use: sge help"];
+        ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.None, msq, hidden: false);
+        return;
     }
 
 
@@ -937,25 +828,104 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
         package.WriteString(GetRemotePermanentTitleDisplay());
         package.WriteString("extra content to force multi package");
-        package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
-        package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
-        package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
-        package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+        //package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+        //package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+        //package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+        //package.WriteString("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
 
         return package;
     }
 
     private void HandleRemotePackage(RemotePackage package, XivChatType type, string senderName, string senderWorld)
     {
-        if (package.PackageType == RemotePackageTypeStatus)
+        try
         {
-            Plugin.Log.Information($"Received remote status package from {senderName}@{senderWorld}.");
-            return;
+            if (package.PackageType == RemotePackageTypeStatus)
+            {
+                if (!TryApplyRemoteStatusPackage(package, senderName, senderWorld))
+                {
+                    Plugin.Log.Warning($"Invalid remote status package from {senderName}@{senderWorld}.");
+                    return;
+                }
+
+                Plugin.Log.Information($"Saved remote status package from {senderName}@{senderWorld}.");
+                return;
+            }
+
+            Plugin.Log.Warning($"Unknown remote package type {package.PackageType} from {senderName}@{senderWorld}.");
         }
-
-        Plugin.Log.Warning($"Unknown remote package type {package.PackageType} from {senderName}@{senderWorld}.");
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, $"Failed to handle remote package from {senderName}@{senderWorld}.");
+        }
     }
+    private bool TryApplyRemoteStatusPackage(RemotePackage package, string senderName, string senderWorld)
+    {
+        if (!IsControlledUser(senderName, senderWorld)) return false;
 
+        var version = package.ReadInt();
+        if (version != RemoteStatusPackageVersion) return false;
+
+        var user = GetOrCreateControlledUser(senderName, senderWorld);
+        user.LastStatusUtc = DateTime.UtcNow;
+        user.AutoZapEnabled = package.ReadBool();
+        user.AutoZapCount = package.ReadInt();
+        user.AutoZapWhen = ReadOperateWhenName(package.ReadInt());
+        user.AutoZapLocked = package.ReadBool();
+        user.AutoVibeEnabled = package.ReadBool();
+        user.AutoVibeCount = package.ReadInt();
+        user.AutoVibeWhen = ReadOperateWhenName(package.ReadInt());
+        user.AutoVibeLocked = package.ReadBool();
+        user.MountQuotaEnabled = package.ReadBool();
+        user.MountQuotaActions = package.ReadInt();
+        user.MountQuotaWindow = ReadQuotaWindow(package.ReadInt());
+        user.MountQuotaUsed = package.ReadInt();
+        user.TeleportQuotaEnabled = package.ReadBool();
+        user.TeleportQuotaActions = package.ReadInt();
+        user.TeleportQuotaWindow = ReadQuotaWindow(package.ReadInt());
+        user.TeleportQuotaUsed = package.ReadInt();
+        user.JobQuotaEnabled = package.ReadBool();
+        user.JobQuotaActions = package.ReadInt();
+        user.JobQuotaWindow = ReadQuotaWindow(package.ReadInt());
+        user.JobQuotaUsed = package.ReadInt();
+        user.JobRouletteEnabled = package.ReadBool();
+        user.JobRouletteLocked = package.ReadBool();
+        user.JobRouletteInterval = package.ReadTimeSpan();
+        user.NextScheduledJobSwitchUtc = package.ReadDateTimeUtc();
+        user.JobRouletteWhitelistedGearsetCount = package.ReadInt();
+        user.RemoteTitle = package.ReadString();
+
+        plugin.Configuration.Save();
+        plugin.RefreshControllerUserInputState(senderName, senderWorld);
+        return true;
+    }
+    private bool IsControlledUser(string senderName, string senderWorld)
+    {
+        return plugin.Configuration.ControllerUsers.Any(user => IsSameCharacter(user.Name, user.World, senderName, senderWorld));
+    }
+    private Configuration.ControllerUserConfig GetOrCreateControlledUser(string senderName, string senderWorld)
+    {
+        var user = plugin.Configuration.ControllerUsers.FirstOrDefault(user => IsSameCharacter(user.Name, user.World, senderName, senderWorld));
+        if (user != null) return user;
+
+        user = new Configuration.ControllerUserConfig { Name = senderName, World = senderWorld };
+        plugin.Configuration.ControllerUsers.Add(user);
+        return user;
+    }
+    private static bool IsSameCharacter(string leftName, string leftWorld, string rightName, string rightWorld)
+    {
+        return string.Equals(leftName?.Trim(), rightName?.Trim(), StringComparison.OrdinalIgnoreCase) && string.Equals(leftWorld?.Trim(), rightWorld?.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+    private static string ReadOperateWhenName(int value)
+    {
+        if (Enum.IsDefined(typeof(RandomZapSender.OperateWhen), value)) return ((RandomZapSender.OperateWhen)value).ToString();
+        return "Unknown";
+    }
+    private static QuotaWindow ReadQuotaWindow(int value)
+    {
+        if (Enum.IsDefined(typeof(QuotaWindow), value)) return (QuotaWindow)value;
+        return QuotaWindow.Hour;
+    }
 
     private bool IsAllowedSender(string senderName, string senderWorld)
     {
@@ -1166,7 +1136,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         var json = plugin.Configuration.RemotePermanentHonorificTitleJson;
 
         if (string.IsNullOrWhiteSpace(json))
-            return "none";
+            return "";
 
         try
         {

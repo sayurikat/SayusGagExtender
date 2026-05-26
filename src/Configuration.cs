@@ -21,13 +21,13 @@ public class Configuration : IPluginConfiguration
     public bool OpenMiniWindowOnStartup { get; set; } = false;
 
 
-    public bool EmoteGuardEnabled { get; set; } = true;
-    public bool HandGuardEnabled { get; set; } = true;
+    public bool EmoteGuardEnabled { get; set; } = false;
+    public bool HandGuardEnabled { get; set; } = false;
 
     public Dictionary<Guid, string> AutoZapRequiredRestrictions { get; set; } = new Dictionary<Guid, string>();
     public List<WeightedZapCommand> AutoZapCommands { get; set; } = new();
     public string ZapControllerName { get; set; }
-    public bool AutoZapEnabled { get; set; } = true;
+    public bool AutoZapEnabled { get; set; } = false;
     public int AutoZapCount { get; set; } = 8;
     public bool AutoZapCountControllerLocked { get; set; } = false;
     public Guid AutoZapEngagedMoodleId { get; set; } = Guid.Empty;
@@ -38,7 +38,7 @@ public class Configuration : IPluginConfiguration
     public Dictionary<Guid, string> AutoVibeRequiredRestrictions { get; set; } = new Dictionary<Guid, string>();
     public List<WeightedVibeCommand> AutoVibeCommands { get; set; } = new();
     public string VibeControllerName { get; set; }
-    public bool AutoVibeEnabled { get; set; } = true;
+    public bool AutoVibeEnabled { get; set; } = false;
     public int AutoVibeCount { get; set; } = 8;
     public bool AutoVibeCountControllerLocked { get; set; } = false;
     public Guid AutoVibeEngagedMoodleId { get; set; } = Guid.Empty;
@@ -48,7 +48,7 @@ public class Configuration : IPluginConfiguration
     public RandomVibeSender.OperateWhen AutoVibeWhen { get; set; } = RandomVibeSender.OperateWhen.Offline;
 
 
-    public bool MountBlockFeature { get; set; } = true;
+    public bool MountBlockFeature { get; set; } = false;
     public Dictionary<Guid, string> MountBlockMoodles { get; set; } = new();
     public bool MountQuotaEnabled { get; set; } = false;
     public int MountQuotaActions { get; set; } = -1;
@@ -60,7 +60,7 @@ public class Configuration : IPluginConfiguration
     public string MountQuotaEmptyMoodleName { get; set; } = string.Empty;
 
 
-    public bool TeleportBlockFeature { get; set; } = true;
+    public bool TeleportBlockFeature { get; set; } = false;
     public Dictionary<Guid, string> TeleportBlockMoodles { get; set; } = new();
     public bool TeleportQuotaEnabled { get; set; } = false;
     public int TeleportQuotaActions { get; set; } = 0;
@@ -72,7 +72,7 @@ public class Configuration : IPluginConfiguration
     public string TeleportQuotaEmptyMoodleName { get; set; } = string.Empty;
 
 
-    public bool JobSwitchBlockFeature { get; set; } = true;
+    public bool JobSwitchBlockFeature { get; set; } = false;
     public Dictionary<Guid, string> JobSwitchBlockMoodles { get; set; } = new();
     public bool JobSwitchQuotaEnabled { get; set; } = false;
     public int JobSwitchQuotaActions { get; set; } = 0;
@@ -264,6 +264,56 @@ public class Configuration : IPluginConfiguration
         Hour = 0,
         Day = 1,
     }
+
+
+
+
+
+
+
+
+
+    public bool ControllerWindowPreferred { get; set; } = false;
+    public List<ControllerUserConfig> ControllerUsers { get; set; } = new();
+
+    [Serializable]
+    public sealed class ControllerUserConfig
+    {
+        public string Name { get; set; } = string.Empty;
+        public string World { get; set; } = string.Empty;
+        public DateTime LastStatusUtc { get; set; } = DateTime.MinValue;
+        public bool AutoZapEnabled { get; set; } = false;
+        public int AutoZapCount { get; set; } = 0;
+        public string AutoZapWhen { get; set; } = string.Empty;
+        public bool AutoZapLocked { get; set; } = false;
+        public bool AutoVibeEnabled { get; set; } = false;
+        public int AutoVibeCount { get; set; } = 0;
+        public string AutoVibeWhen { get; set; } = string.Empty;
+        public bool AutoVibeLocked { get; set; } = false;
+        public bool MountQuotaEnabled { get; set; } = false;
+        public int MountQuotaActions { get; set; } = -1;
+        public int MountQuotaUsed { get; set; } = -1;
+        public QuotaWindow MountQuotaWindow { get; set; } = QuotaWindow.Hour;
+        public bool TeleportQuotaEnabled { get; set; } = false;
+        public int TeleportQuotaActions { get; set; } = -1;
+        public int TeleportQuotaUsed { get; set; } = -1;
+        public QuotaWindow TeleportQuotaWindow { get; set; } = QuotaWindow.Hour;
+        public bool JobQuotaEnabled { get; set; } = false;
+        public int JobQuotaActions { get; set; } = -1;
+        public int JobQuotaUsed { get; set; } = -1;
+        public QuotaWindow JobQuotaWindow { get; set; } = QuotaWindow.Hour;
+        public bool JobRouletteEnabled { get; set; } = false;
+        public bool JobRouletteLocked { get; set; } = false;
+        public TimeSpan JobRouletteInterval { get; set; } = TimeSpan.Zero;
+        public DateTime NextScheduledJobSwitchUtc { get; set; } = DateTime.MinValue;
+        public int JobRouletteWhitelistedGearsetCount { get; set; } = -1;
+        //public int JobRouletteIntervalMinutes { get; set; } = 0;
+        public string RemoteTitle { get; set; } = string.Empty;
+    }
+
+
+
+
 
 
     public void Save()

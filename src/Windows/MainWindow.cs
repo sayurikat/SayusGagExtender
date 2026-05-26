@@ -70,6 +70,16 @@ public class MainWindow : Window, IDisposable
             //ImGui.SameLine();
         }
 
+        ImGui.SameLine();
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X - ImGui.CalcTextSize("Controller InterfaceInter").X + ImGui.GetStyle().FramePadding.X * 2);
+        if (ImGui.Button("Controller Interface"))
+        {
+            configuration.ControllerWindowPreferred = true;
+            configuration.Save();
+            plugin.ToggleControllerUi();
+            IsOpen = false;
+        }
+
         ImGui.BeginGroup();
 
         ImGui.Text("Sayu's Gag Extender");
@@ -97,6 +107,7 @@ public class MainWindow : Window, IDisposable
         {
             plugin.ToggleMiniUi();
         }
+        
     }
 
     private void DrawFeatureStatus()

@@ -86,6 +86,7 @@ public sealed class Plugin : IDalamudPlugin
     private ConfigWindow ConfigWindow { get; init; }
     private MainWindow MainWindow { get; init; }
     private MiniWindow MiniWindow { get; init; }
+    private ControllerWindow ControllerWindow { get; init; }
 
     public Plugin()
     {
@@ -98,10 +99,12 @@ public sealed class Plugin : IDalamudPlugin
         ConfigWindow = new ConfigWindow(this);
         MainWindow = new MainWindow(this);
         MiniWindow = new MiniWindow(this);
+        ControllerWindow = new ControllerWindow(this);
 
         WindowSystem.AddWindow(ConfigWindow);
         WindowSystem.AddWindow(MainWindow);
         WindowSystem.AddWindow(MiniWindow);
+        WindowSystem.AddWindow(ControllerWindow);
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -179,7 +182,8 @@ public sealed class Plugin : IDalamudPlugin
         {
             //MainWindow.Toggle();
             //MainWindow.BringToFront();
-            MainWindow.IsOpen = true;
+            if (Configuration.ControllerWindowPreferred) ControllerWindow.IsOpen = true;
+            else MainWindow.IsOpen = true;
         }
         if (Configuration.OpenConfigWindowOnStartup)
         {
@@ -205,6 +209,7 @@ public sealed class Plugin : IDalamudPlugin
         ConfigWindow.Dispose();
         MainWindow.Dispose();
         MiniWindow.Dispose();
+        ControllerWindow.Dispose();
 
         EmoteGuard?.Dispose();
         AutoAttackKiller?.Dispose();
@@ -402,6 +407,19 @@ public sealed class Plugin : IDalamudPlugin
     }
     
     public void ToggleConfigUi() => ConfigWindow.Toggle();
-    public void ToggleMainUi() => MainWindow.Toggle();
+    public void ToggleMainUi()
+    {
+        if (Configuration.ControllerWindowPreferred) ControllerWindow.Toggle();
+        else MainWindow.Toggle();
+    }
+
+    public void ToggleControllerUi()
+    {
+        ControllerWindow.Toggle();
+    }
     public void ToggleMiniUi() => MiniWindow.Toggle();
+    public void RefreshControllerUserInputState(string name, string world)
+    {
+        ControllerWindow.RefreshUserInputState(name, world);
+    }
 }
