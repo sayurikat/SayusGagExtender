@@ -39,6 +39,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         Mount,
         Teleport,
         Job,
+        Roulette,
         Title,
     }
     public RemoteChatCommandMonitor(Plugin plugin)
@@ -75,6 +76,8 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 "commands: sge mountlimit [day/hour] [count] → How many times a mount can be used per day/hour, or: sge mountlimit unlimited",
                 "commands: sge teleportlimit [day/hour] [count] → How many times a teleport can be used per day/hour, or: sge teleportlimit unlimited",
                 "commands: sge joblimit [day/hour] [count] → How many times jobs can be changed per day/hour, or: sge joblimit unlimited",
+                "commands: sge jobroulette [minutes] → Enable job roulette with required interval in minutes",
+                "commands: sge stopjobroulette → Stop job roulette and unlock local roulette settings",
                 "commands: sge settitle [title] → Sets permanent Honorific title",
                 "commands: sge settemptitle [seconds] [title] → Sets temporary Honorific title",
                 "commands: sge cleartitle → Clears the permanent remote Honorific title",
@@ -92,6 +95,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 Status(RemoteStatusType.Mount),
                 Status(RemoteStatusType.Teleport),
                 Status(RemoteStatusType.Job),
+                Status(RemoteStatusType.Roulette),
                 Status(RemoteStatusType.Title),
             ]);
 
@@ -99,6 +103,16 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         }
 
         string[] arguments = args.Split(' ');
+
+        // Convenience: "sge jobroulette 0" means stop roulette.
+        // Keep the actual stop handling in the normal stopjobroulette branch below.
+        if (arguments.Length >= 2 &&
+            arguments[0].Equals("jobroulette", StringComparison.OrdinalIgnoreCase) &&
+            arguments[1].Equals("0", StringComparison.OrdinalIgnoreCase))
+        {
+            arguments[0] = "stopjobroulette";
+        }
+
 
         if (arguments[0].Equals("autozap", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
         {
@@ -321,7 +335,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                         plugin.Configuration.MountQuotaActionLogUtc.Clear();
                         plugin.Configuration.MountQuotaEnabled = false;
                     }
-                    
+
                     plugin.Configuration.Save();
                     validParameter = true;
                 }
@@ -332,11 +346,11 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     $"<me> can never change this. To remove limit, use: sge mountlimit unlimited",
                 ]);
 
-                if (validParameter) 
+                if (validParameter)
                     return;
 
             }
-            
+
             _ = SendTellLinesAsync(senderName, senderWorld,
             [
                 "cannot recognize command, to limit number of mount usage, use: sge mountlimit [day/hour] [count]]",
@@ -479,6 +493,61 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
             return;
         }
+        if (arguments[0].Equals("jobroulette", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
+        {
+            if (int.TryParse(arguments[1], out var intervalMinutes))
+            {
+                if (intervalMinutes < 1)
+                {
+                    _ = SendTellLinesAsync(senderName, senderWorld,
+                    [
+                        "cannot start job roulette with interval less than 1 minute, to enable job roulette, use: sge jobroulette [minutes]",
+                        Status(RemoteStatusType.Roulette),
+                    ]);
+                    return;
+                }
+
+                var interval = TimeSpan.FromMinutes(intervalMinutes);
+
+                plugin.Configuration.JobRouletteInterval = interval;
+                plugin.Configuration.JobRouletteEnabled = true;
+                plugin.Configuration.JobRouletteRemoteSet = true;
+                //for now force this
+                plugin.Configuration.JobRouletteSwapEvenIfLockedOrOutOfQuota = true;
+                plugin.Configuration.JobRouletteLockManualChanges = false;
+
+                plugin.Configuration.NextScheduledJobSwitch = DateTime.UtcNow + interval;
+                plugin.Configuration.Save();
+
+                _ = SendTellLinesAsync(senderName, senderWorld,
+                [
+                    $"Job roulette enabled with interval {FormatTimeSpan(interval)}. Job roulettes will also consume <me>'s Quota",
+                    Status(RemoteStatusType.Roulette),
+                ]);
+                return;
+            }
+
+            _ = SendTellLinesAsync(senderName, senderWorld,
+            [
+                "cannot recognize command, to enable job roulette, use: sge jobroulette [minutes]",
+                Status(RemoteStatusType.Roulette),
+            ]);
+
+            return;
+        }
+        if (arguments[0].Equals("stopjobroulette", StringComparison.OrdinalIgnoreCase))
+        {
+            plugin.Configuration.JobRouletteEnabled = false;
+            plugin.Configuration.NextScheduledJobSwitch = DateTime.MinValue;
+            plugin.Configuration.Save();
+
+            _ = SendTellLinesAsync(senderName, senderWorld,
+            [
+                Status(RemoteStatusType.Roulette),
+            ]);
+            return;
+        }
+
         if (arguments[0].Equals("settitle", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 2)
         {
 
@@ -494,7 +563,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             }
             ApplyRemotePermanentTitleJson(json);
             _ = SendTellLinesAsync(senderName, senderWorld, [
-                Status(RemoteStatusType.Title), 
+                Status(RemoteStatusType.Title),
             ]);
             return;
 
@@ -507,7 +576,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             ]);
 
             return;
-            
+
         }
         if (arguments[0].Equals("settemptitle", StringComparison.OrdinalIgnoreCase) && arguments.Length >= 3)
         {
@@ -550,7 +619,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             RecallRemotePermanentTitleRequest();
             _ = SendTellLinesAsync(senderName, senderWorld, [
                 Status(RemoteStatusType.Title),
-            ]); 
+            ]);
             return;
         }
 
@@ -579,11 +648,70 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
             RemoteStatusType.Job =>
                 $"status: sge joblimit [day/hour] [count] → {(plugin.Configuration.JobSwitchQuotaActions < 0 ? "unlimited" : plugin.Configuration.JobSwitchQuotaActions)} per {plugin.Configuration.JobSwitchQuotaWindow.ToString()} [Locked]",
+
+            RemoteStatusType.Roulette =>
+                BuildRouletteStatus(),
+
             RemoteStatusType.Title =>
                 $"status: sge settitle [title] → {GetRemotePermanentTitleDisplay()} [Priority:{RemoteHonorificPriority}] [Locked]",
 
             _ => "status: unknown",
         };
+    }
+
+    private string BuildRouletteStatus()
+    {
+        var whitelistCount = plugin.Configuration.JobRouletteWhitelistedGearsets?.Count ?? 0;
+        var enabled = plugin.Configuration.JobRouletteEnabled;
+        var locked = plugin.Configuration.JobRouletteRemoteSet;
+
+        var parts = new List<string>
+        {
+            $"{whitelistCount} gearsets",
+        };
+
+        if (enabled)
+        {
+            parts.Add($"interval {FormatTimeSpan(plugin.Configuration.JobRouletteInterval)}");
+            parts.Add($"next {FormatTimeUntil(plugin.Configuration.NextScheduledJobSwitch)}");
+            parts.Add("[Enabled]");
+        }
+        else
+        {
+            parts.Add("[Disabled]");
+        }
+
+        if (locked)
+            parts.Add("[Locked]");
+
+        return $"status: sge jobroulette [minutes] / stoproulette → {string.Join(", ", parts)}";
+    }
+
+    private static string FormatTimeUntil(DateTime utc)
+    {
+        if (utc == DateTime.MinValue)
+            return "not scheduled";
+
+        return FormatTimeSpan(utc - DateTime.UtcNow);
+    }
+
+    private static string FormatTimeSpan(TimeSpan value)
+    {
+        if (value < TimeSpan.Zero)
+            value = TimeSpan.Zero;
+
+        value = TimeSpan.FromSeconds(Math.Ceiling(value.TotalSeconds));
+
+        if (value.TotalDays >= 1)
+            return $"{(int)value.TotalDays}d {value.Hours}h {value.Minutes}m {value.Seconds}s";
+
+        if (value.TotalHours >= 1)
+            return $"{(int)value.TotalHours}h {value.Minutes}m {value.Seconds}s";
+
+        if (value.TotalMinutes >= 1)
+            return $"{(int)value.TotalMinutes}m {value.Seconds}s";
+
+        return $"{value.Seconds}s";
     }
 
     private void OnChatMessage(IHandleableChatMessage context)
@@ -604,7 +732,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     //DateTime timeout = DateTime.Now;
     private void HandleChatMessage(XivChatType type, SeString sender, SeString message)
     {
-        
+
         //if (timeout > DateTime.Now)
         //    return;
         //timeout = DateTime.Now + TimeSpan.FromSeconds(1);
@@ -895,7 +1023,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
         if (string.IsNullOrWhiteSpace(json))
             return "none";
-        
+
         try
         {
             var token = JObject.Parse(json);

@@ -90,7 +90,7 @@ public sealed class XIVMessengerManager : IDisposable
         }
 
         IsClosedByChatHidden = plugin.ChatMonitor.chatboxHidden;
-        IsClosedByBlindfold = plugin.BlindfoldMonitor.blindfolded;
+        IsClosedByBlindfold = false;//plugin.BlindfoldMonitor.blindfolded;
 
         IsTextInputBlocked =
             plugin.ChatMonitor.chatboxInputHidden ||

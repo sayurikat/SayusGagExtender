@@ -186,6 +186,43 @@ public class Configuration : IPluginConfiguration
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+    public bool JobRouletteEnabled { get; set; } = false;
+    public bool JobRouletteLockManualChanges { get; set; } = true;
+    public bool JobRouletteSwapEvenIfLockedOrOutOfQuota { get; set; } = true;
+    public bool JobRouletteRemoteSet { get; set; } = true;
+    public List<JobRouletteGearsetConfig> JobRouletteWhitelistedGearsets { get; set; } = new();
+    public DateTime NextScheduledJobSwitch { get; set; } = DateTime.MinValue;
+    public TimeSpan JobRouletteInterval { get; set; } = TimeSpan.FromHours(1);
+
+    [Serializable]
+    public sealed class JobRouletteGearsetConfig
+    {
+        public int GearsetId { get; set; } = -1;
+        public string GearsetName { get; set; } = string.Empty;
+        public byte ClassJobId { get; set; }
+        public string JobName { get; set; } = string.Empty;
+    }
+
+
+
+
+
+
+
+
+
     public API.Chat2Api.Chat2Bounds Chat2Bounds { get; set; } = new API.Chat2Api.Chat2Bounds();
     public string Chat2HiddenTabName { get; set; }
     public string ActiveRestraintSet { get; set; }

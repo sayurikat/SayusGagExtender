@@ -113,7 +113,8 @@ public class MainWindow : Window, IDisposable
             DrawFeaturesRow("Hand Guard", configuration.HandGuardEnabled, plugin.WeaponSheather.IsActive);
             DrawFeaturesRow("Teleport Block", configuration.TeleportBlockFeature, plugin.TeleportBlocker.IsActive);
             DrawFeaturesRow("Mount Block", configuration.MountBlockFeature, plugin.MountBlocker.IsActive);
-            DrawFeaturesRow("Job Switch Block", configuration.JobSwitchBlockFeature, plugin.JobSwitchBlocker.IsActive);
+            //DrawFeaturesRow("Job Switch Block", configuration.JobSwitchBlockFeature, plugin.JobSwitchBlocker.IsActive);
+            DrawFeaturesRow("Job Manager", configuration.JobSwitchBlockFeature || configuration.JobRouletteEnabled, plugin.JobManager.IsActive);
             DrawFeaturesRow("Fatigue Tracker", configuration.FatigueEnabled, plugin.FatigueTracker.IsActive);
             DrawFeaturesRow("Moodle Enforcer", configuration.MoodleEnforcerEnabled, plugin.MoodleEnforcer.IsActive);
             DrawFeaturesRow("Penumbra Enforcer", configuration.PenumbraEnforcerEnabled, plugin.PenumbraEnforcer.IsActive);
@@ -236,6 +237,12 @@ public class MainWindow : Window, IDisposable
 
             DrawSeparatorRow();
 
+            DrawTextStatusRow(
+                "Job roulette",
+                BuildJobRouletteStatus(configuration),
+                configuration.JobRouletteEnabled);
+
+            DrawSeparatorRow();
 
 
             DrawStatusRow("Blindfolded", plugin.BlindfoldMonitor.blindfolded);
@@ -369,5 +376,30 @@ public class MainWindow : Window, IDisposable
             Configuration.QuotaWindow.Day => "day",
             _ => "hour",
         };
+    }
+    public static string BuildJobRouletteStatus(Configuration configuration)
+    {
+        if (!configuration.JobRouletteEnabled)
+            return "Inactive";
+
+        var untilNext = configuration.NextScheduledJobSwitch - DateTime.UtcNow;
+        if (untilNext < TimeSpan.Zero)
+            untilNext = TimeSpan.Zero;
+
+        return $"Next in {FormatDuration(untilNext)}";
+    }
+
+    private static string FormatDuration(TimeSpan timeSpan)
+    {
+        if (timeSpan.TotalDays >= 1)
+            return $"{(int)timeSpan.TotalDays}d {timeSpan.Hours}h {timeSpan.Minutes}m";
+
+        if (timeSpan.TotalHours >= 1)
+            return $"{(int)timeSpan.TotalHours}h {timeSpan.Minutes}m {timeSpan.Seconds}s";
+
+        if (timeSpan.TotalMinutes >= 1)
+            return $"{(int)timeSpan.TotalMinutes}m {timeSpan.Seconds}s";
+
+        return $"{Math.Max(0, timeSpan.Seconds)}s";
     }
 }

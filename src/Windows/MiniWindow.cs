@@ -111,6 +111,12 @@ public class MiniWindow : Window, IDisposable
                     configuration.JobSwitchQuotaWindow,
                     configuration.JobSwitchQuotaActionLogUtc));
 
+            DrawSeparatorRow();
+
+            DrawTextStatusRow(
+                "Job roulette",
+                MainWindow.BuildJobRouletteStatus(configuration),
+                configuration.JobRouletteEnabled);
             //  DrawSeparatorRow();
         }
         
@@ -137,58 +143,18 @@ public class MiniWindow : Window, IDisposable
     private void DrawActions()
     {
         ImGui.Text("Actions");
+
         if (ImGui.Button("Settings"))
         {
             plugin.ToggleConfigUi();
         }
+
         ImGui.SameLine();
+
         if (ImGui.Button("Refresh GagSpeak Cache"))
         {
-            plugin.GagSpeakContext.RefreshGagSpeakVisualsAsync();
+            _ = plugin.GagSpeakContext.RefreshGagSpeakVisualsAsync();
         }
-
-        if (ImGui.Button("Restrained"))
-        {
-            plugin.HonorificApi.SetLocalTitle("Restrained", isPrefix: false);
-        }
-        if (ImGui.Button("Bound"))
-        {
-            plugin.HonorificApi.SetLocalTitle("Bound", isPrefix: true);
-        }
-        if (ImGui.Button("Shocked"))
-        {
-            plugin.HonorificApi.SetLocalTitle(
-            "Shocked",
-            isPrefix: false,
-            color: new Vector3(1.0f, 0.2f, 0.2f),
-            glow: new Vector3(1.0f, 0.0f, 0.0f));
-        }
-        if (ImGui.Button("Clear"))
-        {
-            plugin.HonorificApi.ClearLocalTitle();
-        }
-        if (ImGui.Button("Copy"))
-        {
-            honorificJson = plugin.HonorificApi.GetLocalTitleJson();
-        }
-        if (ImGui.Button("paste"))
-        {
-            plugin.HonorificApi.SetLocalTitleJson(honorificJson);
-        }
-        if (ImGui.Button("Alter"))
-        {
-            var currentJson = plugin.HonorificApi.GetLocalTitleJson();
-
-            plugin.HonorificApi.SetLocalTitleFromEditedJson(
-                currentJson,
-                "Restrained");
-        }
-
-
-
-
-
-
 
     }
     private static void DrawSeparatorRow()

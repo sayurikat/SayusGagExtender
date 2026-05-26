@@ -116,5 +116,41 @@ namespace SayusGagExtender
 
             shell->ExecuteCommandInner(&cmd, uiModule);
         }
+        public string FormatCompactTimeSpan(TimeSpan value)
+        {
+            if (value < TimeSpan.Zero)
+                value = TimeSpan.Zero;
+
+            var days = (int)value.TotalDays;
+            var hours = value.Hours;
+            var minutes = value.Minutes;
+            var seconds = value.Seconds;
+
+            if (days > 0)
+            {
+                if (hours > 0)
+                    return $"{days}d{hours}h";
+
+                return $"{days}d";
+            }
+
+            if (hours > 0)
+            {
+                if (minutes > 0)
+                    return $"{hours}h{minutes}m";
+
+                return $"{hours}h";
+            }
+
+            if (minutes > 0)
+            {
+                if (seconds > 0)
+                    return $"{minutes}m{seconds}s";
+
+                return $"{minutes}m";
+            }
+
+            return $"{Math.Max(1, seconds)}s";
+        }
     }
 }

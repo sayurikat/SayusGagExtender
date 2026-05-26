@@ -36,6 +36,7 @@ public partial class ConfigWindow : Window, IDisposable
         HonorificEnforcer,
         CammnyEnforcer,
         XIVMessenger,
+        Roulette,
     }
 
     public ConfigWindow(Plugin plugin) : base("Sayu's Gag Extender Config###SayusGagExtenderConfig")
@@ -76,6 +77,7 @@ public partial class ConfigWindow : Window, IDisposable
         DrawNavigationItem("Blocks", ConfigTab.Blocks);
         DrawNavigationItem("Quotas", ConfigTab.Quotas);
         DrawNavigationItem("Fatigue", ConfigTab.Fatigue);
+        DrawNavigationItem("Roulette", ConfigTab.Roulette);
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -136,6 +138,10 @@ public partial class ConfigWindow : Window, IDisposable
 
             case ConfigTab.Fatigue:
                 DrawFatigueTab();
+                break;
+
+            case ConfigTab.Roulette:
+                DrawRouletteTab();
                 break;
 
             case ConfigTab.MoodleEnforcer:

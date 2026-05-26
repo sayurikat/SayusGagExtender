@@ -20,7 +20,7 @@ public partial class ConfigWindow
             "Bridges GagSpeak chat restrictions to XIV Messenger.");
 
         ImGui.TextWrapped(
-            "When GagSpeak hides chat or a blindfold is active, XIV Messenger will be kept closed.");
+            "When GagSpeak hides chat XIV Messenger will be kept closed.");
 
         ImGui.TextWrapped(
             "When GagSpeak hides or disables chat input, XIV Messenger text input will also be disabled until both restrictions are removed.");

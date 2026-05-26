@@ -58,7 +58,7 @@ public sealed class Plugin : IDalamudPlugin
     public MoodleEnforcer MoodleEnforcer { get; set; }
     public TeleportBlocker TeleportBlocker { get; set; }
     public MountBlocker MountBlocker { get; set; }
-    public JobSwitchBlocker JobSwitchBlocker { get; set; }
+    //public JobSwitchBlocker JobSwitchBlocker { get; set; }
     public ChatMonitor ChatMonitor { get; set; }
     public BlindfoldMonitor BlindfoldMonitor { get; set; }
     public MirrorGagSpeak MirrorGagSpeak { get; set; }
@@ -75,6 +75,7 @@ public sealed class Plugin : IDalamudPlugin
     public HonorificEnforcer HonorificEnforcer { get; set; }
     public CammyEnforcer CammyEnforcer { get; set; }
     public XIVMessengerManager XIVMessengerManager { get; set; }
+    public JobManager JobManager { get; set; }
 
 
 
@@ -150,7 +151,7 @@ public sealed class Plugin : IDalamudPlugin
         MoodleEnforcer = new MoodleEnforcer(Instance);
         TeleportBlocker = new TeleportBlocker(Instance);
         MountBlocker = new MountBlocker(Instance);
-        JobSwitchBlocker = new JobSwitchBlocker(Instance);
+        //JobSwitchBlocker = new JobSwitchBlocker(Instance);
         EmoteGuard = new EmoteGuard(Instance);
         AutoAttackKiller = new AutoAttackKiller(Instance);
         WeaponSheather = new WeaponSheather(Instance);
@@ -172,6 +173,7 @@ public sealed class Plugin : IDalamudPlugin
         HonorificEnforcer = new HonorificEnforcer(Instance);
         CammyEnforcer = new CammyEnforcer(Instance);
         XIVMessengerManager = new XIVMessengerManager(Instance);
+        JobManager = new JobManager(Instance);
 
         if (Configuration.OpenMainWindowOnStartup)
         {
@@ -211,7 +213,7 @@ public sealed class Plugin : IDalamudPlugin
         RandomVibeSender?.Dispose();
         TeleportBlocker?.Dispose();
         MountBlocker?.Dispose();
-        JobSwitchBlocker?.Dispose();
+        //JobSwitchBlocker?.Dispose();
         ChatMonitor?.Dispose();
         BlindfoldMonitor?.Dispose();
         MirrorGagSpeak?.Dispose();
@@ -229,6 +231,7 @@ public sealed class Plugin : IDalamudPlugin
         HonorificEnforcer?.Dispose();
         CammyEnforcer?.Dispose();
         XIVMessengerManager?.Dispose();
+        JobManager?.Dispose();
 
 
         GagSpeakRestraintSetApi?.Dispose();

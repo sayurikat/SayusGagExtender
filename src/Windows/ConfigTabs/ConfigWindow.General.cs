@@ -49,6 +49,8 @@ namespace SayusGagExtender.Windows
             ImGui.TextWrapped("Makes sure emotes can be used when running, in combat or mounted.");
             ImGui.TextWrapped("Will block most actions until emote is executed.");
             ImGui.TextWrapped("Will also dismount for certain emotes.");
+            ImGui.Spacing();
+            ImGui.TextWrapped("Required for certain features to work properly.");
 
             ImGui.Spacing();
             ImGui.Separator();
