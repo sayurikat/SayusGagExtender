@@ -3,6 +3,7 @@ using Dalamud.Game.Text;
 using Dalamud.Interface.Windowing;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Numerics;
 
@@ -16,6 +17,7 @@ public class ControllerWindow : Window, IDisposable
     private string newUserName = string.Empty;
     private string newUserWorld = string.Empty;
     private readonly Dictionary<string, ControllerUserInputState> inputStates = new();
+    private DateTime commandButtonsDisabledUntilUtc = DateTime.MinValue;
 
     private sealed class ControllerUserInputState
     {
@@ -185,7 +187,7 @@ public class ControllerWindow : Window, IDisposable
         var state = GetInputState(user);
         ImGui.TextUnformatted(GetUserDisplayName(user));
         ImGui.SameLine();
-        if (ImGui.Button("Request Status")) SendCommand(user, "statuspack");
+        if (CommandButton("Request Status")) SendCommand(user, "statuspack");
         ImGui.SameLine();
         ImGui.Spacing();
         DrawCachedStatus(user);
@@ -235,7 +237,7 @@ public class ControllerWindow : Window, IDisposable
             DrawCacheRow("Mount limit", FormatQuota(user.MountQuotaEnabled, user.MountQuotaActions, user.MountQuotaWindow));
             DrawCacheRow("Teleport limit", FormatQuota(user.TeleportQuotaEnabled, user.TeleportQuotaActions, user.TeleportQuotaWindow));
             DrawCacheRow("Job limit", FormatQuota(user.JobQuotaEnabled, user.JobQuotaActions, user.JobQuotaWindow));
-            DrawCacheRow("Job roulette", user.JobRouletteEnabled ? $"{user.JobRouletteInterval.Minutes}m" : "Disabled");
+            DrawCacheRow("Job roulette", FormatJobRouletteStatus(user));
             DrawCacheRow("Remote title", string.IsNullOrWhiteSpace(user.RemoteTitle) ? "None" : user.RemoteTitle);
             ImGui.EndTable();
         }
@@ -247,42 +249,37 @@ public class ControllerWindow : Window, IDisposable
         ImGui.SetNextItemWidth(90);
         ImGui.InputInt("Zaps per hour", ref state.ZapCount);
         ImGui.SameLine();
-        if (ImGui.Button("Set Zap Count")) SendCommand(user, $"zapcount {Math.Max(0, state.ZapCount)}");
-
-
-        if (ImGui.Button("Autozap Always")) SendCommand(user, "autozap always");
+        if (CommandButton("Set Zap Count")) SendCommand(user, $"zapcount {Math.Max(0, state.ZapCount)}");
+        if (CommandButton("Autozap Always", user.AutoZapEnabled && user.AutoZapWhen.Equals("Always", StringComparison.OrdinalIgnoreCase))) SendCommand(user, "autozap always");
         ImGui.SameLine();
-        if (ImGui.Button("Autozap Distant")) SendCommand(user, "autozap distant");
+        if (CommandButton("Autozap Distant", user.AutoZapEnabled && user.AutoZapWhen.Equals("Distant", StringComparison.OrdinalIgnoreCase))) SendCommand(user, "autozap distant");
         ImGui.SameLine();
-        if (ImGui.Button("Autozap Offline")) SendCommand(user, "autozap offline");
-        
+        if (CommandButton("Autozap Offline", user.AutoZapEnabled && user.AutoZapWhen.Equals("Offline", StringComparison.OrdinalIgnoreCase))) SendCommand(user, "autozap offline");
     }
 
     private void DrawVibeCommands(Configuration.ControllerUserConfig user, ControllerUserInputState state)
     {
         ImGui.TextUnformatted("Vibrator");
-
         ImGui.SetNextItemWidth(90);
         ImGui.InputInt("Vibes per hour", ref state.VibeCount);
         ImGui.SameLine();
-        if (ImGui.Button("Set Vibe Count")) SendCommand(user, $"vibecount {Math.Max(0, state.VibeCount)}");
-
-        if (ImGui.Button("Autovibe Always")) SendCommand(user, "autovibe always");
+        if (CommandButton("Set Vibe Count")) SendCommand(user, $"vibecount {Math.Max(0, state.VibeCount)}");
+        if (CommandButton("Autovibe Always", user.AutoVibeEnabled && user.AutoVibeWhen.Equals("Always", StringComparison.OrdinalIgnoreCase))) SendCommand(user, "autovibe always");
         ImGui.SameLine();
-        if (ImGui.Button("Autovibe Distant")) SendCommand(user, "autovibe distant");
+        if (CommandButton("Autovibe Distant", user.AutoVibeEnabled && user.AutoVibeWhen.Equals("Distant", StringComparison.OrdinalIgnoreCase))) SendCommand(user, "autovibe distant");
         ImGui.SameLine();
-        if (ImGui.Button("Autovibe Offline")) SendCommand(user, "autovibe offline");
+        if (CommandButton("Autovibe Offline", user.AutoVibeEnabled && user.AutoVibeWhen.Equals("Offline", StringComparison.OrdinalIgnoreCase))) SendCommand(user, "autovibe offline");
     }
 
     private void DrawQuotaCommands(Configuration.ControllerUserConfig user, ControllerUserInputState state)
     {
         ImGui.TextUnformatted("Quotas");
-        DrawQuotaCommand("Mount", user, "mountlimit", ref state.MountWindow, ref state.MountCount);
-        DrawQuotaCommand("Teleport", user, "teleportlimit", ref state.TeleportWindow, ref state.TeleportCount);
-        DrawQuotaCommand("Job", user, "joblimit", ref state.JobWindow, ref state.JobCount);
+        DrawQuotaCommand("Mount", user, "mountlimit", ref state.MountWindow, ref state.MountCount, user.MountQuotaEnabled, user.MountQuotaActions);
+        DrawQuotaCommand("Teleport", user, "teleportlimit", ref state.TeleportWindow, ref state.TeleportCount, user.TeleportQuotaEnabled, user.TeleportQuotaActions);
+        DrawQuotaCommand("Job", user, "joblimit", ref state.JobWindow, ref state.JobCount, user.JobQuotaEnabled, user.JobQuotaActions);
     }
 
-    private void DrawQuotaCommand(string label, Configuration.ControllerUserConfig user, string command, ref int window, ref int count)
+    private void DrawQuotaCommand(string label, Configuration.ControllerUserConfig user, string command, ref int window, ref int count, bool quotaEnabled, int quotaActions)
     {
         ImGui.PushID(command);
         ImGui.TextUnformatted(label);
@@ -293,9 +290,9 @@ public class ControllerWindow : Window, IDisposable
         ImGui.SetNextItemWidth(80);
         ImGui.InputInt("Count", ref count);
         ImGui.SameLine();
-        if (ImGui.Button("Set")) SendCommand(user, $"{command} {GetWindowCommandText(window)} {Math.Max(0, count)}");
+        if (CommandButton("Set", quotaEnabled && quotaActions >= 0)) SendCommand(user, $"{command} {GetWindowCommandText(window)} {Math.Max(0, count)}");
         ImGui.SameLine();
-        if (ImGui.Button("Unlimited")) SendCommand(user, $"{command} {GetWindowCommandText(window)} unlimited");
+        if (CommandButton("Unlimited", !quotaEnabled || quotaActions < 0)) SendCommand(user, $"{command} {GetWindowCommandText(window)} unlimited");
         ImGui.PopID();
     }
 
@@ -305,9 +302,9 @@ public class ControllerWindow : Window, IDisposable
         ImGui.SetNextItemWidth(90);
         ImGui.InputInt("Interval minutes", ref state.RouletteMinutes);
         ImGui.SameLine();
-        if (ImGui.Button("Start Roulette")) SendCommand(user, $"jobroulette {Math.Max(1, state.RouletteMinutes)}");
+        if (CommandButton("Start Roulette", user.JobRouletteEnabled)) SendCommand(user, $"jobroulette {Math.Max(1, state.RouletteMinutes)}");
         ImGui.SameLine();
-        if (ImGui.Button("Stop Roulette")) SendCommand(user, "stopjobroulette");
+        if (CommandButton("Stop Roulette", !user.JobRouletteEnabled)) SendCommand(user, "stopjobroulette");
     }
 
     private void DrawTitleCommands(Configuration.ControllerUserConfig user, ControllerUserInputState state)
@@ -315,18 +312,18 @@ public class ControllerWindow : Window, IDisposable
         ImGui.TextUnformatted("Honorific Title");
         ImGui.SetNextItemWidth(260);
         ImGui.InputText("Title", ref state.Title, 128);
-        if (ImGui.Button("Set Permanent Title")) SendCommand(user, $"settitle {state.Title.Trim()}");
+        if (CommandButton("Set Permanent Title")) SendCommand(user, $"settitle {state.Title.Trim()}");
         ImGui.SameLine();
-        if (ImGui.Button("Clear Title")) SendCommand(user, "cleartitle");
+        if (CommandButton("Clear Title")) SendCommand(user, "cleartitle");
 
         ImGui.SetNextItemWidth(260);
         ImGui.InputText("TitleTemp", ref state.TitleTemp, 128);
 
         ImGui.SetNextItemWidth(90);
         ImGui.InputInt("Seconds", ref state.TempTitleSeconds);
-        if (ImGui.Button("Set Temporary Title")) SendCommand(user, $"settemptitle {Math.Max(1, state.TempTitleSeconds)} {state.TitleTemp.Trim()}");
+        if (CommandButton("Set Temporary Title")) SendCommand(user, $"settemptitle {Math.Max(1, state.TempTitleSeconds)} {state.TitleTemp.Trim()}");
 
-        
+
     }
 
     private void DrawCacheRow(string label, string value)
@@ -336,6 +333,21 @@ public class ControllerWindow : Window, IDisposable
         ImGui.TextUnformatted(label);
         ImGui.TableSetColumnIndex(1);
         ImGui.TextUnformatted(value);
+    }
+    private static bool HighlightButton(string label, bool highlighted)
+    {
+        if (!highlighted)
+            return ImGui.Button(label);
+
+        var style = ImGui.GetStyle();
+        ImGui.PushStyleColor(ImGuiCol.Button, style.Colors[(int)ImGuiCol.ButtonActive]);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, style.Colors[(int)ImGuiCol.ButtonHovered]);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, style.Colors[(int)ImGuiCol.ButtonActive]);
+
+        var clicked = ImGui.Button(label);
+
+        ImGui.PopStyleColor(3);
+        return clicked;
     }
 
     private void AddUser()
@@ -375,7 +387,25 @@ public class ControllerWindow : Window, IDisposable
         inputStates[key] = state;
         return state;
     }
+    private bool CommandButton(string label, bool highlighted = false)
+    {
+        var disabled = DateTime.UtcNow < commandButtonsDisabledUntilUtc;
 
+        if (disabled)
+            ImGui.BeginDisabled();
+
+        var clicked = HighlightButton(label, highlighted);
+
+        if (disabled)
+        {
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip("Please wait before sending another command.");
+
+            ImGui.EndDisabled();
+        }
+
+        return clicked && !disabled;
+    }
     private void SendCommand(Configuration.ControllerUserConfig user, string args, bool hidden = true)
     {
         var hiddenToken = (hidden ? "::" : " ");
@@ -389,6 +419,7 @@ public class ControllerWindow : Window, IDisposable
             return;
         }
         plugin.Utils.ExecuteNativeCommand(command);
+        commandButtonsDisabledUntilUtc = DateTime.UtcNow.AddSeconds(2);
     }
 
     private static string GetUserKey(Configuration.ControllerUserConfig user)
@@ -650,7 +681,7 @@ public class ControllerWindow : Window, IDisposable
         state.MountCount = Math.Max(0, user.MountQuotaActions);
         state.TeleportCount = Math.Max(0, user.TeleportQuotaActions);
         state.JobCount = Math.Max(0, user.JobQuotaActions);
-        state.RouletteMinutes = Math.Max(1, user.JobRouletteInterval.Minutes);
+        state.RouletteMinutes = Math.Max(1, (int)Math.Round(user.JobRouletteInterval.TotalMinutes));
         state.Title = user.RemoteTitle ?? string.Empty;
         state.TitleTemp = string.Empty;
         state.MountWindow = user.MountQuotaWindow == Configuration.QuotaWindow.Day ? 1 : 0;
@@ -661,5 +692,42 @@ public class ControllerWindow : Window, IDisposable
     private static bool IsSameCharacter(string leftName, string leftWorld, string rightName, string rightWorld)
     {
         return string.Equals(leftName?.Trim(), rightName?.Trim(), StringComparison.OrdinalIgnoreCase) && string.Equals(leftWorld?.Trim(), rightWorld?.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+    private static string FormatJobRouletteStatus(Configuration.ControllerUserConfig user)
+    {
+        var whitelistText = user.JobRouletteWhitelistedGearsetCount < 0 ? "unknown gearsets" : $"{user.JobRouletteWhitelistedGearsetCount} whitelisted gearsets";
+
+        if (!user.JobRouletteEnabled)
+            return $"Disabled, {whitelistText}";
+
+        return $"Enabled, interval {FormatCompactTimeSpan(user.JobRouletteInterval)}, next {FormatLocalTime(user.NextScheduledJobSwitchUtc)}, {whitelistText}";
+    }
+
+    private static string FormatCompactTimeSpan(TimeSpan value)
+    {
+        if (value < TimeSpan.Zero)
+            value = TimeSpan.Zero;
+
+        if (value.TotalDays >= 1)
+            return $"{(int)value.TotalDays}d {value.Hours}h {value.Minutes}m";
+
+        if (value.TotalHours >= 1)
+            return $"{(int)value.TotalHours}h {value.Minutes}m";
+
+        if (value.TotalMinutes >= 1)
+            return $"{(int)value.TotalMinutes}m";
+
+        return $"{Math.Max(0, value.Seconds)}s";
+    }
+
+    private static string FormatLocalTime(DateTime utc)
+    {
+        if (utc == DateTime.MinValue)
+            return "not scheduled";
+
+        if (utc.Kind == DateTimeKind.Unspecified)
+            utc = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+
+        return utc.ToLocalTime().ToString("t", CultureInfo.CurrentCulture);
     }
 }

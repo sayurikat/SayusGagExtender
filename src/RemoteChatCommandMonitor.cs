@@ -229,11 +229,12 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 var senderSeString = SeString.Parse(sender->AsSpan());
                 var messageSeString = SeString.Parse(message->AsSpan());
 
-                if (TryGetRemoteCommand(chatType,senderSeString,messageSeString,RemoteCommandPrefixMode.HiddenOnly,out var command))
+                if (ShouldHideOwnHiddenRemoteCommandDisplay(chatType, messageSeString))
+                    return 0;
+
+                if (TryGetRemoteCommand(chatType, senderSeString, messageSeString, RemoteCommandPrefixMode.HiddenOnly, out var command))
                 {
                     HandleParsedRemoteCommand(command, isHidden: true);
-
-                    // Eat the message completely.
                     return 0;
                 }
             }
@@ -244,6 +245,23 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         }
 
         return printMessageHook!.Original(manager, chatType, sender, message, timestamp, silent);
+    }
+    private bool ShouldHideOwnHiddenRemoteCommandDisplay(XivChatType type, SeString message)
+    {
+        if (type != XivChatType.TellOutgoing)
+            return false;
+
+        var messageText = message.TextValue?.Trim();
+
+        if (string.IsNullOrWhiteSpace(messageText))
+            return false;
+
+        var prefix = plugin.Configuration.RemoteChatCommandPrefix;
+
+        if (string.IsNullOrWhiteSpace(prefix))
+            prefix = "sge";
+
+        return TryStripRemoteCommandPrefix(messageText, prefix, RemoteCommandPrefixMode.HiddenOnly, out _);
     }
     private bool TryGetRemoteCommand(XivChatType type, SeString sender, SeString message, RemoteCommandPrefixMode prefixMode, out ParsedRemoteCommand command)
     {
@@ -307,7 +325,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         }
 
         Plugin.Log.Information($"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " + $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
-        Plugin.ChatGui.Print($"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " + $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
+        //Plugin.ChatGui.Print($"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " + $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
 
         HandleSgeCommand(command.Args, command.Type, command.SenderName, command.SenderWorld, isHidden);
     }
