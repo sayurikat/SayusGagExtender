@@ -13,6 +13,10 @@ using System.Linq;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
+using Dalamud.Hooking;
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
+using System.Runtime.InteropServices;
 using static SayusGagExtender.Configuration;
 
 namespace SayusGagExtender;
@@ -31,7 +35,11 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     private string lastSubmittedRemoteTitleJson = string.Empty;
 
     public bool IsActive => plugin.Configuration.RemoteChatCommandsEnabled;
-
+    private enum RemoteCommandPrefixMode
+    {
+        VisibleOrHidden,
+        HiddenOnly,
+    }
     private enum RemoteStatusType
     {
         Zap,
@@ -42,15 +50,29 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         Roulette,
         Title,
     }
-    public RemoteChatCommandMonitor(Plugin plugin)
+
+    public unsafe RemoteChatCommandMonitor(Plugin plugin)
     {
         this.plugin = plugin;
 
         Plugin.ChatGui.ChatMessage += OnChatMessage;
 
+        try
+        {
+            printMessageHook = Plugin.GameInterop.HookFromAddress<PrintMessageDelegate>(
+                RaptureLogModule.Addresses.PrintMessage.Value, PrintMessageDetour);
+
+            printMessageHook.Enable();
+
+            Plugin.Log.Information("RemoteChatCommandMonitor PrintMessage detour enabled.");
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Failed to enable RemoteChatCommandMonitor PrintMessage detour.");
+        }
+
         ApplySavedRemotePermanentTitle();
     }
-
     public void Dispose()
     {
         if (disposed)
@@ -59,9 +81,235 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         disposed = true;
 
         Plugin.ChatGui.ChatMessage -= OnChatMessage;
-    }
 
-    public void HandleSgeCommand(string args, XivChatType type, string senderName, string senderWorld)
+        try
+        {
+            printMessageHook?.Disable();
+            printMessageHook?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Failed to dispose RemoteChatCommandMonitor PrintMessage detour.");
+        }
+    }
+    
+    private string Status(RemoteStatusType type)
+    {
+        return type switch
+        {
+            RemoteStatusType.Zap =>
+                $"status: sge zapcount [count] → {plugin.Configuration.AutoZapCount} [{(plugin.Configuration.AutoZapEnabled ? "Enabled" : "Disabled")}] [When:{plugin.Configuration.AutoZapWhen.ToString()}] {(plugin.Configuration.AutoZapCountControllerLocked ? "[Locked]" : "")}",
+
+            RemoteStatusType.Vibe =>
+                $"status: sge vibecount [count] → {plugin.Configuration.AutoVibeCount} [{(plugin.Configuration.AutoVibeEnabled ? "Enabled" : "Disabled")}] [When:{plugin.Configuration.AutoVibeWhen.ToString()}] {(plugin.Configuration.AutoVibeCountControllerLocked ? "[Locked]" : "")}",
+
+            RemoteStatusType.Mount =>
+                $"status: sge mountlimit [day/hour] [count] → {(plugin.Configuration.MountQuotaActions < 0 ? "unlimited" : plugin.Configuration.MountQuotaActions)} per {plugin.Configuration.MountQuotaWindow.ToString()} [Locked]",
+
+            RemoteStatusType.Teleport =>
+                $"status: sge teleportlimit [day/hour] [count] → {(plugin.Configuration.TeleportQuotaActions < 0 ? "unlimited" : plugin.Configuration.TeleportQuotaActions)} per {plugin.Configuration.TeleportQuotaWindow.ToString()} [Locked]",
+
+            RemoteStatusType.Job =>
+                $"status: sge joblimit [day/hour] [count] → {(plugin.Configuration.JobSwitchQuotaActions < 0 ? "unlimited" : plugin.Configuration.JobSwitchQuotaActions)} per {plugin.Configuration.JobSwitchQuotaWindow.ToString()} [Locked]",
+
+            RemoteStatusType.Roulette =>
+                BuildRouletteStatus(),
+
+            RemoteStatusType.Title =>
+                $"status: sge settitle [title] → {GetRemotePermanentTitleDisplay()} [Priority:{RemoteHonorificPriority}] [Locked]",
+
+            _ => "status: unknown",
+        };
+    }
+    private string BuildRouletteStatus()
+    {
+        var whitelistCount = plugin.Configuration.JobRouletteWhitelistedGearsets?.Count ?? 0;
+        var enabled = plugin.Configuration.JobRouletteEnabled;
+        var locked = plugin.Configuration.JobRouletteRemoteSet;
+
+        var parts = new List<string>
+        {
+            $"{whitelistCount} gearsets",
+        };
+
+        if (enabled)
+        {
+            parts.Add($"interval {FormatTimeSpan(plugin.Configuration.JobRouletteInterval)}");
+            parts.Add($"next {FormatTimeUntil(plugin.Configuration.NextScheduledJobSwitch)}");
+            parts.Add("[Enabled]");
+        }
+        else
+        {
+            parts.Add("[Disabled]");
+        }
+
+        if (locked)
+            parts.Add("[Locked]");
+
+        return $"status: sge jobroulette [minutes] / stoproulette → {string.Join(", ", parts)}";
+    }
+    private static string FormatTimeUntil(DateTime utc)
+    {
+        if (utc == DateTime.MinValue)
+            return "not scheduled";
+
+        return FormatTimeSpan(utc - DateTime.UtcNow);
+    }
+    private static string FormatTimeSpan(TimeSpan value)
+    {
+        if (value < TimeSpan.Zero)
+            value = TimeSpan.Zero;
+
+        value = TimeSpan.FromSeconds(Math.Ceiling(value.TotalSeconds));
+
+        if (value.TotalDays >= 1)
+            return $"{(int)value.TotalDays}d {value.Hours}h {value.Minutes}m {value.Seconds}s";
+
+        if (value.TotalHours >= 1)
+            return $"{(int)value.TotalHours}h {value.Minutes}m {value.Seconds}s";
+
+        if (value.TotalMinutes >= 1)
+            return $"{(int)value.TotalMinutes}m {value.Seconds}s";
+
+        return $"{value.Seconds}s";
+    }
+    private void OnChatMessage(IHandleableChatMessage context)
+    {
+        try
+        {
+            if (!TryGetRemoteCommand(context.LogKind,context.Sender,context.Message,RemoteCommandPrefixMode.VisibleOrHidden, out var command))
+            {
+                return;
+            }
+
+            context.PreventOriginal();
+
+            HandleParsedRemoteCommand(command, isHidden: false);
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Remote chat command monitor failed.");
+        }
+    }
+    private unsafe delegate uint PrintMessageDelegate(RaptureLogModule* manager, XivChatType chatType, Utf8String* sender, Utf8String* message, int timestamp, byte silent);
+    private readonly Hook<PrintMessageDelegate>? printMessageHook;
+    private unsafe uint PrintMessageDetour(RaptureLogModule* manager, XivChatType chatType, Utf8String* sender, Utf8String* message, int timestamp, byte silent)
+    {
+        try
+        {
+            if (sender != null && message != null)
+            {
+                var senderSeString = SeString.Parse(sender->AsSpan());
+                var messageSeString = SeString.Parse(message->AsSpan());
+
+                if (TryGetRemoteCommand(chatType,senderSeString,messageSeString,RemoteCommandPrefixMode.HiddenOnly,out var command))
+                {
+                    HandleParsedRemoteCommand(command, isHidden: true);
+
+                    // Eat the message completely.
+                    return 0;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Plugin.Log.Error(ex, "Remote hidden chat command detour failed.");
+        }
+
+        return printMessageHook!.Original(manager, chatType, sender, message, timestamp, silent);
+    }
+    private bool TryGetRemoteCommand(XivChatType type, SeString sender, SeString message, RemoteCommandPrefixMode prefixMode, out ParsedRemoteCommand command)
+    {
+        command = default;
+
+        if (!plugin.Configuration.RemoteChatCommandsEnabled)
+            return false;
+
+        if (type == XivChatType.None)
+            return false;
+
+        if (!plugin.Configuration.RemoteAcceptedChannels.Contains(type))
+            return false;
+
+        var messageText = message.TextValue?.Trim();
+        if (string.IsNullOrWhiteSpace(messageText))
+            return false;
+
+        var prefix = plugin.Configuration.RemoteChatCommandPrefix;
+        if (string.IsNullOrWhiteSpace(prefix))
+            prefix = "sge";
+
+        if (!TryStripRemoteCommandPrefix(messageText, prefix, prefixMode, out var args))
+            return false;
+
+        if (!TryGetSenderCharacter(sender, out var senderName, out var senderWorld))
+            return false;
+
+        if (!IsAllowedSender(senderName, senderWorld))
+            return false;
+
+        command = new ParsedRemoteCommand(type, senderName, senderWorld, args);
+        return true;
+    }
+    private static bool TryStripRemoteCommandPrefix(string message,string prefix,RemoteCommandPrefixMode mode,out string args)
+    {
+        args = string.Empty;
+
+        message = message.Trim();
+        prefix = prefix.Trim();
+
+        if (string.IsNullOrWhiteSpace(prefix))
+            return false;
+
+        if (!message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var afterPrefix = message[prefix.Length..];
+
+        // Accept: "sge::command"
+        if (afterPrefix.StartsWith("::", StringComparison.Ordinal))
+        {
+            args = afterPrefix[2..].Trim();
+            return true;
+        }
+
+        if (mode == RemoteCommandPrefixMode.HiddenOnly)
+            return false;
+
+        // Accept: exact "sge" or "sge command"
+        if (afterPrefix.Length == 0 || char.IsWhiteSpace(afterPrefix[0]))
+        {
+            args = afterPrefix.Trim();
+            return true;
+        }
+
+        // Reject: "sgefoo"
+        return false;
+    }
+    private readonly record struct ParsedRemoteCommand(XivChatType Type,string SenderName,string SenderWorld,string Args);
+    private void HandleParsedRemoteCommand(ParsedRemoteCommand command, bool isHidden)
+    {
+        if (string.IsNullOrWhiteSpace(command.Args))
+        {
+            Plugin.ChatGui.PrintError(
+                isHidden
+                    ? "Remote SGE hidden command ignored: missing command."
+                    : "Remote SGE command ignored: missing command.");
+
+            return;
+        }
+
+        Plugin.Log.Information(
+            $"{(isHidden ? "Hidden remote" : "Remote")} SGE command from " +
+            $"{command.SenderName}@{command.SenderWorld}: {command.Args}");
+
+        HandleSgeCommand(
+            command.Args,
+            command.Type,
+            command.SenderName,
+            command.SenderWorld);
+    }
+    private void HandleSgeCommand(string args, XivChatType type, string senderName, string senderWorld)
     {
         if (args.StartsWith("help", StringComparison.OrdinalIgnoreCase))
         {
@@ -630,151 +878,9 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         ]);
     }
 
-    private string Status(RemoteStatusType type)
-    {
-        return type switch
-        {
-            RemoteStatusType.Zap =>
-                $"status: sge zapcount [count] → {plugin.Configuration.AutoZapCount} [{(plugin.Configuration.AutoZapEnabled ? "Enabled" : "Disabled")}] [When:{plugin.Configuration.AutoZapWhen.ToString()}] {(plugin.Configuration.AutoZapCountControllerLocked ? "[Locked]" : "")}",
 
-            RemoteStatusType.Vibe =>
-                $"status: sge vibecount [count] → {plugin.Configuration.AutoVibeCount} [{(plugin.Configuration.AutoVibeEnabled ? "Enabled" : "Disabled")}] [When:{plugin.Configuration.AutoVibeWhen.ToString()}] {(plugin.Configuration.AutoVibeCountControllerLocked ? "[Locked]" : "")}",
 
-            RemoteStatusType.Mount =>
-                $"status: sge mountlimit [day/hour] [count] → {(plugin.Configuration.MountQuotaActions < 0 ? "unlimited" : plugin.Configuration.MountQuotaActions)} per {plugin.Configuration.MountQuotaWindow.ToString()} [Locked]",
 
-            RemoteStatusType.Teleport =>
-                $"status: sge teleportlimit [day/hour] [count] → {(plugin.Configuration.TeleportQuotaActions < 0 ? "unlimited" : plugin.Configuration.TeleportQuotaActions)} per {plugin.Configuration.TeleportQuotaWindow.ToString()} [Locked]",
-
-            RemoteStatusType.Job =>
-                $"status: sge joblimit [day/hour] [count] → {(plugin.Configuration.JobSwitchQuotaActions < 0 ? "unlimited" : plugin.Configuration.JobSwitchQuotaActions)} per {plugin.Configuration.JobSwitchQuotaWindow.ToString()} [Locked]",
-
-            RemoteStatusType.Roulette =>
-                BuildRouletteStatus(),
-
-            RemoteStatusType.Title =>
-                $"status: sge settitle [title] → {GetRemotePermanentTitleDisplay()} [Priority:{RemoteHonorificPriority}] [Locked]",
-
-            _ => "status: unknown",
-        };
-    }
-
-    private string BuildRouletteStatus()
-    {
-        var whitelistCount = plugin.Configuration.JobRouletteWhitelistedGearsets?.Count ?? 0;
-        var enabled = plugin.Configuration.JobRouletteEnabled;
-        var locked = plugin.Configuration.JobRouletteRemoteSet;
-
-        var parts = new List<string>
-        {
-            $"{whitelistCount} gearsets",
-        };
-
-        if (enabled)
-        {
-            parts.Add($"interval {FormatTimeSpan(plugin.Configuration.JobRouletteInterval)}");
-            parts.Add($"next {FormatTimeUntil(plugin.Configuration.NextScheduledJobSwitch)}");
-            parts.Add("[Enabled]");
-        }
-        else
-        {
-            parts.Add("[Disabled]");
-        }
-
-        if (locked)
-            parts.Add("[Locked]");
-
-        return $"status: sge jobroulette [minutes] / stoproulette → {string.Join(", ", parts)}";
-    }
-
-    private static string FormatTimeUntil(DateTime utc)
-    {
-        if (utc == DateTime.MinValue)
-            return "not scheduled";
-
-        return FormatTimeSpan(utc - DateTime.UtcNow);
-    }
-
-    private static string FormatTimeSpan(TimeSpan value)
-    {
-        if (value < TimeSpan.Zero)
-            value = TimeSpan.Zero;
-
-        value = TimeSpan.FromSeconds(Math.Ceiling(value.TotalSeconds));
-
-        if (value.TotalDays >= 1)
-            return $"{(int)value.TotalDays}d {value.Hours}h {value.Minutes}m {value.Seconds}s";
-
-        if (value.TotalHours >= 1)
-            return $"{(int)value.TotalHours}h {value.Minutes}m {value.Seconds}s";
-
-        if (value.TotalMinutes >= 1)
-            return $"{(int)value.TotalMinutes}m {value.Seconds}s";
-
-        return $"{value.Seconds}s";
-    }
-
-    private void OnChatMessage(IHandleableChatMessage context)
-    {
-        XivChatType type = context.LogKind;
-        var sender = context.Sender;
-        var message = context.Message;
-        try
-        {
-            HandleChatMessage(type, sender, message);
-        }
-        catch (Exception ex)
-        {
-            Plugin.Log.Error(ex, "Remote chat command monitor failed.");
-        }
-    }
-
-    //DateTime timeout = DateTime.Now;
-    private void HandleChatMessage(XivChatType type, SeString sender, SeString message)
-    {
-
-        //if (timeout > DateTime.Now)
-        //    return;
-        //timeout = DateTime.Now + TimeSpan.FromSeconds(1);
-
-        //Plugin.Log.Info($"HandleChatMessage {type} {sender} {message}");
-
-        if (!plugin.Configuration.RemoteChatCommandsEnabled)
-            return;
-
-        if (type == XivChatType.None)
-            return;
-
-        if (!plugin.Configuration.RemoteAcceptedChannels.Contains(type))
-            return;
-
-        var messageText = message.TextValue?.Trim();
-        if (string.IsNullOrWhiteSpace(messageText))
-            return;
-
-        var prefix = plugin.Configuration.RemoteChatCommandPrefix;
-        if (string.IsNullOrWhiteSpace(prefix))
-            prefix = "sge";
-
-        if (!TryStripPrefix(messageText, prefix, out var args))
-            return;
-
-        if (!TryGetSenderCharacter(sender, out var senderName, out var senderWorld))
-            return;
-
-        if (!IsAllowedSender(senderName, senderWorld))
-            return;
-
-        if (string.IsNullOrWhiteSpace(args))
-        {
-            Plugin.ChatGui.PrintError("Remote SGE command ignored: missing command.");
-            return;
-        }
-
-        Plugin.Log.Information($"Remote SGE command from {senderName}@{senderWorld}: {args}");
-
-        HandleSgeCommand(args, type, senderName, senderWorld);
-    }
 
     private bool IsAllowedSender(string senderName, string senderWorld)
     {
@@ -787,35 +893,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                    plugin.Configuration.RemoteControllerWorld,
                    StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool TryStripPrefix(
-        string message,
-        string prefix,
-        out string args)
-    {
-        args = string.Empty;
-
-        message = message.Trim();
-        prefix = prefix.Trim();
-
-        if (!message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        // Require either exact "sge" or "sge ..."
-        if (message.Length > prefix.Length &&
-            !char.IsWhiteSpace(message[prefix.Length]))
-        {
-            return false;
-        }
-
-        args = message[prefix.Length..].Trim();
-        return true;
-    }
-
-    private bool TryGetSenderCharacter(
-        SeString sender,
-        out string name,
-        out string world)
+    private bool TryGetSenderCharacter(SeString sender, out string name, out string world)
     {
         name = string.Empty;
         world = string.Empty;
@@ -836,11 +914,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         // Fallback for channels/sender formats that do not expose PlayerPayload.
         return TryParseSenderText(sender.TextValue, out name, out world);
     }
-
-    private static bool TryParseSenderText(
-        string? senderText,
-        out string name,
-        out string world)
+    private static bool TryParseSenderText(string? senderText,out string name,out string world)
     {
         name = string.Empty;
         world = string.Empty;
@@ -870,11 +944,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
 
         return false;
     }
-    private async Task SendTellLinesAsync(
-    string senderName,
-    string senderWorld,
-    IEnumerable<string> lines,
-    int delayMs = 1500)
+    private async Task SendTellLinesAsync(string senderName,string senderWorld,IEnumerable<string> lines,int delayMs = 1500)
     {
         await tellSendLock.WaitAsync();
 
@@ -910,6 +980,9 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             tellSendLock.Release();
         }
     }
+
+
+
     private void ApplySavedRemotePermanentTitle()
     {
         var json = plugin.Configuration.RemotePermanentHonorificTitleJson;
@@ -925,7 +998,6 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             ApplyRemotePermanentTitleJson(json);
         });
     }
-
     private void ApplyRemotePermanentTitleJson(string json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -952,7 +1024,6 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             lastSubmittedRemoteTitleJson = json;
         });
     }
-
     private void RecallRemotePermanentTitleRequest()
     {
         _ = Plugin.Framework.RunOnFrameworkThread(() =>
@@ -965,7 +1036,6 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             lastSubmittedRemoteTitleJson = string.Empty;
         });
     }
-
     private string BuildRemoteTitleJsonFromCurrent(string title)
     {
         if (string.IsNullOrWhiteSpace(title))
@@ -1016,7 +1086,6 @@ public sealed class RemoteChatCommandMonitor : IDisposable
             new Vector3(1f, 1f, 1f),
             new Vector3(0f, 0f, 0f));
     }
-
     private string GetRemotePermanentTitleDisplay()
     {
         var json = plugin.Configuration.RemotePermanentHonorificTitleJson;
