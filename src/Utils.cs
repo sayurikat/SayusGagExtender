@@ -60,7 +60,14 @@ namespace SayusGagExtender
             //return world;
 
         }
-        public unsafe void ExecuteNativeCommand(string command)
+        public void ExecuteNativeCommand(string command)
+        {
+            if (plugin.GagSpeakGarblerBypassApi != null)
+                plugin.GagSpeakGarblerBypassApi.ExecuteWithoutGarbler(() => ExecuteNativeCommandInner(command));
+            else
+                ExecuteNativeCommandInner(command);
+        }
+        private unsafe void ExecuteNativeCommandInner(string command)
         {
             if (string.IsNullOrWhiteSpace(command))
                 return;
