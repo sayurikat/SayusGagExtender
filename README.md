@@ -262,7 +262,7 @@ It can:
 
 - Show alias folder, name, trigger.
 - Store local notes for aliases.
-- Which allows Controller Interface to retrieve users alias library.
+- Allows Controller Interface to retrieve users alias library.
 
 ---
 
