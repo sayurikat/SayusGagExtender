@@ -342,10 +342,25 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     }
     private void HandleSgeCommand(string args, XivChatType type, string senderName, string senderWorld, bool isHidden)
     {
-        packageTransport.ClearOldPendingPackages();
-
-        if (packageTransport.TryReceive(args, out var receivedPackage))
+        if (packageTransport.ClearOldPendingPackages() > 0 && IsControlledUser(senderName, senderWorld))
         {
+            plugin.NotifyControllerRemotePackageFailed(senderName, senderWorld, "Package timed out before all chunks arrived.");
+        }
+
+        var receiveResult = packageTransport.TryReceive(args, out var receivedPackage, out var packageProgress);
+        if (receiveResult == RemotePackageTransport.ReceiveResult.Pending)
+        {
+            if (IsControlledUser(senderName, senderWorld)) plugin.NotifyControllerRemotePackageProgress(senderName, senderWorld, packageProgress.Part, packageProgress.Total);
+            return;
+        }
+        if (receiveResult == RemotePackageTransport.ReceiveResult.Invalid)
+        {
+            if (IsControlledUser(senderName, senderWorld)) plugin.NotifyControllerRemotePackageFailed(senderName, senderWorld, "Package failed to decode.");
+            return;
+        }
+        if (receiveResult == RemotePackageTransport.ReceiveResult.Complete)
+        {
+            if (packageProgress.IsChunked && IsControlledUser(senderName, senderWorld)) plugin.NotifyControllerRemotePackageCompleted(senderName, senderWorld, "Package received.");
             HandleRemotePackage(receivedPackage, type, senderName, senderWorld);
             return;
         }
@@ -1038,6 +1053,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         user.PuppeteerAliases = ParsePuppeteerAliasesResponse(json);
         user.LastPuppeteerAliasesUtc = DateTime.UtcNow;
         plugin.Configuration.Save();
+        plugin.NotifyControllerRemotePackageCompleted(senderName, senderWorld, $"Alias package received: {user.PuppeteerAliases.Count} aliases.");
     }
     private JArray BuildPuppeteerAliasesForController(string controllerName)
     {
@@ -1226,19 +1242,22 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     }
     private async Task SendTellLinesAsync(string senderName,string senderWorld,IEnumerable<string> lines,int delayMs = 1500)
     {
+        var sendLines = lines.Select(line => line.Trim()).Where(line => !string.IsNullOrWhiteSpace(line)).ToList();
+        if (sendLines.Count == 0) return;
+
         await tellSendLock.WaitAsync();
 
         try
         {
-            foreach (var line in lines)
+            if (sendLines.Count > 1)
+            {
+                Plugin.ChatGui.Print($"SGE is sending {sendLines.Count} tell chunks to {senderName}@{senderWorld}. Avoid sending manual tells until it completes, or the transfer may fail due to tell cooldown.");
+            }
+
+            foreach (var safeLine in sendLines)
             {
                 if (disposed)
                     return;
-
-                var safeLine = line.Trim();
-
-                if (string.IsNullOrWhiteSpace(safeLine))
-                    continue;
 
                 await Plugin.Framework.RunOnFrameworkThread(() =>
                 {
@@ -1249,6 +1268,11 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                 });
 
                 await Task.Delay(delayMs);
+            }
+
+            if (sendLines.Count > 1)
+            {
+                Plugin.ChatGui.Print($"SGE tell chunk transfer to {senderName}@{senderWorld} completed.");
             }
         }
         catch (Exception ex)

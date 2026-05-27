@@ -432,4 +432,16 @@ public sealed class Plugin : IDalamudPlugin
     {
         ControllerWindow.SetTempHonorificInputState(name, world, json);
     }
+    public void NotifyControllerRemotePackageProgress(string name, string world, int part, int total)
+    {
+        ControllerWindow.NotifyRemotePackageProgress(name, world, part, total);
+    }
+    public void NotifyControllerRemotePackageCompleted(string name, string world, string message)
+    {
+        ControllerWindow.NotifyRemotePackageCompleted(name, world, message);
+    }
+    public void NotifyControllerRemotePackageFailed(string name, string world, string message)
+    {
+        ControllerWindow.NotifyRemotePackageFailed(name, world, message);
+    }
 }

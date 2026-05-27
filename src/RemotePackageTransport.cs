@@ -12,6 +12,16 @@ public sealed class RemotePackageTransport
 
     private readonly Dictionary<string, PendingPackage> pendingPackages = [];
 
+    public enum ReceiveResult
+    {
+        NotPackage,
+        Pending,
+        Complete,
+        Invalid,
+    }
+
+    public readonly record struct ReceiveProgress(string Id, int Part, int Total, int Received, bool IsChunked);
+
     public IReadOnlyList<string> BuildTellLines(RemotePackage package, string prefix)
     {
   
@@ -44,34 +54,43 @@ public sealed class RemotePackageTransport
 
     public bool TryReceive(string args, out RemotePackage package)
     {
+        var result = TryReceive(args, out package, out _);
+        return result == ReceiveResult.Complete;
+    }
+
+    public ReceiveResult TryReceive(string args, out RemotePackage package, out ReceiveProgress progress)
+    {
         package = new RemotePackage(0);
+        progress = default;
 
         if (!args.StartsWith($"{CommandPrefix}:", StringComparison.OrdinalIgnoreCase))
         {
-            return false;
+            return ReceiveResult.NotPackage;
         }
 
         var rest = args[CommandPrefix.Length..].TrimStart(':');
 
         if (!rest.Contains(':'))
         {
-            return RemotePackage.TryFromBase64Url(rest, out package);
+            var complete = RemotePackage.TryFromBase64Url(rest, out package);
+            progress = new ReceiveProgress(string.Empty, 1, 1, complete ? 1 : 0, false);
+            return complete ? ReceiveResult.Complete : ReceiveResult.Invalid;
         }
 
         var firstColon = rest.IndexOf(':');
         var secondColon = rest.IndexOf(':', firstColon + 1);
 
-        if (firstColon <= 0 || secondColon <= firstColon) return false;
+        if (firstColon <= 0 || secondColon <= firstColon) return ReceiveResult.Invalid;
 
         var id = rest[..firstColon];
         var numbering = rest[(firstColon + 1)..secondColon];
         var chunk = rest[(secondColon + 1)..];
 
         var slash = numbering.IndexOf('/');
-        if (slash <= 0) return false;
-        if (!int.TryParse(numbering[..slash], out var part)) return false;
-        if (!int.TryParse(numbering[(slash + 1)..], out var total)) return false;
-        if (part < 1 || total < 1 || part > total) return false;
+        if (slash <= 0) return ReceiveResult.Invalid;
+        if (!int.TryParse(numbering[..slash], out var part)) return ReceiveResult.Invalid;
+        if (!int.TryParse(numbering[(slash + 1)..], out var total)) return ReceiveResult.Invalid;
+        if (part < 1 || total < 1 || part > total) return ReceiveResult.Invalid;
 
         if (!pendingPackages.TryGetValue(id, out var pending))
         {
@@ -82,27 +101,32 @@ public sealed class RemotePackageTransport
         if (pending.Total != total)
         {
             pendingPackages.Remove(id);
-            return false;
+            progress = new ReceiveProgress(id, part, total, 0, true);
+            return ReceiveResult.Invalid;
         }
 
         pending.Chunks[part - 1] = chunk;
+        var received = pending.Chunks.Count(x => !string.IsNullOrEmpty(x));
+        progress = new ReceiveProgress(id, part, total, received, true);
 
         if (pending.Chunks.Any(string.IsNullOrEmpty))
         {
-            return false;
+            return ReceiveResult.Pending;
         }
 
         pendingPackages.Remove(id);
-        return RemotePackage.TryFromBase64Url(string.Concat(pending.Chunks), out package);
+        return RemotePackage.TryFromBase64Url(string.Concat(pending.Chunks), out package) ? ReceiveResult.Complete : ReceiveResult.Invalid;
     }
 
-    public void ClearOldPendingPackages()
+    public int ClearOldPendingPackages()
     {
         var cutoff = DateTime.UtcNow - TimeSpan.FromMinutes(2);
-        foreach (var entry in pendingPackages.Where(x => x.Value.CreatedUtc < cutoff).Select(x => x.Key).ToList())
+        var expired = pendingPackages.Where(x => x.Value.CreatedUtc < cutoff).Select(x => x.Key).ToList();
+        foreach (var entry in expired)
         {
             pendingPackages.Remove(entry);
         }
+        return expired.Count;
     }
 
     private sealed class PendingPackage

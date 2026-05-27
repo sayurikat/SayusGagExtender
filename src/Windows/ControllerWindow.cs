@@ -20,6 +20,16 @@ public class ControllerWindow : Window, IDisposable
     private readonly Dictionary<string, ControllerUserInputState> inputStates = new();
     private DateTime commandButtonsDisabledUntilUtc = DateTime.MinValue;
     private readonly RemotePackageTransport packageTransport = new();
+    private readonly Dictionary<string, RemotePackageFeedbackState> remotePackageFeedbackStates = new();
+
+    private sealed class RemotePackageFeedbackState
+    {
+        public bool InProgress;
+        public bool Failed;
+        public string Message = string.Empty;
+        public DateTime TimeoutUtc = DateTime.MinValue;
+        public DateTime MessageUntilUtc = DateTime.MinValue;
+    }
 
     private sealed class ControllerUserInputState
     {
@@ -242,6 +252,7 @@ public class ControllerWindow : Window, IDisposable
         ImGui.SameLine();
         if (CommandButton("Request Aliases")) SendPuppeteerAliasesRequest(user);
         ImGui.TextDisabled($"Last alias package: {FormatLastStatus(user.LastPuppeteerAliasesUtc)}");
+        DrawRemotePackageFeedback(user);
 
         var channel = user.PuppeteerAliasChatType;
         if (!RemoteChannelOptions.Contains(channel)) channel = XivChatType.TellIncoming;
@@ -442,6 +453,7 @@ public class ControllerWindow : Window, IDisposable
     }
     private void SendPuppeteerAliasesRequest(Configuration.ControllerUserConfig user)
     {
+        BeginRemotePackageWait(user, "Alias request sent. Waiting for response...");
         var package = new RemotePackage(8);
         package.WriteInt(1);
         SendPackage(user, package);
@@ -634,7 +646,7 @@ public class ControllerWindow : Window, IDisposable
         if (disabled)
         {
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Please wait before sending another command.");
+                ImGui.SetTooltip($"Please wait before sending another command. {FormatCompactTimeSpan(commandButtonsDisabledUntilUtc - DateTime.UtcNow)} remaining.");
 
             ImGui.EndDisabled();
         }
@@ -657,9 +669,84 @@ public class ControllerWindow : Window, IDisposable
         commandButtonsDisabledUntilUtc = DateTime.UtcNow.AddSeconds(2);
     }
 
+
+    public void NotifyRemotePackageProgress(string name, string world, int part, int total)
+    {
+        var key = GetUserKey(name, world);
+        var state = GetRemotePackageFeedbackState(key);
+        var now = DateTime.UtcNow;
+        state.InProgress = true;
+        state.Failed = false;
+        state.Message = $"Receiving package chunk {part}/{total}...";
+        state.TimeoutUtc = now.AddSeconds(2);
+        state.MessageUntilUtc = state.TimeoutUtc;
+        if (commandButtonsDisabledUntilUtc < state.TimeoutUtc) commandButtonsDisabledUntilUtc = state.TimeoutUtc;
+    }
+
+    public void NotifyRemotePackageCompleted(string name, string world, string message)
+    {
+        var state = GetRemotePackageFeedbackState(GetUserKey(name, world));
+        state.InProgress = false;
+        state.Failed = false;
+        state.Message = string.IsNullOrWhiteSpace(message) ? "Package completed." : message;
+        state.TimeoutUtc = DateTime.MinValue;
+        state.MessageUntilUtc = DateTime.UtcNow.AddSeconds(6);
+    }
+
+    public void NotifyRemotePackageFailed(string name, string world, string message)
+    {
+        var state = GetRemotePackageFeedbackState(GetUserKey(name, world));
+        state.InProgress = false;
+        state.Failed = true;
+        state.Message = string.IsNullOrWhiteSpace(message) ? "Package failed." : message;
+        state.TimeoutUtc = DateTime.MinValue;
+        state.MessageUntilUtc = DateTime.UtcNow.AddSeconds(10);
+    }
+
+    private void BeginRemotePackageWait(Configuration.ControllerUserConfig user, string message)
+    {
+        var state = GetRemotePackageFeedbackState(GetUserKey(user));
+        state.InProgress = true;
+        state.Failed = false;
+        state.Message = message;
+        state.TimeoutUtc = DateTime.UtcNow.AddSeconds(10);
+        state.MessageUntilUtc = state.TimeoutUtc;
+    }
+
+    private RemotePackageFeedbackState GetRemotePackageFeedbackState(string key)
+    {
+        if (remotePackageFeedbackStates.TryGetValue(key, out var state)) return state;
+        state = new RemotePackageFeedbackState();
+        remotePackageFeedbackStates[key] = state;
+        return state;
+    }
+
+    private void DrawRemotePackageFeedback(Configuration.ControllerUserConfig user)
+    {
+        var key = GetUserKey(user);
+        if (!remotePackageFeedbackStates.TryGetValue(key, out var state)) return;
+        var now = DateTime.UtcNow;
+        if (state.InProgress && now > state.TimeoutUtc)
+        {
+            state.InProgress = false;
+            state.Failed = true;
+            state.Message = "Package timed out before completion.";
+            state.MessageUntilUtc = now.AddSeconds(10);
+        }
+        if (!state.InProgress && now > state.MessageUntilUtc) return;
+        if (state.Failed) ImGui.TextColored(new Vector4(1f, 0.35f, 0.35f, 1f), state.Message);
+        else if (state.InProgress) ImGui.TextColored(new Vector4(1f, 0.85f, 0.35f, 1f), $"{state.Message} Timeout in {FormatCompactTimeSpan(state.TimeoutUtc - now)}.");
+        else ImGui.TextColored(new Vector4(0.45f, 1f, 0.45f, 1f), state.Message);
+    }
+
     private static string GetUserKey(Configuration.ControllerUserConfig user)
     {
-        return $"{user.Name.Trim()}@{user.World.Trim()}".ToLowerInvariant();
+        return GetUserKey(user.Name, user.World);
+    }
+
+    private static string GetUserKey(string name, string world)
+    {
+        return $"{name.Trim()}@{world.Trim()}".ToLowerInvariant();
     }
 
     private static string GetUserDisplayName(Configuration.ControllerUserConfig user)
