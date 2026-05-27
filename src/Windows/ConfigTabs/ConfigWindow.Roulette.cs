@@ -76,6 +76,13 @@ public partial class ConfigWindow
             configuration.Save();
         }
 
+        var swapOverspend = configuration.JobRouletteSpendOutOfQuotaLimit;
+        if (ImGui.Checkbox("Spend even while out of quota", ref swapOverspend))
+        {
+            configuration.JobRouletteSpendOutOfQuotaLimit = swapOverspend;
+            configuration.Save();
+        }
+
         if (ImGui.IsItemHovered())
             ImGui.SetTooltip("When enabled, scheduled roulette swaps are allowed even while normal job switching is locked or quota is empty. Quota is never increased above the configured limit.");
 

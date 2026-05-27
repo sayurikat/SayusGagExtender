@@ -64,7 +64,7 @@ namespace SayusGagExtender.Windows
 
             if (ImGui.Button($"Apply saved restraints now"))
             {
-                plugin.MirrorGagSpeak.MirrorGagSpeakState();
+                plugin.MirrorGagSpeak.MirrorGagSpeakState(didRelog: true);
             }
 
             if (!ctrlHeld)

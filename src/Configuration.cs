@@ -205,6 +205,7 @@ public class Configuration : IPluginConfiguration
     public bool JobRouletteEnabled { get; set; } = false;
     public bool JobRouletteLockManualChanges { get; set; } = true;
     public bool JobRouletteSwapEvenIfLockedOrOutOfQuota { get; set; } = true;
+    public bool JobRouletteSpendOutOfQuotaLimit { get; set; } = true;
     public bool JobRouletteRemoteSet { get; set; } = true;
     public List<JobRouletteGearsetConfig> JobRouletteWhitelistedGearsets { get; set; } = new();
     public DateTime NextScheduledJobSwitch { get; set; } = DateTime.MinValue;

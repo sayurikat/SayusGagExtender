@@ -996,7 +996,8 @@ public unsafe sealed class JobManager : IDisposable
         // If quota is already empty, this is not a spend.
         // Do NOT schedule another final capture.
         var remainingBefore = GetRemainingQuota();
-        if (remainingBefore <= 0)
+        if ((!plugin.Configuration.JobRouletteSpendOutOfQuotaLimit && remainingBefore <= 0)
+            || plugin.Configuration.JobSwitchQuotaEnabled == false)
             return;
 
         if (!ignoreCooldown && jobSwitchCountCooldown > DateTime.UtcNow)
