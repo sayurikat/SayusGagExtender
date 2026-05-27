@@ -1,3 +1,13 @@
+# Sayu's Gag Extender
+
+A Dalamud plugin for Final Fantasy XIV that extends **GagSpeak** with extra automation, enforcement, controller tools, and quality-of-life features.
+
+Sayu's Gag Extender watches GagSpeak state such as active restraints, restrictions, gags, blindfolds, and chat restrictions, then applies related effects through Dalamud hooks, in-game commands, and optional plugin integrations.
+
+GagSpeak is required. Other supported plugins are optional and only needed for the features that use them.
+
+---
+
 ## Installation
 
 1. Open Dalamud Settings.
@@ -6,205 +16,257 @@
 
    ```text
    https://raw.githubusercontent.com/sayurikat/PartyPulse/refs/heads/master/repo/pluginmaster.json
+   ```
 
 4. Open the Dalamud Plugin Installer.
-5. Search for Sayu's Gag Extender.
+5. Search for **Sayu's Gag Extender**.
 6. Install the plugin.
 
+---
 
-# Sayu's Gag Extender
+## Important warning
 
-A Dalamud plugin for Final Fantasy XIV that extends the functionality of **GagSpeak** with extra automation, enforcement, and quality-of-life tools.
+This plugin depends on Dalamud hooks and IPC/reflection-style integrations with other plugins.
 
-Sayu's Gag Extender watches GagSpeak state changes such as active gags, restrictions, restraint sets, blindfold state, and chat restrictions, then reacts by applying related effects through other plugins and in-game systems. It can enforce emotes, block actions, manage Chat 2 behavior, mirror GagSpeak state across characters, and trigger configured commands while certain restrictions are active.
+Game updates, Dalamud updates, GagSpeak updates, or updates to supported plugins may break features until Sayu's Gag Extender is updated.
 
-> This plugin is intended to be used together with GagSpeak. Several features also support optional plugin integrations such as Moodles, Penumbra, Customize+, and Chat 2.
->
-> **Warning:** GagSpeak is required. Other supported plugins are optional, but disabling or updating them while Sayu's Gag Extender is running may cause errors because this plugin continuously monitors their state. It is recommended to disable Sayu's Gag Extender before disabling, updating, or reinstalling any supported plugin. Game updates, Dalamud updates, and updates to GagSpeak or any supported plugin may also break functionality until Sayu's Gag Extender is updated.
+It is recommended to disable Sayu's Gag Extender before disabling, updating, reinstalling, or testing major changes to GagSpeak, Moodles, Penumbra, Customize+, Chat 2, XIVMessenger, Honorific, Cammy, or other supported integrations.
+
+Blocking and enforcement features are best-effort quality-of-life tools. They are not security boundaries.
 
 ---
 
-## Features
+## Features overview
 
-Sayu's Gag Extender expands GagSpeak with extra commands, additional restraint-style restrictions, random command automation, and integrations with other appearance/status plugins.
+Sayu's Gag Extender currently includes:
 
-At a high level, it can:
-
-- Add `/sge` commands for quickly applying or removing GagSpeak restraints by name.
-- Add extra restriction behavior, such as blocking teleporting, mounting, and job switching when configured states are active.
-- Trigger random shock or vibration commands while selected restraints are active.
-- Monitor GagSpeak restraint state and use it to control other plugin states, such as Moodles, Penumbra mods, and Customize+ profiles.
-
-See [Commands](#commands) for the full command list.
+- `/sge` commands for applying and removing GagSpeak restrictions, gags, and restraint sets.
+- Emote Guard for more reliable remote emotes.
+- Hand Guard for hands-bound style restrictions.
+- Moodle-based blocking for teleporting, mounting, and job changes.
+- Quotas for mount, teleport, and job-change usage.
+- Fatigue tracking with forced walking, stopping, sitting.
+- Job Roulette with whitelisted gearsets.
+- Moodle, Penumbra, Customize+, Emote, Honorific, and Cammy enforcers.
+- Random shock and vibration command automation.
+- Chat 2 and XIVMessenger bridges for GagSpeak chat restrictions.
+- GagSpeak Mirror for syncing restraint state from a main character to alts.
+- Controller commands over configured chat channels.
+- Controller interface for managing other configured users.
+- Puppeteer Alias viewer for controller.
 
 ---
+
+### Controller Interface
+
+The Controller Interface is for users who control one or more other GagSpeak users.
+
+Send remote commands, view active settings, control quotas, roulette, Honorific titles, and view Puppeteer aliases.
+
+---
+
+## Core features
 
 ### Emote Guard
 
-Emote Guard makes emotes more reliable when they are triggered remotely, such as when a GagSpeak controller uses Puppeteer to make your character perform an emote.
+Emote Guard improves reliability when emotes are triggered remotely, such as through GagSpeak Puppeteer.
 
-Normally, those emotes can fail or be ignored if your character is not ready to perform them. Emote Guard intercepts emotes, queues them, and waits until they can safely be carried out.
+It can queue emotes, wait for safer conditions, dismount when needed, wait through blocked states, and briefly prevent movement or action interruption so the emote has a better chance to start.
 
-It helps ensure emotes still happen when your character is:
-
-- Mounted
-- Mounting or dismounting
-- Moving
-- Jumping
-- Casting
-- In combat
-- Occupied by an event, cutscene, trade, crafting, gathering, fishing, or performance state
-- Changing areas
-
-When needed, Emote Guard can dismount, wait through loading screens or blocked states, briefly suppress combat actions, and wait for your character to stop moving before replaying the emote.
-
-After the emote starts, movement and actions are blocked for a brief moment. This helps make sure the emote actually begins, since the player may not know in advance when their controller has issued it.
-
----
 
 ### Hand Guard
 
-Hand Guard is intended to enhance GagSpeak's hand-blocking behavior for selected restraints.
+Hand Guard supports hands-bound style restrictions.
 
-When a configured restraint is active, Hand Guard attempts to keep your character from using their hands in combat by blocking auto-attacks and sheathing drawn weapons.
-
-This helps enforce hands-bound or weapon-forbidden states more reliably.
+When configured GagSpeak restrictions are active, it attempts to keep weapons sheathed and suppress auto-attacks.
 
 ---
 
-### Teleport Block
+### Blocks
 
-Teleport Block is a restriction feature added by Sayu's Gag Extender.
+The Blocks tab lets Moodles control extra restrictions:
 
-When enabled, it prevents Teleport and Return while a configured Moodle is active. That Moodle should be activated by the relevant GagSpeak restraints, either through GagSpeak's own triggers or through Sayu's Gag Extender's Moodle Enforcer.
+- Teleport Block
+- Mount Block
+- Job Switch Block
+
+When any configured Moodle is active, the matching action is blocked. Mount Block can also attempt to dismount the player if they are already mounted.
+
+### Quotas
+
+The Quotas tab adds usage limits for:
+
+- Mounting
+- Teleporting
+- Job changes
+
+Each quota can be configured per hour or per day. Optional Moodles can show whether a quota is available or empty.
+
+Remote controller commands can also set and lock these limits.
+
+### Fatigue
+
+Fatigue tracks movement and builds fatigue based on movement speed and configured active GagSpeak restrictions.
+
+Fatigue can:
+
+- Increase faster under configured restraints.
+- Recover while standing or resting.
+- Force walk at a configured threshold.
+- Force stop at a configured threshold.
+- Force sit at a configured threshold.
+- Apply Moodles for enabled, restrained, and fatigue-status states.
+- Apply Honorific titles for fatigue states.
+- Show live status in the Main and Mini windows.
+
+
+### Job Roulette
+
+Job Roulette randomly switches between configured whitelisted gearsets on a schedule.
+
+It can:
+
+- Use only selected gearsets.
+- Lock manual job changes while active.
+- Spend job-change quota.
+- Swap even while locked or out of quota, depending on settings.
+- Be controlled remotely.
+- Apply a Moodle and/or Honorific while roulette is active.
 
 ---
 
-### Mount Block
+## Enforcers
 
-Mount Block is a restriction feature added by Sayu's Gag Extender.
+Enforcers link GagSpeak state to other plugin or game states.
 
-When enabled, it prevents mounting while a configured Moodle is active. That Moodle should be activated by the relevant GagSpeak restraints, either through GagSpeak's own triggers or through Sayu's Gag Extender's Moodle Enforcer.
+Most enforcers can be linked to:
 
-If the player is already mounted when the block becomes active, the plugin will attempt to dismount them.
-
----
-
-### Job Switch Block
-
-Job Switch Block is a restriction feature added by Sayu's Gag Extender.
-
-When enabled, it prevents changing jobs while a configured Moodle is active. That Moodle should be activated by the relevant GagSpeak restraints, either through GagSpeak's own triggers or through Sayu's Gag Extender's Moodle Enforcer.
-
-If a blocked job switch is detected, the plugin will attempt to return the player to the previously allowed job.
-
----
+- Restraint sets
+- Restrictions
+- Gags
 
 ### Moodle Enforcer
 
-Moodle Enforcer keeps selected Moodle statuses active while linked GagSpeak restraints are active.
-
-A Moodle can be linked to specific restraints, including restraint sets, restrictions, and gags. When any linked restraint is active, the selected Moodle is applied. When the linked restraints are no longer active, the Moodle is removed again.
-
-This is useful for keeping status effects in sync with GagSpeak restraint states.
-
----
+Keeps selected Moodles active while linked GagSpeak restraints are active, then removes them when the linked state ends.
 
 ### Penumbra Enforcer
 
-Penumbra Enforcer keeps selected Penumbra mods enabled while linked GagSpeak restraints are active.
+Keeps selected Penumbra mods enabled while linked GagSpeak restraints are active.
 
-A Penumbra mod can be linked to specific restraints, including restraint sets, restrictions, and gags. When any linked restraint is active, the selected mod is enabled on the player collection. When the linked restraints are no longer active, the mod is disabled again.
-
-This is useful for making visual restraint mods stay enabled only while the matching GagSpeak restraint state is active.
-
----
+This is intended for restraint-specific visual mods. Duplicate mods may be useful if the same mod should also be usable outside the enforcer.
 
 ### Customize+ Enforcer
 
-Customize+ Enforcer keeps selected Customize+ profiles active while linked GagSpeak restraints are active.
+Keeps selected Customize+ profiles enabled while linked GagSpeak restraints are active.
 
-A Customize+ profile can be linked to specific restraints, including restraint sets, restrictions, and gags. When any linked restraint is active, the selected profile is enabled. When the linked restraints are no longer active, the profile is disabled again.
-
-This can be used to improve gag expressions, restore the correct facial expression when gags are removed, or apply other Customize+ changes for specific restraint states.
-
----
+It also supports a default Customize+ profile to restore when no linked profile should be active.
 
 ### Emote Enforcer
 
-Emote Enforcer keeps selected emotes active while linked GagSpeak restraints are active.
+Keeps a selected emote active while linked GagSpeak restraints are active.
 
-An emote can be linked to specific restraints, including restraint sets, restrictions, and gags. When any linked restraint is active, the selected emote is enforced. When the linked restraints are no longer active, the enforced emote is cancelled.
+While an emote is enforced, movement and most actions are blocked to prevent accidentally breaking out of the pose. A configurable cancel command is used when enforcement ends.
 
-While an emote is enforced, the player is locked in place and most actions and movement are blocked to prevent breaking out of the emote state. Expression emotes can still be used.
+### Honorific Enforcer
 
-This is intended for restriction effects that depend on the player staying in a specific emote or pose.
+Applies Honorific titles while linked GagSpeak restraints are active.
+
+Titles support color, glow, priority, and cloned source JSON so hidden Honorific design data can be inlcuded.
+
+### Cammy Enforcer
+
+Applies Cammy presets while linked GagSpeak restraints are active.
+
+The highest-priority matching preset wins. A default Cammy preset can be restored when enforcement ends.
 
 ---
+
+## Automation
 
 ### Shock Collar
 
-Shock Collar can take over surprise shock commands while the player's controller is offline.
+Shock Collar can send random configured shock commands while selected GagSpeak restrictions are active.
 
-When selected restraints are active, such as shock collars or similar restraint items, Sayu's Gag Extender can send configured shock commands at random times. If the configured controller is online, the plugin skips the automated shock and leaves control to them instead.
-
-Shock Collar works together with Emote Guard so the player can be dismounted, stopped, and held briefly when needed to help the shock command go through properly.
-
----
+It supports weighted command lists, a configured controller name, controller-online checking, per-hour counts, remote locks, optional Moodles for active/controller-online state, and honorific title change while shock collar triggers.
 
 ### Vibrator
 
-Vibrator can take over surprise vibration commands while the player's controller is offline.
+Vibrator works similarly to Shock Collar, but sends configured vibration commands.
 
-When selected restraints are active, such as vibrators or similar restraint items, Sayu's Gag Extender can send configured vibration commands at random times. If the configured controller is online, the plugin skips the automated vibration and leaves control to them instead.
-
-Vibrator works together with Emote Guard so the player can be dismounted, stopped, and held briefly when needed to help the vibration command go through properly.
+It supports weighted command lists, controller-online checking, per-hour counts, remote locks, optional Moodles for active/controller-online state, and honorific title change while vibrator triggers.
 
 ---
 
-### Chat 2 Integration
+## Chat integrations
 
-Chat 2 Integration bridges the gap between GagSpeak's chat restrictions and Chat 2.
+### Chat 2
 
-When GagSpeak blocks the normal in-game chat window or chat input field, Sayu's Gag Extender can apply similar restrictions to Chat 2. This includes disabling Chat 2 input when GagSpeak disables chat input.
+The Chat 2 bridge follows GagSpeak chat restrictions.
 
-GagSpeak cannot directly hide the Chat 2 window through this plugin. Instead, Sayu's Gag Extender can force Chat 2 onto a configured empty or unused tab while GagSpeak requests the chatbox to be hidden. In practice, this can serve the same purpose by preventing the player from reading useful chat content.
+It can:
 
-Chat 2 Integration can also help with blindfold behavior. Since blindfolds cover most of the screen, Chat 2 can be moved to a saved position in the remaining visible area so the player can still speak while blinded.
+- Disable Chat 2 input when GagSpeak disables or hides chat input.
+- Switch Chat 2 to a configured hidden/empty tab when GagSpeak hides chat.
+- Save and apply a blindfold-friendly Chat 2 position.
+- Optionally lock Chat 2 position while blindfolded.
 
-For a stronger blackout effect, Chat 2 can be forcefully locked over that visible area, preventing the player from seeing the game through the opening while blindfolded.
+### XIVMessenger
+
+The XIVMessenger bridge follows GagSpeak chat restrictions.
+
+It can:
+
+- Keep XIVMessenger closed while GagSpeak hides chat.
+- Disable XIVMessenger text input while GagSpeak hides or disables chat input.
+- Restore text input after restrictions are removed.
 
 ---
 
-### GagSpeak Mirror
+## GagSpeak Mirror
 
-GagSpeak Mirror saves the active GagSpeak restraints from a configured main character and mirrors them onto other characters.
+GagSpeak Mirror saves the active GagSpeak state from a configured main character and mirrors it to alt characters.
 
-When the current character is set as the main character, Sayu's Gag Extender saves restraint changes. When an alt character is loaded, the plugin can apply the saved restraint state after GagSpeak is ready.
+It can mirror:
 
-For this to work correctly, alt characters need the same GagSpeak wardrobe library as the main character. GagSpeak stores its data in Dalamud's plugin configuration folder, usually:
+- Active restraint set
+- Active restrictions
+- Active gags
 
-`%AppData%\XIVLauncher\pluginConfigs\ProjectGagSpeak`
+Locked mirroring can prevent alt characters from changing away from the saved restraint state.
 
-Inside that folder, GagSpeak creates profile folders with alphanumeric names. Back up the `ProjectGagSpeak` folder, then replace each alt profile folder with a directory link to the main character's profile folder.
+For best results, alt characters should share the same GagSpeak wardrobe library as the main character.
+
+Back up your GagSpeak configuration before changing profile folders.
+
+GagSpeak usually stores configuration under:
+
+```text
+%AppData%\XIVLauncher\pluginConfigs\ProjectGagSpeak
+```
+
+A common setup is to replace an alt profile folder with a directory link to the main character's profile folder:
+
+```text
+mklink /D "%AppData%\XIVLauncher\pluginConfigs\ProjectGagSpeak\{AltProfileId}" "%AppData%\XIVLauncher\pluginConfigs\ProjectGagSpeak\{MainProfileId}"
+```
 
 Close the game and launcher before changing these folders.
 
-Open the Windows Start menu, search for `cmd`, then right-click **Command Prompt** and choose **Run as administrator**.
+---
 
-Command format:
+## Puppeteer Aliases
 
-`mklink /D "%AppData%\XIVLauncher\pluginConfigs\ProjectGagSpeak\{AltProfileId}" "%AppData%\XIVLauncher\pluginConfigs\ProjectGagSpeak\{MainProfileId}"`
+The Puppeteer Aliases tab can read aliases from GagSpeak Puppeteer.
 
-Replace `{AltProfileId}` and `{MainProfileId}` with the actual alphanumeric folder names from your `ProjectGagSpeak` folder.
+It can:
 
-Important note: the alt profile folder must not already exist when running `mklink /D`. Rename or move the alt folder first, after making a backup.
-
-Linking the wrong folders can make profiles share the wrong data, so make a backup first.
+- Show alias folder, name, trigger.
+- Store local notes for aliases.
+- Which allows Controller Interface to retrieve users alias library.
 
 ---
 
-## Commands
+## Local commands
 
 The base command is:
 
@@ -212,7 +274,7 @@ The base command is:
 /sge
 ```
 
-Running `/sge` without a recognized subcommand opens the main plugin window.
+Running `/sge` without a recognized subcommand opens the main window.
 
 ### Help
 
@@ -220,22 +282,11 @@ Running `/sge` without a recognized subcommand opens the main plugin window.
 /sge help
 ```
 
-Prints the available command list in chat.
-
-### Restrictions
+### GagSpeak restrictions
 
 ```text
 /sge apply restriction [name]
 /sge remove restriction [name]
-```
-
-Applies or removes a GagSpeak restriction by name.
-
-Examples:
-
-```text
-/sge apply restriction Wrist Cuffs
-/sge remove restriction Wrist Cuffs
 ```
 
 ### Gags
@@ -245,15 +296,6 @@ Examples:
 /sge remove gag [name]
 ```
 
-Applies or removes a GagSpeak gag by name.
-
-Examples:
-
-```text
-/sge apply gag Ball Gag
-/sge remove gag Ball Gag
-```
-
 ### Restraint sets
 
 ```text
@@ -261,57 +303,86 @@ Examples:
 /sge remove restraintset [name]
 ```
 
-Applies or removes a GagSpeak restraint set by name.
-
-Examples:
-
-```text
-/sge apply restraintset Heavy Bondage
-/sge remove restraintset Heavy Bondage
-```
-
 ---
 
-## Main window
+## Remote controller commands
 
-The main window provides a compact overview of the plugin's current state.
+Remote controller commands are configured in the Controller tab.
 
-From here, you can quickly see which features are enabled and whether they are currently active. This makes it easier to tell at a glance whether a restraint, blocker, enforcer, Chat 2 state, or automation feature is currently doing something.
+The controlled user must enable controller commands, configure the controller name/world, and select accepted chat channels.
 
-The window also shows a few live status values, such as the configured shock and vibration controllers, blindfold state, and GagSpeak chat restriction state.
+Commands use the prefix:
 
-Use the **Settings** button in the main window to open the configuration UI.
+```text
+sge
+```
+
+Hidden/package commands may use the hidden prefix form used internally by the controller interface.
+
+Available remote commands include:
+
+```text
+sge help
+sge status
+sge autozap [always/distant/offline]
+sge zapcount [count]
+sge zapcount unlock
+sge autovibe [always/distant/offline]
+sge vibecount [count]
+sge vibecount unlock
+sge mountlimit [day/hour] [count]
+sge mountlimit unlimited
+sge teleportlimit [day/hour] [count]
+sge teleportlimit unlimited
+sge joblimit [day/hour] [count]
+sge joblimit unlimited
+sge jobroulette [minutes]
+sge stopjobroulette
+sge settitle [title]
+sge settemptitle [seconds] [title]
+sge cleartitle
+```
+
+The Controller Interface wraps many of these commands in buttons and cached status fields.
 
 ---
 
 ## Integrations
 
-Sayu's Gag Extender is built around GagSpeak and can also integrate with several other plugins.
-
 | Integration | Required | Used for |
 | --- | --- | --- |
-| GagSpeak | Yes | Core source of restraints, blindfold state, and chat restriction state |
-| Moodles | No | Status effects used by Moodle Enforcer and as triggers for teleport, mount, and job-switch blocking |
-| Penumbra | No | Enabling or disabling configured mods based on GagSpeak restraints |
-| Customize+ | No | Enabling or disabling configured profiles based on GagSpeak restraints |
-| Chat 2 | No | Chat tab/input control and blindfold position handling |
+| GagSpeak | Yes | Core restraint, gag, restriction, blindfold, chat, Puppeteer, and command state |
+| Moodles | Optional | Moodles, blockers, quotas, fatigue effects, roulette effects |
+| Penumbra | Optional | Restraint-linked mod enforcement |
+| Customize+ | Optional | Restraint-linked profile enforcement and default profile restore |
+| Chat 2 | Optional | Chat input/tab control and blindfold-friendly positioning |
+| XIVMessenger | Optional | Chat restriction bridge |
+| Honorific | Optional | Restraint, fatigue, roulette, and remote title effects |
+| Cammy | Optional | Restraint-linked camera preset enforcement |
 
-Features that depend on optional integrations will do nothing unless the related plugin is installed, available, and configured.
+Features that depend on optional integrations do nothing unless the related plugin is installed, available, and configured.
+
 
 ---
 
 ## Notes and limitations
 
-- This plugin uses Dalamud hooks and plugin IPC/reflection-style integrations. Game updates, Dalamud updates, and updates to GagSpeak or any supported plugin may also break functionality until Sayu's Gag Extender is updated.
-- The plugin assumes GagSpeak is installed and ready for most major features.
-- Blocking features are best-effort. They are designed to catch normal action paths and common edge cases, but they should not be treated as security boundaries.
-- Moodles, Penumbra, Customize+, and Chat 2 integrations require their respective plugins to be installed and up to date.
+- GagSpeak is required for most features.
+- Optional integrations must be installed and loaded for their related features to work.
+- Blocks, quotas, forced walking, forced stopping, and forced sitting are best-effort.
+- Remote commands can intentionally lock some local settings until the controller changes or unlocks them.
+- There is no safeword or emergency override built into the remote controller feature.
+- Updating or disabling supported plugins while Sayu's Gag Extender is running may cause errors.
+- Make backups before linking GagSpeak profile folders for mirroring.
+
 
 ---
 
 ## Disclaimer
 
-Sayu's Gag Extender is an unofficial plugin for use with Dalamud and Final Fantasy XIV. It is not affiliated with or endorsed by Square Enix, Dalamud, GagSpeak, or the authors of any optional integration plugins.
+Sayu's Gag Extender is an unofficial plugin for use with Dalamud and Final Fantasy XIV.
+
+It is not affiliated with or endorsed by Square Enix, Dalamud, GagSpeak, or the authors of any optional integration plugins.
 
 ---
 
@@ -319,6 +390,12 @@ Sayu's Gag Extender is an unofficial plugin for use with Dalamud and Final Fanta
 
 Questions, bug reports, and feedback are welcome.
 
-You can contact me on Discord: `sayurikat`
+Discord: `sayurikat`
 
-When reporting an issue, please include which feature you were using, what happened, and any relevant Dalamud log messages.
+When reporting an issue, please include:
+
+- Which feature you were using.
+- What you expected to happen.
+- What actually happened.
+- Relevant Dalamud log messages.
+
