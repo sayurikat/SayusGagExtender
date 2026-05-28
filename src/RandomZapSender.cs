@@ -27,6 +27,9 @@ namespace SayusGagExtender
         private bool autoZapByControllerMoodleRequested;
         private bool autoZapAutonomusMoodleRequested;
 
+        private const string AutoZapControllerMoodleSource = "RandomZapSender.ControllerOnline";
+        private const string AutoZapAutonomousMoodleSource = "RandomZapSender.AutonomousEngaged";
+
         private const float ControllerNearbyDistance = 30f;
         private ControllerPresence lastControllerPresence = ControllerPresence.Offline;
 
@@ -69,6 +72,7 @@ namespace SayusGagExtender
             Plugin.Framework.Update += this.OnFrameworkUpdate;
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnRestrictionsChanged;
 
+            RegisterAutoZapMoodles();
             RefreshHonorificEmoteSubscriptions();
         }
 
@@ -437,10 +441,18 @@ namespace SayusGagExtender
                 zapCommand.HonorificPriority,
                 this);
         }
+        private void RegisterAutoZapMoodles()
+        {
+            plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.AutoZapControllerOnlineMoodleId, AutoZapControllerMoodleSource);
+            plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.AutoZapEngagedMoodleId, AutoZapAutonomousMoodleSource);
+        }
+
         private void ClearAutoZapMoodles()
         {
-            SetAutoZapByControllerMoodle(false);
-            SetAutoZapAutonomusMoodle(false);
+            autoZapByControllerMoodleRequested = false;
+            autoZapAutonomusMoodleRequested = false;
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoZapControllerMoodleSource);
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoZapAutonomousMoodleSource);
         }
 
         private void SetAutoZapByControllerMoodle(bool active)
@@ -448,7 +460,10 @@ namespace SayusGagExtender
             var moodleId = plugin.Configuration.AutoZapControllerOnlineMoodleId;
 
             if (moodleId == Guid.Empty)
+            {
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoZapControllerMoodleSource);
                 return;
+            }
 
             if (active)
             {
@@ -456,7 +471,7 @@ namespace SayusGagExtender
                     return;
 
                 autoZapByControllerMoodleRequested = true;
-                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, this);
+                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, AutoZapControllerMoodleSource);
             }
             else
             {
@@ -464,7 +479,7 @@ namespace SayusGagExtender
                     return;
 
                 autoZapByControllerMoodleRequested = false;
-                plugin.MoodleEnforcer.RemoveEnforcedMoodle(moodleId, this);
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoZapControllerMoodleSource);
             }
         }
 
@@ -473,7 +488,10 @@ namespace SayusGagExtender
             var moodleId = plugin.Configuration.AutoZapEngagedMoodleId;
 
             if (moodleId == Guid.Empty)
+            {
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoZapAutonomousMoodleSource);
                 return;
+            }
 
             if (active)
             {
@@ -481,7 +499,7 @@ namespace SayusGagExtender
                     return;
 
                 autoZapAutonomusMoodleRequested = true;
-                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, this);
+                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, AutoZapAutonomousMoodleSource);
             }
             else
             {
@@ -489,12 +507,13 @@ namespace SayusGagExtender
                     return;
 
                 autoZapAutonomusMoodleRequested = false;
-                plugin.MoodleEnforcer.RemoveEnforcedMoodle(moodleId, this);
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoZapAutonomousMoodleSource);
             }
         }
         public void MoodleConfigChange()
         {
             ClearAutoZapMoodles();
+            RegisterAutoZapMoodles();
         }
     
 

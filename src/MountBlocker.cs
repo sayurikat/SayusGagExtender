@@ -34,6 +34,9 @@ public unsafe sealed class MountBlocker : IDisposable
 
     private Guid requestedQuotaRunningMoodleId = Guid.Empty;
     private Guid requestedQuotaEmptyMoodleId = Guid.Empty;
+
+    private const string MountQuotaRunningMoodleSource = "MountBlocker.QuotaRunning";
+    private const string MountQuotaEmptyMoodleSource = "MountBlocker.QuotaEmpty";
     private DateTime mountCountCooldown = DateTime.MinValue;
 
     public bool Enabled => plugin.Configuration.MountBlockFeature;
@@ -55,6 +58,7 @@ public unsafe sealed class MountBlocker : IDisposable
         this.useActionHook.Enable();
 
         Plugin.Framework.Update += this.OnFrameworkUpdate;
+        this.RegisterQuotaMoodles();
 
     }
 
@@ -300,8 +304,15 @@ public unsafe sealed class MountBlocker : IDisposable
         plugin.Configuration.MountQuotaActionLogUtc ??= new List<DateTime>();
     }
 
+    private void RegisterQuotaMoodles()
+    {
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.MountQuotaMoodleId, MountQuotaRunningMoodleSource);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.MountQuotaEmptyMoodleId, MountQuotaEmptyMoodleSource);
+    }
+
     private void UpdateQuotaMoodleState()
     {
+        this.RegisterQuotaMoodles();
         if (!this.Enabled || !this.IsQuotaEnabled())
         {
             this.RemoveQuotaMoodleIfApplied();
@@ -324,32 +335,32 @@ public unsafe sealed class MountBlocker : IDisposable
             wantedEmptyMoodleId = Guid.Empty;
         }
 
-        this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, wantedRunningMoodleId);
-        this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, wantedEmptyMoodleId);
+        this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, wantedRunningMoodleId, MountQuotaRunningMoodleSource);
+        this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, wantedEmptyMoodleId, MountQuotaEmptyMoodleSource);
     }
 
-    private void SetQuotaMoodleRequest(ref Guid currentlyRequestedMoodleId, Guid wantedMoodleId)
+    private void SetQuotaMoodleRequest(ref Guid currentlyRequestedMoodleId, Guid wantedMoodleId, string sourceKey)
     {
         if (currentlyRequestedMoodleId == wantedMoodleId)
             return;
 
         if (currentlyRequestedMoodleId != Guid.Empty)
         {
-            plugin.MoodleEnforcer.RemoveEnforcedMoodle(currentlyRequestedMoodleId, this);
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(sourceKey);
             currentlyRequestedMoodleId = Guid.Empty;
         }
 
         if (wantedMoodleId == Guid.Empty)
             return;
 
-        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, this);
+        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, sourceKey);
         currentlyRequestedMoodleId = wantedMoodleId;
     }
 
     private void RemoveQuotaMoodleIfApplied()
     {
-        this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, Guid.Empty);
-        this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, Guid.Empty);
+        this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, Guid.Empty, MountQuotaRunningMoodleSource);
+        this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, Guid.Empty, MountQuotaEmptyMoodleSource);
     }
 
     public void Dispose()

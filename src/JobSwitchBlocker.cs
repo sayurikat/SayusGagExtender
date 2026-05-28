@@ -37,6 +37,9 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
     private Guid requestedQuotaRunningMoodleId = Guid.Empty;
     private Guid requestedQuotaEmptyMoodleId = Guid.Empty;
 
+    private const string JobSwitchQuotaRunningMoodleSource = "JobSwitchBlocker.QuotaRunning";
+    private const string JobSwitchQuotaEmptyMoodleSource = "JobSwitchBlocker.QuotaEmpty";
+
     private DateTime jobSwitchCountCooldown = DateTime.MinValue;
 
     // When the last quota is spent, do not immediately lock/revert.
@@ -65,9 +68,7 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
         this.equipGearsetHook.Enable();
 
         Plugin.Framework.Update += this.OnFrameworkUpdate;
-
-        // Do not update quota Moodle here.
-        // MoodleEnforcer may not be ready yet, and this is safer on framework update.
+        this.RegisterQuotaMoodles();
     }
 
     public void Enable()
@@ -498,15 +499,22 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
         plugin.Configuration.JobSwitchQuotaActionLogUtc ??= new List<DateTime>();
     }
 
+    private void RegisterQuotaMoodles()
+    {
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.JobSwitchQuotaMoodleId, JobSwitchQuotaRunningMoodleSource);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.JobSwitchQuotaEmptyMoodleId, JobSwitchQuotaEmptyMoodleSource);
+    }
+
     private void UpdateQuotaMoodleState()
     {
+        this.RegisterQuotaMoodles();
         var runningMoodleId = plugin.Configuration.JobSwitchQuotaMoodleId;
         var emptyMoodleId = plugin.Configuration.JobSwitchQuotaEmptyMoodleId;
 
         if (!this.IsQuotaEnabled())
         {
-            this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, Guid.Empty);
-            this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, Guid.Empty);
+            this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, Guid.Empty, JobSwitchQuotaRunningMoodleSource);
+            this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, Guid.Empty, JobSwitchQuotaEmptyMoodleSource);
             return;
         }
 
@@ -530,11 +538,11 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
             wantedEmptyMoodleId = Guid.Empty;
         }
 
-        this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, wantedRunningMoodleId);
-        this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, wantedEmptyMoodleId);
+        this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, wantedRunningMoodleId, JobSwitchQuotaRunningMoodleSource);
+        this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, wantedEmptyMoodleId, JobSwitchQuotaEmptyMoodleSource);
     }
 
-    private void SetQuotaMoodleRequest(ref Guid currentlyRequestedMoodleId, Guid wantedMoodleId)
+    private void SetQuotaMoodleRequest(ref Guid currentlyRequestedMoodleId, Guid wantedMoodleId, string sourceKey)
     {
         // Already correct for this slot.
         if (currentlyRequestedMoodleId == wantedMoodleId)
@@ -542,21 +550,21 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
 
         if (currentlyRequestedMoodleId != Guid.Empty)
         {
-            plugin.MoodleEnforcer.RemoveEnforcedMoodle(currentlyRequestedMoodleId, this);
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(sourceKey);
             currentlyRequestedMoodleId = Guid.Empty;
         }
 
         if (wantedMoodleId == Guid.Empty)
             return;
 
-        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, this);
+        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, sourceKey);
         currentlyRequestedMoodleId = wantedMoodleId;
     }
 
     private void RemoveQuotaMoodleIfApplied()
     {
-        this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, Guid.Empty);
-        this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, Guid.Empty);
+        this.SetQuotaMoodleRequest(ref this.requestedQuotaRunningMoodleId, Guid.Empty, JobSwitchQuotaRunningMoodleSource);
+        this.SetQuotaMoodleRequest(ref this.requestedQuotaEmptyMoodleId, Guid.Empty, JobSwitchQuotaEmptyMoodleSource);
     }
 
     private void CaptureAllowedState()

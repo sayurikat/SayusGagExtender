@@ -43,6 +43,10 @@ public sealed class FatigueTracker : IDisposable
     private static readonly TimeSpan RestrictionCheckCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SaveCooldown = TimeSpan.FromSeconds(30);
 
+    private const string FatigueEnabledMoodleSource = "FatigueTracker.Enabled";
+    private const string FatigueRestrainedMoodleSource = "FatigueTracker.Restrained";
+    private const string FatigueStatusMoodleSource = "FatigueTracker.Status";
+
     private const uint SprintStatusId = 50;
     private const uint PelotonStatusId = 1199;
     private const uint JogStatusId = 4209;
@@ -158,6 +162,7 @@ public sealed class FatigueTracker : IDisposable
         plugin.Configuration.FatigueCurrent = Clamp01(plugin.Configuration.FatigueCurrent);
 
 
+        RegisterFatigueMoodles();
         Plugin.Framework.Update += OnFrameworkUpdate;
     }
 
@@ -752,20 +757,15 @@ public sealed class FatigueTracker : IDisposable
         var restrainedEffect = plugin.Configuration.FatigueRestrainedEffect;
         var statusEffect = GetEffectConfigForFatigueStatus(status);
 
-        EnsureFatigueMoodleState(
-            ref activeFatigueEnabledMoodleId,
-            enabledEffect.MoodleId,
-            shouldBeActive: plugin.Configuration.FatigueEnabled);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(enabledEffect.MoodleId, FatigueEnabledMoodleSource);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(restrainedEffect.MoodleId, FatigueRestrainedMoodleSource);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(statusEffect.MoodleId, FatigueStatusMoodleSource);
 
-        EnsureFatigueMoodleState(
-            ref activeFatigueRestrainedMoodleId,
-            restrainedEffect.MoodleId,
-            shouldBeActive: plugin.Configuration.FatigueEnabled && cachedActiveRestrictionCount > 0);
+        EnsureFatigueMoodleState(ref activeFatigueEnabledMoodleId, enabledEffect.MoodleId, plugin.Configuration.FatigueEnabled, FatigueEnabledMoodleSource);
 
-        EnsureFatigueMoodleState(
-            ref activeFatigueStatusMoodleId,
-            statusEffect.MoodleId,
-            shouldBeActive: status != FatigueStatusLevel.None && statusEffect.MoodleId != Guid.Empty);
+        EnsureFatigueMoodleState(ref activeFatigueRestrainedMoodleId, restrainedEffect.MoodleId, plugin.Configuration.FatigueEnabled && cachedActiveRestrictionCount > 0, FatigueRestrainedMoodleSource);
+
+        EnsureFatigueMoodleState(ref activeFatigueStatusMoodleId, statusEffect.MoodleId, status != FatigueStatusLevel.None && statusEffect.MoodleId != Guid.Empty, FatigueStatusMoodleSource);
 
         UpdateFatigueHonorificWinner(enabledEffect, restrainedEffect, statusEffect);
     }
@@ -776,36 +776,46 @@ public sealed class FatigueTracker : IDisposable
         RecallFatigueHonorificRequest();
     }
 
-    private void ClearFatigueMoodles()
+    private void RegisterFatigueMoodles()
     {
-        ClearFatigueMoodle(ref activeFatigueEnabledMoodleId);
-        ClearFatigueMoodle(ref activeFatigueRestrainedMoodleId);
-        ClearFatigueMoodle(ref activeFatigueStatusMoodleId);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.FatigueEnabledEffect.MoodleId, FatigueEnabledMoodleSource);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.FatigueRestrainedEffect.MoodleId, FatigueRestrainedMoodleSource);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(GetEffectConfigForFatigueStatus(currentFatigueStatus).MoodleId, FatigueStatusMoodleSource);
     }
 
-    private void EnsureFatigueMoodleState(ref Guid activeId, Guid wantedId, bool shouldBeActive)
+    private void ClearFatigueMoodles()
+    {
+        ClearFatigueMoodle(ref activeFatigueEnabledMoodleId, FatigueEnabledMoodleSource);
+        ClearFatigueMoodle(ref activeFatigueRestrainedMoodleId, FatigueRestrainedMoodleSource);
+        ClearFatigueMoodle(ref activeFatigueStatusMoodleId, FatigueStatusMoodleSource);
+    }
+
+    private void EnsureFatigueMoodleState(ref Guid activeId, Guid wantedId, bool shouldBeActive, string sourceKey)
     {
         if (!shouldBeActive || wantedId == Guid.Empty)
         {
-            ClearFatigueMoodle(ref activeId);
+            ClearFatigueMoodle(ref activeId, sourceKey);
             return;
         }
 
         if (activeId == wantedId)
             return;
 
-        ClearFatigueMoodle(ref activeId);
+        ClearFatigueMoodle(ref activeId, sourceKey);
 
-        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedId, this);
+        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedId, sourceKey);
         activeId = wantedId;
     }
 
-    private void ClearFatigueMoodle(ref Guid activeId)
+    private void ClearFatigueMoodle(ref Guid activeId, string sourceKey)
     {
         if (activeId == Guid.Empty)
+        {
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(sourceKey);
             return;
+        }
 
-        plugin.MoodleEnforcer.RemoveEnforcedMoodle(activeId, this);
+        plugin.MoodleEnforcer.RemoveEnforcedMoodle(sourceKey);
         activeId = Guid.Empty;
     }
 

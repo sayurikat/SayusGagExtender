@@ -34,6 +34,9 @@ public unsafe sealed class TeleportBlocker : IDisposable
     private bool quotaMoodleApplied;
     private Guid appliedQuotaMoodleId = Guid.Empty;
 
+    private const string TeleportQuotaMoodleSource = "TeleportBlocker.Quota";
+    private const string TeleportQuotaEmptyMoodleSource = "TeleportBlocker.QuotaEmpty";
+
     private DateTime teleportCountCooldown = DateTime.MinValue;
 
     public TeleportBlocker(Plugin plugin)
@@ -47,6 +50,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
         this.useActionHook.Enable();
 
         Plugin.Framework.Update += this.OnFrameworkUpdate;
+        this.RegisterQuotaMoodle();
 
     }
 
@@ -267,17 +271,24 @@ public unsafe sealed class TeleportBlocker : IDisposable
         plugin.Configuration.TeleportQuotaActionLogUtc ??= new List<DateTime>();
     }
 
+    private void RegisterQuotaMoodle()
+    {
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.TeleportQuotaMoodleId, TeleportQuotaMoodleSource);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.TeleportQuotaEmptyMoodleId, TeleportQuotaEmptyMoodleSource);
+    }
+
     private void UpdateQuotaMoodleState()
     {
+        this.RegisterQuotaMoodle();
         if (!this.Enabled || !this.IsQuotaEnabled())
         {
             this.RemoveQuotaMoodleIfApplied();
             return;
         }
 
-        var wantedMoodleId = this.IsQuotaExhausted()
-            ? plugin.Configuration.TeleportQuotaEmptyMoodleId
-            : plugin.Configuration.TeleportQuotaMoodleId;
+        var quotaEmpty = this.IsQuotaExhausted();
+        var wantedMoodleId = quotaEmpty ? plugin.Configuration.TeleportQuotaEmptyMoodleId : plugin.Configuration.TeleportQuotaMoodleId;
+        var wantedSourceKey = quotaEmpty ? TeleportQuotaEmptyMoodleSource : TeleportQuotaMoodleSource;
 
         if (wantedMoodleId == Guid.Empty)
         {
@@ -290,7 +301,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
 
         this.RemoveQuotaMoodleIfApplied();
 
-        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, this);
+        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, wantedSourceKey);
 
         this.quotaMoodleApplied = true;
         this.appliedQuotaMoodleId = wantedMoodleId;
@@ -301,7 +312,8 @@ public unsafe sealed class TeleportBlocker : IDisposable
         if (!this.quotaMoodleApplied || this.appliedQuotaMoodleId == Guid.Empty)
             return;
 
-        plugin.MoodleEnforcer.RemoveEnforcedMoodle(this.appliedQuotaMoodleId, this);
+        plugin.MoodleEnforcer.RemoveEnforcedMoodle(TeleportQuotaMoodleSource);
+        plugin.MoodleEnforcer.RemoveEnforcedMoodle(TeleportQuotaEmptyMoodleSource);
 
         this.quotaMoodleApplied = false;
         this.appliedQuotaMoodleId = Guid.Empty;

@@ -26,6 +26,9 @@ namespace SayusGagExtender
         private bool autoVibeByControllerMoodleRequested;
         private bool autoVibeAutonomusMoodleRequested;
 
+        private const string AutoVibeControllerMoodleSource = "RandomVibeSender.ControllerOnline";
+        private const string AutoVibeAutonomousMoodleSource = "RandomVibeSender.AutonomousEngaged";
+
         private const float ControllerNearbyDistance = 30f;
         private ControllerPresence lastControllerPresence = ControllerPresence.Offline;
 
@@ -68,6 +71,7 @@ namespace SayusGagExtender
             plugin.GagSpeakRestrictionsApi.OnRestrictionsChanged += this.OnRestrictionsChanged;
             plugin.FriendListHelper.RequestFriendListUpdateWithCooldown();
 
+            RegisterAutoVibeMoodles();
             RefreshHonorificEmoteSubscriptions();
         }
 
@@ -446,10 +450,18 @@ namespace SayusGagExtender
                 vibeCommand.HonorificPriority,
                 this);
         }
+        private void RegisterAutoVibeMoodles()
+        {
+            plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.AutoVibeControllerOnlineMoodleId, AutoVibeControllerMoodleSource);
+            plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.AutoVibeEngagedMoodleId, AutoVibeAutonomousMoodleSource);
+        }
+
         private void ClearAutoVibeMoodles()
         {
-            SetAutoVibeByControllerMoodle(false);
-            SetAutoVibeAutonomusMoodle(false);
+            autoVibeByControllerMoodleRequested = false;
+            autoVibeAutonomusMoodleRequested = false;
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoVibeControllerMoodleSource);
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoVibeAutonomousMoodleSource);
         }
 
         private void SetAutoVibeByControllerMoodle(bool active)
@@ -457,7 +469,10 @@ namespace SayusGagExtender
             var moodleId = plugin.Configuration.AutoVibeControllerOnlineMoodleId;
 
             if (moodleId == Guid.Empty)
+            {
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoVibeControllerMoodleSource);
                 return;
+            }
 
             if (active)
             {
@@ -465,7 +480,7 @@ namespace SayusGagExtender
                     return;
 
                 autoVibeByControllerMoodleRequested = true;
-                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, this);
+                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, AutoVibeControllerMoodleSource);
             }
             else
             {
@@ -473,7 +488,7 @@ namespace SayusGagExtender
                     return;
 
                 autoVibeByControllerMoodleRequested = false;
-                plugin.MoodleEnforcer.RemoveEnforcedMoodle(moodleId, this);
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoVibeControllerMoodleSource);
             }
         }
 
@@ -482,7 +497,10 @@ namespace SayusGagExtender
             var moodleId = plugin.Configuration.AutoVibeEngagedMoodleId;
 
             if (moodleId == Guid.Empty)
+            {
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoVibeAutonomousMoodleSource);
                 return;
+            }
 
             if (active)
             {
@@ -490,7 +508,7 @@ namespace SayusGagExtender
                     return;
 
                 autoVibeAutonomusMoodleRequested = true;
-                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, this);
+                plugin.MoodleEnforcer.AddEnforcedMoodle(moodleId, AutoVibeAutonomousMoodleSource);
             }
             else
             {
@@ -498,13 +516,14 @@ namespace SayusGagExtender
                     return;
 
                 autoVibeAutonomusMoodleRequested = false;
-                plugin.MoodleEnforcer.RemoveEnforcedMoodle(moodleId, this);
+                plugin.MoodleEnforcer.RemoveEnforcedMoodle(AutoVibeAutonomousMoodleSource);
             }
         }
 
         public void MoodleConfigChange()
         {
             ClearAutoVibeMoodles();
+            RegisterAutoVibeMoodles();
         }
         public void RefreshHonorificEmoteSubscriptions()
         {

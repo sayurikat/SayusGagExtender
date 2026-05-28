@@ -52,6 +52,10 @@ public unsafe sealed class JobManager : IDisposable
     private Guid requestedQuotaEmptyMoodleId = Guid.Empty;
     private Guid requestedRouletteMoodleId = Guid.Empty;
 
+    private const string JobManagerQuotaRunningMoodleSource = "JobManager.QuotaRunning";
+    private const string JobManagerQuotaEmptyMoodleSource = "JobManager.QuotaEmpty";
+    private const string JobManagerRouletteMoodleSource = "JobManager.JobRoulette";
+
     private string lastSubmittedRouletteHonorificJson = string.Empty;
     private int lastSubmittedRouletteHonorificPriority = -1;
     private bool hasSubmittedRouletteHonorificRequest;
@@ -103,9 +107,8 @@ public unsafe sealed class JobManager : IDisposable
         equipGearsetHook.Enable();
 
         Plugin.Framework.Update += OnFrameworkUpdate;
-
-        // Do not update quota Moodle here.
-        // MoodleEnforcer may not be ready yet, and framework update derives the correct state.
+        RegisterQuotaMoodles();
+        RegisterRouletteMoodle();
     }
 
     public void Dispose()
@@ -1136,8 +1139,14 @@ public unsafe sealed class JobManager : IDisposable
         plugin.Configuration.JobSwitchQuotaActionLogUtc ??= new List<DateTime>();
     }
 
+    private void RegisterRouletteMoodle()
+    {
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.JobRouletteEffect.MoodleId, JobManagerRouletteMoodleSource);
+    }
+
     private void UpdateRouletteEffectState()
     {
+        RegisterRouletteMoodle();
         var config = plugin.Configuration.JobRouletteEffect;
         var shouldBeActive = RouletteEnabled && plugin.Configuration.JobRouletteWhitelistedGearsets.Count > 0;
 
@@ -1152,14 +1161,14 @@ public unsafe sealed class JobManager : IDisposable
 
         if (requestedRouletteMoodleId != Guid.Empty)
         {
-            plugin.MoodleEnforcer.RemoveEnforcedMoodle(requestedRouletteMoodleId, "JobManager.JobRoulette");
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(JobManagerRouletteMoodleSource);
             requestedRouletteMoodleId = Guid.Empty;
         }
 
         if (wantedMoodleId == Guid.Empty)
             return;
 
-        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, "JobManager.JobRoulette");
+        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, JobManagerRouletteMoodleSource);
         requestedRouletteMoodleId = wantedMoodleId;
     }
 
@@ -1213,15 +1222,22 @@ public unsafe sealed class JobManager : IDisposable
     }
 
 
+    private void RegisterQuotaMoodles()
+    {
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.JobSwitchQuotaMoodleId, JobManagerQuotaRunningMoodleSource);
+        plugin.MoodleEnforcer.RegisterExternalMoodle(plugin.Configuration.JobSwitchQuotaEmptyMoodleId, JobManagerQuotaEmptyMoodleSource);
+    }
+
     private void UpdateQuotaMoodleState()
     {
+        RegisterQuotaMoodles();
         var runningMoodleId = plugin.Configuration.JobSwitchQuotaMoodleId;
         var emptyMoodleId = plugin.Configuration.JobSwitchQuotaEmptyMoodleId;
 
         if (!IsQuotaEnabled())
         {
-            SetQuotaMoodleRequest(ref requestedQuotaRunningMoodleId, Guid.Empty);
-            SetQuotaMoodleRequest(ref requestedQuotaEmptyMoodleId, Guid.Empty);
+            SetQuotaMoodleRequest(ref requestedQuotaRunningMoodleId, Guid.Empty, JobManagerQuotaRunningMoodleSource);
+            SetQuotaMoodleRequest(ref requestedQuotaEmptyMoodleId, Guid.Empty, JobManagerQuotaEmptyMoodleSource);
             return;
         }
 
@@ -1245,11 +1261,11 @@ public unsafe sealed class JobManager : IDisposable
             wantedEmptyMoodleId = Guid.Empty;
         }
 
-        SetQuotaMoodleRequest(ref requestedQuotaRunningMoodleId, wantedRunningMoodleId);
-        SetQuotaMoodleRequest(ref requestedQuotaEmptyMoodleId, wantedEmptyMoodleId);
+        SetQuotaMoodleRequest(ref requestedQuotaRunningMoodleId, wantedRunningMoodleId, JobManagerQuotaRunningMoodleSource);
+        SetQuotaMoodleRequest(ref requestedQuotaEmptyMoodleId, wantedEmptyMoodleId, JobManagerQuotaEmptyMoodleSource);
     }
 
-    private void SetQuotaMoodleRequest(ref Guid currentlyRequestedMoodleId, Guid wantedMoodleId)
+    private void SetQuotaMoodleRequest(ref Guid currentlyRequestedMoodleId, Guid wantedMoodleId, string sourceKey)
     {
         // Already correct for this slot.
         if (currentlyRequestedMoodleId == wantedMoodleId)
@@ -1257,21 +1273,21 @@ public unsafe sealed class JobManager : IDisposable
 
         if (currentlyRequestedMoodleId != Guid.Empty)
         {
-            plugin.MoodleEnforcer.RemoveEnforcedMoodle(currentlyRequestedMoodleId, this);
+            plugin.MoodleEnforcer.RemoveEnforcedMoodle(sourceKey);
             currentlyRequestedMoodleId = Guid.Empty;
         }
 
         if (wantedMoodleId == Guid.Empty)
             return;
 
-        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, this);
+        plugin.MoodleEnforcer.AddEnforcedMoodle(wantedMoodleId, sourceKey);
         currentlyRequestedMoodleId = wantedMoodleId;
     }
 
     private void RemoveQuotaMoodleIfApplied()
     {
-        SetQuotaMoodleRequest(ref requestedQuotaRunningMoodleId, Guid.Empty);
-        SetQuotaMoodleRequest(ref requestedQuotaEmptyMoodleId, Guid.Empty);
+        SetQuotaMoodleRequest(ref requestedQuotaRunningMoodleId, Guid.Empty, JobManagerQuotaRunningMoodleSource);
+        SetQuotaMoodleRequest(ref requestedQuotaEmptyMoodleId, Guid.Empty, JobManagerQuotaEmptyMoodleSource);
     }
 
     private void CaptureAllowedState()
