@@ -8,7 +8,8 @@ public sealed class RemotePackageTransport
 {
     public const string CommandPrefix = "pkg";
     private const int MaxTellLength = 500;
-    private const int SafetyMargin = 20;
+    private const int SafetyMargin = 40;
+    public const int DefaultMaxLineLength = MaxTellLength;
 
     private readonly Dictionary<string, PendingPackage> pendingPackages = [];
 
@@ -22,21 +23,21 @@ public sealed class RemotePackageTransport
 
     public readonly record struct ReceiveProgress(string Id, int Part, int Total, int Received, bool IsChunked);
 
-    public IReadOnlyList<string> BuildTellLines(RemotePackage package, string prefix)
+    public IReadOnlyList<string> BuildTellLines(RemotePackage package, string prefix, int maxLineLength = DefaultMaxLineLength)
     {
-  
+        maxLineLength = Math.Clamp(maxLineLength, 100, MaxTellLength);
         var encoded = package.ToBase64Url();
         var singlePrefix = $"{prefix}::{CommandPrefix}:";
         var singleLine = $"{singlePrefix}{encoded}";
 
-        if (singleLine.Length <= MaxTellLength - SafetyMargin)
+        if (singleLine.Length <= maxLineLength - SafetyMargin)
         {
             return [singleLine];
         }
 
         var id = Random.Shared.Next(0x100000, 0xFFFFFF).ToString("X6");
         var headerReserve = $"{prefix}::{CommandPrefix}:{id}:999/999:".Length;
-        var chunkSize = Math.Max(50, MaxTellLength - SafetyMargin - headerReserve);
+        var chunkSize = Math.Max(50, maxLineLength - SafetyMargin - headerReserve);
         var total = (int)Math.Ceiling(encoded.Length / (double)chunkSize);
         var lines = new List<string>(total);
 
@@ -106,6 +107,7 @@ public sealed class RemotePackageTransport
         }
 
         pending.Chunks[part - 1] = chunk;
+        pending.LastUpdatedUtc = DateTime.UtcNow;
         var received = pending.Chunks.Count(x => !string.IsNullOrEmpty(x));
         progress = new ReceiveProgress(id, part, total, received, true);
 
@@ -121,7 +123,7 @@ public sealed class RemotePackageTransport
     public int ClearOldPendingPackages()
     {
         var cutoff = DateTime.UtcNow - TimeSpan.FromMinutes(2);
-        var expired = pendingPackages.Where(x => x.Value.CreatedUtc < cutoff).Select(x => x.Key).ToList();
+        var expired = pendingPackages.Where(x => x.Value.LastUpdatedUtc < cutoff).Select(x => x.Key).ToList();
         foreach (var entry in expired)
         {
             pendingPackages.Remove(entry);
@@ -133,7 +135,7 @@ public sealed class RemotePackageTransport
     {
         public int Total { get; }
         public string[] Chunks { get; }
-        public DateTime CreatedUtc { get; } = DateTime.UtcNow;
+        public DateTime LastUpdatedUtc { get; set; } = DateTime.UtcNow;
 
         public PendingPackage(int total)
         {

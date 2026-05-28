@@ -116,7 +116,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     {
         if (hidden)
         {
-            _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(BuildRemoteStatusPackage(), prefix));
+            _ = SendTellPackageAsync(senderName, senderWorld, BuildRemoteStatusPackage(), prefix);
             return;
         }
 
@@ -989,7 +989,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         var response = new RemotePackage(RemotePackageTypeCloneCurrentTitleResponse);
         response.WriteInt(RemoteTitlePackageVersion);
         response.WriteString(json);
-        _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(response, GetRemotePrefix()));
+        _ = SendTellPackageAsync(senderName, senderWorld, response, GetRemotePrefix());
     }
     private void HandleCloneCurrentTitleResponsePackage(RemotePackage package, string senderName, string senderWorld)
     {
@@ -1022,7 +1022,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         var response = new RemotePackage(RemotePackageTypeCloneCurrentTempTitleResponse);
         response.WriteInt(RemoteTitlePackageVersion);
         response.WriteString(json);
-        _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(response, GetRemotePrefix()));
+        _ = SendTellPackageAsync(senderName, senderWorld, response, GetRemotePrefix());
     }
     private void HandleCloneCurrentTempTitleResponsePackage(RemotePackage package, string senderName, string senderWorld)
     {
@@ -1041,7 +1041,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         var response = new RemotePackage(RemotePackageTypePuppeteerAliasesResponse);
         response.WriteInt(RemotePuppeteerAliasesPackageVersion);
         response.WriteString(aliases.ToString(Newtonsoft.Json.Formatting.None));
-        _ = SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(response, GetRemotePrefix()));
+        _ = SendTellPackageAsync(senderName, senderWorld, response, GetRemotePrefix());
     }
     private void HandlePuppeteerAliasesResponsePackage(RemotePackage package, string senderName, string senderWorld)
     {
@@ -1239,6 +1239,12 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         }
 
         return false;
+    }
+    private Task SendTellPackageAsync(string senderName,string senderWorld,RemotePackage package,string prefix)
+    {
+        var tellPrefixLength = $"/t {senderName}@{senderWorld} ".Length;
+        var maxLineLength = Math.Max(100, RemotePackageTransport.DefaultMaxLineLength - tellPrefixLength);
+        return SendTellLinesAsync(senderName, senderWorld, packageTransport.BuildTellLines(package, prefix, maxLineLength));
     }
     private async Task SendTellLinesAsync(string senderName,string senderWorld,IEnumerable<string> lines,int delayMs = 1500)
     {

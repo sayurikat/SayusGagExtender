@@ -566,7 +566,10 @@ public class ControllerWindow : Window, IDisposable
         if (string.IsNullOrWhiteSpace(user.Name) || string.IsNullOrWhiteSpace(user.World)) return;
         var prefix = string.IsNullOrWhiteSpace(configuration.RemoteChatCommandPrefix) ? "sge" : configuration.RemoteChatCommandPrefix.Trim();
 
-        foreach (var line in packageTransport.BuildTellLines(package, prefix))
+        var tellPrefixLength = $"/t {user.Name}@{user.World} ".Length;
+        var maxLineLength = Math.Max(100, RemotePackageTransport.DefaultMaxLineLength - tellPrefixLength);
+
+        foreach (var line in packageTransport.BuildTellLines(package, prefix, maxLineLength))
         {
             var command = $"/t {user.Name}@{user.World} {line}";
 
@@ -678,7 +681,7 @@ public class ControllerWindow : Window, IDisposable
         state.InProgress = true;
         state.Failed = false;
         state.Message = $"Receiving package chunk {part}/{total}...";
-        state.TimeoutUtc = now.AddSeconds(5);
+        state.TimeoutUtc = now.AddSeconds(10);
         state.MessageUntilUtc = state.TimeoutUtc;
         if (commandButtonsDisabledUntilUtc < state.TimeoutUtc) commandButtonsDisabledUntilUtc = state.TimeoutUtc;
     }
