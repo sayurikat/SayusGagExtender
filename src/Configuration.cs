@@ -2,6 +2,7 @@ using Dalamud.Configuration;
 using Dalamud.Game.Text;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using static SayusGagExtender.CammyEnforcer;
 using static SayusGagExtender.HonorificEnforcer;
 using static SayusGagExtender.MoodleEnforcer;
@@ -208,8 +209,72 @@ public class Configuration : IPluginConfiguration
     public bool JobRouletteSpendOutOfQuotaLimit { get; set; } = true;
     public bool JobRouletteRemoteSet { get; set; } = true;
     public List<JobRouletteGearsetConfig> JobRouletteWhitelistedGearsets { get; set; } = new();
+    public Dictionary<string, List<JobRouletteGearsetConfig>> JobRouletteWhitelistedGearsetsByCharacter { get; set; } = new();
+    public bool JobRouletteWhitelistedGearsetsMigratedToCharacter { get; set; } = false;
     public DateTime NextScheduledJobSwitch { get; set; } = DateTime.MinValue;
     public TimeSpan JobRouletteInterval { get; set; } = TimeSpan.FromHours(1);
+
+
+    public List<JobRouletteGearsetConfig> GetCurrentCharacterJobRouletteWhitelistedGearsets(CharacterHelper.CharacterIdentity? character)
+    {
+        JobRouletteWhitelistedGearsetsByCharacter ??= new Dictionary<string, List<JobRouletteGearsetConfig>>(StringComparer.OrdinalIgnoreCase);
+
+        if (character is null)
+            return new List<JobRouletteGearsetConfig>();
+
+        var key = GetJobRouletteCharacterKey(character.Value);
+        if (!JobRouletteWhitelistedGearsetsByCharacter.TryGetValue(key, out var whitelist) || whitelist is null)
+        {
+            whitelist = new List<JobRouletteGearsetConfig>();
+            JobRouletteWhitelistedGearsetsByCharacter[key] = whitelist;
+        }
+
+        if (!JobRouletteWhitelistedGearsetsMigratedToCharacter && JobRouletteWhitelistedGearsets.Count > 0)
+        {
+            foreach (var gearset in JobRouletteWhitelistedGearsets)
+            {
+                if (!whitelist.Any(x => JobRouletteGearsetConfigEquals(x, gearset)))
+                    whitelist.Add(CloneJobRouletteGearsetConfig(gearset));
+            }
+
+            JobRouletteWhitelistedGearsets.Clear();
+            JobRouletteWhitelistedGearsetsMigratedToCharacter = true;
+            Save();
+        }
+
+        return whitelist;
+    }
+
+    public string GetJobRouletteCharacterDisplayName(CharacterHelper.CharacterIdentity? character)
+    {
+        if (character is null)
+            return "No character loaded";
+
+        return $"{character.Value.Name}@{character.Value.HomeWorldId}";
+    }
+
+    private static string GetJobRouletteCharacterKey(CharacterHelper.CharacterIdentity character)
+    {
+        return $"{character.Name.Trim()}@{character.HomeWorldId}";
+    }
+
+    private static JobRouletteGearsetConfig CloneJobRouletteGearsetConfig(JobRouletteGearsetConfig gearset)
+    {
+        return new JobRouletteGearsetConfig
+        {
+            GearsetId = gearset.GearsetId,
+            GearsetName = gearset.GearsetName,
+            ClassJobId = gearset.ClassJobId,
+            JobName = gearset.JobName,
+        };
+    }
+
+    private static bool JobRouletteGearsetConfigEquals(JobRouletteGearsetConfig left, JobRouletteGearsetConfig right)
+    {
+        return left.GearsetId == right.GearsetId &&
+               left.ClassJobId == right.ClassJobId &&
+               string.Equals(left.GearsetName ?? string.Empty, right.GearsetName ?? string.Empty, StringComparison.Ordinal);
+    }
 
     [Serializable]
     public sealed class JobRouletteGearsetConfig

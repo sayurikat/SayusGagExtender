@@ -89,7 +89,13 @@ public unsafe sealed class JobManager : IDisposable
     private bool IsRouletteLockActive =>
         RouletteEnabled &&
         RouletteLockEnabled &&
-        plugin.Configuration.JobRouletteWhitelistedGearsets.Count > 0;
+        GetCurrentCharacterRouletteWhitelist().Count > 0;
+
+
+    public List<JobRouletteGearsetConfig> GetCurrentCharacterRouletteWhitelist()
+    {
+        return plugin.Configuration.GetCurrentCharacterJobRouletteWhitelistedGearsets(plugin.CharacterHelper.CurrentCharacter);
+    }
 
     public JobManager(Plugin plugin)
     {
@@ -537,7 +543,7 @@ public unsafe sealed class JobManager : IDisposable
         if (!RouletteEnabled)
             return;
 
-        if (plugin.Configuration.JobRouletteWhitelistedGearsets.Count == 0)
+        if (GetCurrentCharacterRouletteWhitelist().Count == 0)
             return;
 
         var now = DateTime.UtcNow;
@@ -695,7 +701,7 @@ public unsafe sealed class JobManager : IDisposable
 
         var currentJob = GetCurrentClassJob();
 
-        var whitelist = plugin.Configuration.JobRouletteWhitelistedGearsets;
+        var whitelist = GetCurrentCharacterRouletteWhitelist();
 
         var candidates = available
             .Where(x => whitelist.Any(w => WhitelistEntryMatches(w, x)))
@@ -711,23 +717,23 @@ public unsafe sealed class JobManager : IDisposable
 
     private void PruneMissingWhitelistedGearsets(IReadOnlyList<GearsetInfo> existingGearsets)
     {
-        var before = plugin.Configuration.JobRouletteWhitelistedGearsets.Count;
+        var before = GetCurrentCharacterRouletteWhitelist().Count;
 
-        plugin.Configuration.JobRouletteWhitelistedGearsets.RemoveAll(w =>
+        GetCurrentCharacterRouletteWhitelist().RemoveAll(w =>
             !existingGearsets.Any(g => WhitelistEntryMatches(w, g)));
 
-        if (plugin.Configuration.JobRouletteWhitelistedGearsets.Count != before)
+        if (GetCurrentCharacterRouletteWhitelist().Count != before)
             plugin.Configuration.Save();
     }
 
     private void RemoveMissingWhitelistEntry(int gearsetId)
     {
-        var before = plugin.Configuration.JobRouletteWhitelistedGearsets.Count;
+        var before = GetCurrentCharacterRouletteWhitelist().Count;
 
-        plugin.Configuration.JobRouletteWhitelistedGearsets.RemoveAll(x =>
+        GetCurrentCharacterRouletteWhitelist().RemoveAll(x =>
             x.GearsetId == gearsetId);
 
-        if (plugin.Configuration.JobRouletteWhitelistedGearsets.Count != before)
+        if (GetCurrentCharacterRouletteWhitelist().Count != before)
             plugin.Configuration.Save();
     }
 
@@ -1148,7 +1154,7 @@ public unsafe sealed class JobManager : IDisposable
     {
         RegisterRouletteMoodle();
         var config = plugin.Configuration.JobRouletteEffect;
-        var shouldBeActive = RouletteEnabled && plugin.Configuration.JobRouletteWhitelistedGearsets.Count > 0;
+        var shouldBeActive = RouletteEnabled && GetCurrentCharacterRouletteWhitelist().Count > 0;
 
         SetRouletteMoodleRequest(shouldBeActive ? config.MoodleId : Guid.Empty);
         SetRouletteHonorificRequest(shouldBeActive ? config : null);

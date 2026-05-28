@@ -93,7 +93,9 @@ public partial class ConfigWindow
             configuration.Save();
         }
 
-        ImGui.TextDisabled($"Whitelisted gearsets: {configuration.JobRouletteWhitelistedGearsets.Count}");
+        var currentRouletteWhitelist = plugin.JobManager.GetCurrentCharacterRouletteWhitelist();
+        ImGui.TextDisabled($"Current character: {configuration.GetJobRouletteCharacterDisplayName(plugin.CharacterHelper.CurrentCharacter)}");
+        ImGui.TextDisabled($"Whitelisted gearsets: {currentRouletteWhitelist.Count}");
         ImGui.TextDisabled($"Remaining job quota: {plugin.JobManager.GetRemainingQuota()}");
 
 
@@ -181,7 +183,14 @@ public partial class ConfigWindow
     private void DrawRouletteGearsetWhitelist()
     {
         ImGui.Text("Roulette Gearsets");
-        ImGui.TextWrapped("Add gearsets that roulette is allowed to pick. Missing or renamed gearsets are pruned by JobManager when it rolls.");
+        ImGui.TextWrapped("Add gearsets that roulette is allowed to pick for the current character only. Missing or renamed gearsets are pruned by JobManager when it rolls.");
+
+        var whitelist = plugin.JobManager.GetCurrentCharacterRouletteWhitelist();
+        if (plugin.CharacterHelper.CurrentCharacter is null)
+        {
+            ImGui.TextDisabled("No character loaded.");
+            return;
+        }
 
         var allGearsets = plugin.JobManager.GetAllGearsets()
             .OrderBy(x => x.JobName, StringComparer.OrdinalIgnoreCase)
@@ -193,7 +202,7 @@ public partial class ConfigWindow
 
         ImGui.Spacing();
 
-        if (configuration.JobRouletteWhitelistedGearsets.Count == 0)
+        if (whitelist.Count == 0)
         {
             ImGui.TextDisabled("No roulette gearsets selected.");
             return;
@@ -202,7 +211,7 @@ public partial class ConfigWindow
         var ctrlHeld = ImGui.GetIO().KeyCtrl;
         const float rowWidth = 420f;
 
-        var orderedSelected = configuration.JobRouletteWhitelistedGearsets
+        var orderedSelected = whitelist
             .OrderBy(x => x.JobName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.GearsetName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.GearsetId)
@@ -211,7 +220,7 @@ public partial class ConfigWindow
         for (var displayIndex = 0; displayIndex < orderedSelected.Count; displayIndex++)
         {
             var gearset = orderedSelected[displayIndex];
-            var actualIndex = configuration.JobRouletteWhitelistedGearsets.FindIndex(x =>
+            var actualIndex = whitelist.FindIndex(x =>
                 x.GearsetId == gearset.GearsetId &&
                 x.ClassJobId == gearset.ClassJobId &&
                 string.Equals(x.GearsetName ?? string.Empty, gearset.GearsetName ?? string.Empty, StringComparison.Ordinal));
@@ -224,7 +233,7 @@ public partial class ConfigWindow
             var label = GetRouletteGearsetDisplayName(gearset);
             if (DrawRouletteSelectedRow(label, rowWidth, ctrlHeld))
             {
-                configuration.JobRouletteWhitelistedGearsets.RemoveAt(actualIndex);
+                whitelist.RemoveAt(actualIndex);
                 configuration.Save();
                 ImGui.PopID();
                 break;
@@ -236,8 +245,9 @@ public partial class ConfigWindow
 
     private void DrawRouletteAddGearsetCombo(IReadOnlyList<JobManager.GearsetInfo> allGearsets)
     {
+        var whitelist = plugin.JobManager.GetCurrentCharacterRouletteWhitelist();
         var available = allGearsets
-            .Where(x => !configuration.JobRouletteWhitelistedGearsets.Any(w => RouletteGearsetConfigMatches(w, x)))
+            .Where(x => !whitelist.Any(w => RouletteGearsetConfigMatches(w, x)))
             .ToList();
 
         if (available.Count == 0)
@@ -307,7 +317,7 @@ public partial class ConfigWindow
         {
             var gearset = available[rouletteSelectedAddIndex];
 
-            configuration.JobRouletteWhitelistedGearsets.Add(new Configuration.JobRouletteGearsetConfig
+            whitelist.Add(new Configuration.JobRouletteGearsetConfig
             {
                 GearsetId = gearset.GearsetId,
                 GearsetName = gearset.Name,

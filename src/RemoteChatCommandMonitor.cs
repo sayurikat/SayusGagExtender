@@ -161,7 +161,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
     }
     private string BuildRouletteStatus()
     {
-        var whitelistCount = plugin.Configuration.JobRouletteWhitelistedGearsets?.Count ?? 0;
+        var whitelistCount = plugin.JobManager.GetCurrentCharacterRouletteWhitelist().Count;
         var enabled = plugin.Configuration.JobRouletteEnabled;
         var locked = plugin.Configuration.JobRouletteRemoteSet;
 
@@ -867,7 +867,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
         package.WriteBool(plugin.Configuration.JobRouletteRemoteSet);
         package.WriteTimeSpan(plugin.Configuration.JobRouletteInterval);
         package.WriteDateTimeUtc(plugin.Configuration.NextScheduledJobSwitch);
-        package.WriteInt(plugin.Configuration.JobRouletteWhitelistedGearsets?.Count ?? 0);
+        package.WriteInt(plugin.JobManager.GetCurrentCharacterRouletteWhitelist().Count);
 
         package.WriteString(GetRemotePermanentTitleDisplay());
         package.WriteString("extra content to force multi package");

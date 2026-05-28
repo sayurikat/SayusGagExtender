@@ -74,16 +74,17 @@ namespace SayusGagExtender
             if (currentCharacter is null)
             {
                 currentCharacter = character.Value;
+                lastCharacter = currentCharacter;
                 OnCharacterReady?.Invoke(currentCharacter.Value);
                 return;
             }
 
-            if (lastCharacter == null || !lastCharacter.Value.Equals(currentCharacter.Value))
+            if (!character.Value.Equals(currentCharacter.Value))
             {
-                OnCharacterChanged?.Invoke(lastCharacter.Value, currentCharacter.Value);
-                lastCharacter = currentCharacter;
-
-                
+                var previousCharacter = currentCharacter.Value;
+                currentCharacter = character.Value;
+                lastCharacter = previousCharacter;
+                OnCharacterChanged?.Invoke(previousCharacter, currentCharacter.Value);
             }
         }
 
