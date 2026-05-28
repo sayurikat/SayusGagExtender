@@ -678,7 +678,7 @@ public class ControllerWindow : Window, IDisposable
         state.InProgress = true;
         state.Failed = false;
         state.Message = $"Receiving package chunk {part}/{total}...";
-        state.TimeoutUtc = now.AddSeconds(2);
+        state.TimeoutUtc = now.AddSeconds(5);
         state.MessageUntilUtc = state.TimeoutUtc;
         if (commandButtonsDisabledUntilUtc < state.TimeoutUtc) commandButtonsDisabledUntilUtc = state.TimeoutUtc;
     }
