@@ -77,7 +77,10 @@ public sealed class FatigueHandler : IDisposable
         HandleForceStop(tracker);
 
         if (invalid)
+        {
+            DisableForcedWalk();
             return;
+        }
 
         HandleForceWalk(tracker);
         HandleForceSit(tracker);

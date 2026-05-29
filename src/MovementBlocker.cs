@@ -1,3 +1,4 @@
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
 using Dalamud.Utility.Signatures;
@@ -19,7 +20,10 @@ public sealed unsafe class MovementBlocker : IDisposable
     public bool ForceWalkEnabled => forceWalkSources.Count > 0;
     public IReadOnlyCollection<string> ForceWalkSources => forceWalkSources;
     private const float ForceWalkScale = 0.5f;
+    private static readonly TimeSpan WalkToggleCooldown = TimeSpan.FromMilliseconds(500);
 
+    private bool walkToggledByUs;
+    private DateTime nextWalkToggleUtc = DateTime.MinValue;
 
     private static readonly InputId[] BlockedInputs =
     [
@@ -151,6 +155,8 @@ public sealed unsafe class MovementBlocker : IDisposable
 
         if (!wasEnabled && ForceWalkEnabled)
             Plugin.ChatGui.Print("Force Walk Enabled");
+
+        EnsureGameWalkMode();
     }
 
     public void ClearForceWalk(string source)
@@ -163,7 +169,10 @@ public sealed unsafe class MovementBlocker : IDisposable
         forceWalkSources.Remove(source);
 
         if (wasEnabled && !ForceWalkEnabled)
+        {
+            RestoreGameRunMode();
             Plugin.ChatGui.Print("Force Walk Disabled");
+        }
     }
 
     public void ClearAllForceWalks()
@@ -173,9 +182,54 @@ public sealed unsafe class MovementBlocker : IDisposable
         forceWalkSources.Clear();
 
         if (wasEnabled)
+        {
+            RestoreGameRunMode();
             Plugin.ChatGui.Print("Force Walk Disabled");
+        }
     }
 
+    private void EnsureGameWalkMode()
+    {
+        if (!ForceWalkEnabled || Enabled)
+            return;
+
+        if (IsGameWalkModeEnabled())
+            return;
+
+        ToggleGameWalkMode();
+        walkToggledByUs = true;
+    }
+
+    private void RestoreGameRunMode()
+    {
+        if (!walkToggledByUs)
+            return;
+
+        walkToggledByUs = false;
+
+        if (!IsGameWalkModeEnabled())
+            return;
+
+        ToggleGameWalkMode();
+    }
+
+    private bool IsGameWalkModeEnabled()
+    {
+        if (!Enum.TryParse<ConditionFlag>("Walking", out var walkingFlag))
+            return false;
+
+        return Plugin.Condition[walkingFlag];
+    }
+
+    private void ToggleGameWalkMode()
+    {
+        var now = DateTime.UtcNow;
+        if (now < nextWalkToggleUtc)
+            return;
+
+        nextWalkToggleUtc = now + WalkToggleCooldown;
+        plugin.Utils.ExecuteNativeCommand("/walk");
+    }
 
     private void ApplyForceWalk(float* left, float* forward)
     {
