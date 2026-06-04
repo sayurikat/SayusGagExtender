@@ -77,7 +77,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
     {
         if (this.Enabled && this.IsTeleportOrReturn(actionType, actionId))
         {
-            if (this.ShouldBlockTeleportAction(actionType, actionId))
+            if (this.ShouldBlockTeleportAction(actionType, actionId) && plugin.MirrorGagSpeak.IsMasterCharacter())
             {
                 Plugin.ChatGui.Print("Blocked teleport / return action");
                 return false;
@@ -94,7 +94,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
             comboRouteId,
             outOptAreaTargeted);
 
-        if (this.Enabled && result && this.IsTeleportOrReturn(actionType, actionId) && this.teleportCountCooldown < DateTime.UtcNow)
+        if (this.Enabled && result && this.IsTeleportOrReturn(actionType, actionId) && this.teleportCountCooldown < DateTime.UtcNow && plugin.MirrorGagSpeak.IsMasterCharacter())
         {
             // Teleport / Return can be noisy depending on how it is started.
             // Cooldown avoids double-counting the same attempt.

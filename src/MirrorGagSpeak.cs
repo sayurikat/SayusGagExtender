@@ -234,7 +234,7 @@ namespace SayusGagExtender
             plugin.GagSpeakGagsApi.OnGagsChanged -= UpdateSavedGags;
             plugin.CharacterHelper.OnCharacterReady -= OnCharacterReady;
         }
-        private bool IsMasterCharacter()
+        public bool IsMasterCharacter()
         {
             string name = "";
             string world = "";

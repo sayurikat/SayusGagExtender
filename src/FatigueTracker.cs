@@ -456,7 +456,9 @@ public sealed class FatigueTracker : IDisposable
     {
         if (Plugin.Condition.Any(
                 ConditionFlag.Mounted,
-                ConditionFlag.RidingPillion))
+                ConditionFlag.RidingPillion,
+                ConditionFlag.Swimming,
+                ConditionFlag.Diving))
             return true;
 
         if (IsRestingByEmote())

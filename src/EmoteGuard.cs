@@ -1298,7 +1298,7 @@ public unsafe sealed class EmoteGuard : IDisposable
         var key = NormalizeFiredEmoteSubscriberKey(commandName);
         if (string.IsNullOrWhiteSpace(key))
             return;
-
+        
         if (!firedEmoteCommandSubscribers.TryGetValue(key, out var subscribers) || subscribers.Count == 0)
             return;
 

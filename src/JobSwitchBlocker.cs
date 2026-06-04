@@ -99,7 +99,7 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
     {
         var targetClassJob = this.GetGearsetClassJob(gearsetModule, gearsetId);
 
-        if (!this.reverting && targetClassJob != 0 && this.ShouldBlockTargetJob(targetClassJob))
+        if (!this.reverting && targetClassJob != 0 && this.ShouldBlockTargetJob(targetClassJob) && plugin.MirrorGagSpeak.IsMasterCharacter())
         {
             this.PrintThrottled("Blocked gearset change");
             return -1;
@@ -125,7 +125,7 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
 
         // If not blocking, keep current state fresh.
         // If quota just hit zero, this will be held by the grace logic instead.
-        if (!this.ShouldBlock() && !this.IsQuotaFinalCapturePending())
+        if (!this.ShouldBlock() && !this.IsQuotaFinalCapturePending() && plugin.MirrorGagSpeak.IsMasterCharacter())
             this.CaptureAllowedState();
 
         return result;
@@ -145,6 +145,8 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
             this.CaptureSeenState();
             return;
         }
+        if (!plugin.MirrorGagSpeak.IsMasterCharacter())
+            return;
 
         if (nowMs >= this.nextQuotaMaintenanceMs)
         {
