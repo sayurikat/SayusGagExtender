@@ -514,6 +514,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     plugin.Configuration.AutoZapCount = count;
                     plugin.Configuration.AutoZapCountControllerLocked = true;
                     plugin.Configuration.Save();
+                    plugin.RandomZapSender.UpdateHourlyCount();
                     msq = [$"<me> cannot change this or disable the feature unless you unlock the setting with: sge zapcount unlock"];
                     ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Zap, msq, hidden: isHidden, prefix: prefix);
                     return;
@@ -545,6 +546,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     plugin.Configuration.AutoVibeCount = count;
                     plugin.Configuration.AutoVibeCountControllerLocked = true;
                     plugin.Configuration.Save();
+                    plugin.RandomVibeSender.UpdateHourlyCount();
 
                     msq = [$"<me> cannot change this or disable the feature unless you unlock the setting with: sge vibecount unlock"];
                     ReturnStatusUpdate(senderName, senderWorld, RemoteStatusType.Vibe, msq, hidden: isHidden, prefix: prefix);

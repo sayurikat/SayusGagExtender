@@ -1,5 +1,7 @@
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
+using Dalamud.Game.Gui.PartyFinder.Types;
 using Dalamud.Plugin.Services;
 using System;
 using System.Collections.Generic;
@@ -138,6 +140,10 @@ namespace SayusGagExtender
                     : $"Paused (Require {plugin.Configuration.AutoVibeWhen})";
             }
         }
+        public void UpdateHourlyCount()
+        {
+            this.ScheduleCurrentHour();
+        }
         private void CheckIfWearingRestrictiveItems()
         {
             wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(
@@ -157,6 +163,8 @@ namespace SayusGagExtender
                 ClearAutoVibeMoodles();
                 return;
             }
+            if (!plugin.CharacterHelper.IsCharacterAvailable || plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks()) return;
+
 
             var now = DateTime.UtcNow;
 
@@ -208,7 +216,7 @@ namespace SayusGagExtender
 
             this.nextTriggerIndex++;
         }
-
+        
         private void ScheduleCurrentHour()
         {
             var now = DateTime.UtcNow;

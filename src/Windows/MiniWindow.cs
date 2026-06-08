@@ -53,6 +53,11 @@ public class MiniWindow : Window, IDisposable
     private void DrawRuntimeStatus()
     {
         ImGui.Text("Current Status");
+        ImGui.Text("IsLoggedIn: " + plugin.CharacterHelper.IsLoggedIn.ToString());
+        ImGui.Text("IsCharacterAvailable: " + plugin.CharacterHelper.IsCharacterAvailable.ToString());
+        ImGui.Text("IsConfined: " + plugin.GagSpeakConfinementApi.IsConfined().ToString());
+        ImGui.Text("ShouldTemporarilyReleaseMovementLocks: " + plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks().ToString());
+        ImGui.Text("MovementBlocker.Enabled: " + plugin.MovementBlocker.Enabled.ToString());
         ImGui.SameLine();
         ImGui.TextDisabled(ConfigWindow.GetFatigueStatusLabel(plugin.FatigueTracker.CurrentFatigueStatus));
 

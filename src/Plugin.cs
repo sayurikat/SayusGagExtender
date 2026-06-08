@@ -47,6 +47,7 @@ public sealed class Plugin : IDalamudPlugin
     public API.GagSpeak.GagSpeakGagsApi GagSpeakGagsApi { get; private set; }
     public API.GagSpeak.GagSpeakPuppeteerAliasesApi GagSpeakPuppeteerAliasesApi { get; private set; }
     public API.GagSpeak.GagSpeakGarblerBypassApi GagSpeakGarblerBypassApi { get; private set; }
+    public API.GagSpeak.GagSpeakConfinementApi GagSpeakConfinementApi { get; private set; }
     public API.HonorificApi HonorificApi { get; private set; }
     public API.CammyApi CammyApi { get; private set; }
     public XivMessengerApi XivMessengerApi { get; private set; }
@@ -147,6 +148,7 @@ public sealed class Plugin : IDalamudPlugin
         this.GagSpeakGagsApi = new GagSpeakGagsApi(this, GagSpeakContext);
         this.GagSpeakPuppeteerAliasesApi = new GagSpeakPuppeteerAliasesApi(this, GagSpeakContext);
         this.GagSpeakGarblerBypassApi = new GagSpeakGarblerBypassApi(this, GagSpeakContext);
+        this.GagSpeakConfinementApi = new GagSpeakConfinementApi(this);
         this.Chat2Api = new API.Chat2Api(this);
         this.HonorificApi = new API.HonorificApi(this);
         this.CammyApi = new API.CammyApi(this);
@@ -249,6 +251,7 @@ public sealed class Plugin : IDalamudPlugin
         GagSpeakGagsApi?.Dispose();
         GagSpeakPuppeteerAliasesApi?.Dispose();
         GagSpeakGarblerBypassApi?.Dispose();
+        GagSpeakConfinementApi?.Dispose();
         MoodlesApi?.Dispose();
         PenumbraApi?.Dispose();
         CustomizePlusApi.Dispose();

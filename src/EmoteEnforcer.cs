@@ -100,7 +100,7 @@ namespace SayusGagExtender
                 return;
             }
 
-            if (plugin.Configuration.EmoteEnforcerEmotes.Count == 0)
+            if (plugin.Configuration.EmoteEnforcerEmotes.Count == 0 || !plugin.CharacterHelper.IsCharacterAvailable || plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks())
             {
                 CancelCurrentEnforcedEmoteOnce();
                 return;
@@ -151,22 +151,34 @@ namespace SayusGagExtender
                     return;
             }
 
-            if (IsActive != RequestedBlockState)
-            {
-                if (IsActive)
-                {
-                    plugin.MovementBlocker.RequestBlock(nameof(EmoteEnforcer));
-                    plugin.ActionBlocker.RequestBlock(nameof(EmoteEnforcer));
-                }
-                else
-                {
-                    plugin.MovementBlocker.ClearBlock(nameof(EmoteEnforcer));
-                    plugin.ActionBlocker.ClearBlock(nameof(EmoteEnforcer));
-                }
-            }
-            
+            SetEnforcerBlocks(IsActive);
 
             EnsureCurrentEmote(wantedEmoteConfig);
+        }
+
+
+        private void SetEnforcerBlocks(bool enabled)
+        {
+
+            if (enabled == RequestedBlockState)
+                return;
+
+            RequestedBlockState = enabled;
+
+            if (enabled)
+            {
+                plugin.MovementBlocker.RequestBlock(nameof(EmoteEnforcer));
+                plugin.ActionBlocker.RequestBlock(nameof(EmoteEnforcer));
+            }
+            else
+            {
+                plugin.MovementBlocker.ClearBlock(nameof(EmoteEnforcer));
+                plugin.ActionBlocker.ClearBlock(nameof(EmoteEnforcer));
+            }
+            
+            
+
+            //EnsureCurrentEmote(wantedEmoteConfig);
         }
 
         private EmoteEnforcerActiveState GetActiveState()
@@ -246,6 +258,7 @@ namespace SayusGagExtender
             var emoteId = emoteConfig.EmoteId;
             var currentEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
 
+            //Plugin.ChatGui.Print($"emoteId {emoteId} currentEmoteId {currentEmoteId}");
             if (currentEmoteId == emoteId)
             {
                 currentEnforcedEmoteId = emoteId;
@@ -267,9 +280,7 @@ namespace SayusGagExtender
 
         private void CancelCurrentEnforcedEmoteOnce()
         {
-            plugin.MovementBlocker.ClearBlock(nameof(EmoteEnforcer));
-            plugin.ActionBlocker.ClearBlock(nameof(EmoteEnforcer));
-            RequestedBlockState = false;
+            SetEnforcerBlocks(false);
 
             if (!currentEnforcedEmoteId.HasValue)
                 return;

@@ -1,3 +1,4 @@
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using System;
 using System.Xml.Linq;
@@ -27,6 +28,8 @@ namespace SayusGagExtender
         public event Action<CharacterIdentity, CharacterIdentity>? OnCharacterChanged;
         public event Action<CharacterIdentity?>? OnLogout;
 
+        public bool IsCharacterAvailable = false;
+
         public readonly record struct CharacterIdentity(
             string Name,
             uint HomeWorldId
@@ -45,7 +48,10 @@ namespace SayusGagExtender
                 return;
 
             nextCheckUtc = now + checkCooldown;
-            
+
+
+            CheckIsAvailable();
+
             var isLoggedIn = Plugin.ClientState.IsLoggedIn;
 
             if (!isLoggedIn)
@@ -91,6 +97,37 @@ namespace SayusGagExtender
         public void Dispose()
         {
             Plugin.Framework.Update -= OnFrameworkUpdate;
+        }
+
+        private DateTime isAvailableAt = DateTime.UtcNow;
+        private TimeSpan isAvailableDelay = TimeSpan.FromSeconds(30);
+        private bool IsAvailable()
+        {
+            if (!Plugin.ClientState.IsLoggedIn)
+            //if (!Plugin.ClientState.IsLoggedIn
+            //    || Plugin.Condition.Any(
+            //    ConditionFlag.Occupied,
+            //    ConditionFlag.BeingMoved,
+            //    ConditionFlag.BetweenAreas,
+            //    ConditionFlag.Crafting,
+            //    ConditionFlag.Fishing,
+            //    ConditionFlag.Gathering,
+            //    ConditionFlag.LoggingOut,
+            //    ConditionFlag.WatchingCutscene
+            //    ))
+            {
+                isAvailableAt = DateTime.UtcNow + isAvailableDelay;
+                return false;
+            }
+
+            if (isAvailableAt < DateTime.UtcNow)
+                return true;
+
+            return false;
+        }
+        private void CheckIsAvailable()
+        {
+            IsCharacterAvailable = IsAvailable();
         }
 
         private CharacterIdentity? TryGetCurrentCharacter()

@@ -45,6 +45,7 @@ namespace SayusGagExtender.Windows
                 {
                     configuration.AutoVibeCount = newVibeCount;
                     configuration.Save();
+                    plugin.RandomVibeSender.UpdateHourlyCount();
                 }
             }
             if (configuration.AutoVibeCountControllerLocked)

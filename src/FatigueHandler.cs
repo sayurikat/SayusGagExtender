@@ -62,7 +62,7 @@ public sealed class FatigueHandler : IDisposable
         }
 
         var tracker = plugin.FatigueTracker;
-        if (tracker == null)
+        if (tracker == null || !plugin.CharacterHelper.IsCharacterAvailable || plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks())
         {
             ResetAll();
             return;

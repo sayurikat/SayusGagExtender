@@ -216,8 +216,18 @@ public unsafe sealed class EmoteGuard : IDisposable
 
     private void OnFrameworkUpdateInner()
     {
+        //return;
         var now = DateTime.UtcNow;
         IsActive = true;
+
+        if (plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks() || !plugin.CharacterHelper.IsCharacterAvailable)
+        {
+            queuedSequence.Clear();
+            ResetQueueState();
+            //return;
+        }
+
+        if (!plugin.CharacterHelper.IsCharacterAvailable) return;
 
         UpdateCombatActionBlock(now);
 
@@ -468,6 +478,11 @@ public unsafe sealed class EmoteGuard : IDisposable
     private void HandleQueuedEmoteBlocked(string reason, bool canAutoDismount, DateTime now)
     {
         suppressedStopDetector.Reset();
+
+        if (!plugin.CharacterHelper.IsCharacterAvailable || plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks())
+        {
+            return;
+        }
 
         if (canAutoDismount && now >= nextDismountAttemptAt)
         {

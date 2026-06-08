@@ -48,6 +48,7 @@ namespace SayusGagExtender.Windows
                 {
                     configuration.AutoZapCount = newZapCount;
                     configuration.Save();
+                    plugin.RandomZapSender.UpdateHourlyCount();
                 }
             }
             if (configuration.AutoZapCountControllerLocked)

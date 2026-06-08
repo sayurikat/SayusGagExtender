@@ -78,15 +78,21 @@ public sealed class FatigueTracker : IDisposable
 
     public bool ShouldForceWalk =>
         plugin.Configuration.FatigueEnabled &&
-        GetLatchedThresholdState(ref shouldForceWalkLatched, ForcedWalkThreshold);
+        GetLatchedThresholdState(ref shouldForceWalkLatched, ForcedWalkThreshold) &&
+        plugin.CharacterHelper.IsCharacterAvailable;
 
     public bool ShouldForceStop =>
         plugin.Configuration.FatigueEnabled &&
-        GetLatchedThresholdState(ref shouldForceStopLatched, ForcedStopThreshold);
+        GetLatchedThresholdState(ref shouldForceStopLatched, ForcedStopThreshold) &&
+        !plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks() &&
+        plugin.CharacterHelper.IsCharacterAvailable;
 
     public bool ShouldForceSit =>
         plugin.Configuration.FatigueEnabled &&
-        GetLatchedThresholdState(ref shouldForceSitLatched, ForcedSitThreshold);
+        GetLatchedThresholdState(ref shouldForceSitLatched, ForcedSitThreshold) &&
+        !plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks() &&
+        plugin.CharacterHelper.IsCharacterAvailable &&
+        !plugin.EmoteEnforcer.IsActive;
 
     public bool IsActive => plugin.Configuration.FatigueEnabled && Fatigue > 0.001f;
 

@@ -362,6 +362,9 @@ public unsafe sealed class JobSwitchBlocker : IDisposable
         if (!this.IsQuotaEnabled())
             return;
 
+        if (!plugin.MirrorGagSpeak.IsMasterCharacter())
+            return;
+
         // If quota is already empty, this is not a spend.
         // Do NOT schedule another final capture.
         var remainingBefore = this.GetRemainingQuota();

@@ -139,6 +139,10 @@ namespace SayusGagExtender
                     : $"Paused (Require {plugin.Configuration.AutoZapWhen})";
             }
         }
+        public void UpdateHourlyCount()
+        {
+            this.ScheduleCurrentHour();
+        }
         private void CheckIfWearingRestrictiveItems()
         {
             wearsRestrictedItems = plugin.GagSpeakRestrictionsApi.IsAnyListedRestrictionsActive(
@@ -158,6 +162,7 @@ namespace SayusGagExtender
                 ClearAutoZapMoodles();
                 return;
             }
+            if (!plugin.CharacterHelper.IsCharacterAvailable || plugin.GagSpeakConfinementApi.ShouldTemporarilyReleaseMovementLocks()) return;
 
             var now = DateTime.UtcNow;
 
