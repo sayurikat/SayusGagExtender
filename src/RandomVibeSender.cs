@@ -52,6 +52,7 @@ namespace SayusGagExtender
         public class WeightedVibeCommand
         {
             public string Command { get; set; } = "";
+            public string EmoteEnforceAlternative { get; set; } = "";
             public int Weight { get; set; } = 1;
 
             public string HonorificTitle { get; set; } = "";
@@ -372,7 +373,8 @@ namespace SayusGagExtender
 
         private void TrySendRandomVibeCommand(ControllerPresence presence)
         {
-            if (plugin.EmoteEnforcer.ShouldBlockUserEmotes)
+            var useEmoteEnforceAlternative = plugin.EmoteEnforcer.IsActive;
+            if (plugin.EmoteEnforcer.ShouldBlockUserEmotes && !useEmoteEnforceAlternative)
                 return;
 
             var interruptedEmoteId = plugin.EmoteApi.GetCurrentLocalPlayerEmoteId();
@@ -393,7 +395,7 @@ namespace SayusGagExtender
                 
 
                 var vibeCommands = plugin.Configuration.AutoVibeCommands
-                    .Where(x => !string.IsNullOrWhiteSpace(x.Command) && x.Weight > 0)
+                    .Where(x => x.Weight > 0 && !string.IsNullOrWhiteSpace(useEmoteEnforceAlternative ? x.EmoteEnforceAlternative : x.Command))
                     .ToList();
 
                 
@@ -415,7 +417,8 @@ namespace SayusGagExtender
 
                     if (roll < currentWeight)
                     {
-                        plugin.EmoteGuard.QueueGuardedEmote(vibeCommand.Command + " " + returnToEmote);
+                        var commandToSend = useEmoteEnforceAlternative ? vibeCommand.EmoteEnforceAlternative : vibeCommand.Command;
+                        plugin.EmoteGuard.QueueGuardedEmote(commandToSend + " " + returnToEmote);
                         return;
                     }
                 }
@@ -539,7 +542,7 @@ namespace SayusGagExtender
 
             foreach (var vibeCommand in plugin.Configuration.AutoVibeCommands)
             {
-                if (string.IsNullOrWhiteSpace(vibeCommand.HonorificTriggerCommand))
+                if (string.IsNullOrWhiteSpace(vibeCommand.HonorificTriggerCommand) && string.IsNullOrWhiteSpace(vibeCommand.EmoteEnforceAlternative))
                     continue;
 
                 if (string.IsNullOrWhiteSpace(vibeCommand.HonorificTitle))
@@ -550,11 +553,17 @@ namespace SayusGagExtender
 
                 var capturedCommand = vibeCommand;
 
-                var subscription = plugin.EmoteGuard.SubscribeToFiredEmoteCommand(
-                    capturedCommand.HonorificTriggerCommand,
-                    _ => ApplyHonorificTitleForCommand(capturedCommand));
+                if (!string.IsNullOrWhiteSpace(capturedCommand.HonorificTriggerCommand))
+                {
+                    var subscription = plugin.EmoteGuard.SubscribeToFiredEmoteCommand(capturedCommand.HonorificTriggerCommand, _ => ApplyHonorificTitleForCommand(capturedCommand));
+                    honorificEmoteSubscriptions.Add(subscription);
+                }
 
-                honorificEmoteSubscriptions.Add(subscription);
+                if (!string.IsNullOrWhiteSpace(capturedCommand.EmoteEnforceAlternative) && (string.IsNullOrWhiteSpace(capturedCommand.HonorificTriggerCommand) || !string.Equals(capturedCommand.EmoteEnforceAlternative.Trim(), capturedCommand.HonorificTriggerCommand.Trim(), StringComparison.OrdinalIgnoreCase)))
+                {
+                    var alternativeSubscription = plugin.EmoteGuard.SubscribeToFiredEmoteCommand(capturedCommand.EmoteEnforceAlternative, _ => ApplyHonorificTitleForCommand(capturedCommand));
+                    honorificEmoteSubscriptions.Add(alternativeSubscription);
+                }
             }
         }
 

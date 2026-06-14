@@ -449,13 +449,24 @@ namespace SayusGagExtender.Windows
                     ImGui.PushID($"VibeCommand{i}");
 
                     var command = vibeCommand.Command;
+                    var emoteEnforceAlternative = vibeCommand.EmoteEnforceAlternative;
                     var weight = vibeCommand.Weight.ToString();
 
-                    ImGui.SetNextItemWidth(330);
+                    ImGui.SetNextItemWidth(260);
                     if (ImGui.InputText("##Command", ref command, 512))
                     {
                         vibeCommand.Command = command;
                         configuration.Save();
+                    }
+
+                    ImGui.SameLine();
+
+                    ImGui.SetNextItemWidth(220);
+                    if (ImGui.InputTextWithHint("##EmoteEnforceAlternative", "EmoteEnforceAlternative", ref emoteEnforceAlternative, 512))
+                    {
+                        vibeCommand.EmoteEnforceAlternative = emoteEnforceAlternative;
+                        configuration.Save();
+                        plugin.RandomVibeSender.RefreshHonorificEmoteSubscriptions();
                     }
 
                     ImGui.SameLine();

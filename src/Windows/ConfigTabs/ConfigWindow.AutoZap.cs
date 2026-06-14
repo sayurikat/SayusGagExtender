@@ -446,13 +446,24 @@ namespace SayusGagExtender.Windows
                     ImGui.PushID($"ZapCommand{i}");
 
                     var command = zapCommand.Command;
+                    var emoteEnforceAlternative = zapCommand.EmoteEnforceAlternative;
                     var weight = zapCommand.Weight.ToString();
 
-                    ImGui.SetNextItemWidth(330);
+                    ImGui.SetNextItemWidth(260);
                     if (ImGui.InputText("##Command", ref command, 512))
                     {
                         zapCommand.Command = command;
                         configuration.Save();
+                    }
+
+                    ImGui.SameLine();
+
+                    ImGui.SetNextItemWidth(220);
+                    if (ImGui.InputTextWithHint("##EmoteEnforceAlternative", "EmoteEnforceAlternative", ref emoteEnforceAlternative, 512))
+                    {
+                        zapCommand.EmoteEnforceAlternative = emoteEnforceAlternative;
+                        configuration.Save();
+                        plugin.RandomZapSender.RefreshHonorificEmoteSubscriptions();
                     }
 
                     ImGui.SameLine();
