@@ -183,7 +183,7 @@ namespace SayusGagExtender
             }
 
             var presence = GetControllerPresence();
-            var shouldOperate = ShouldOperateForPresence(presence);
+            var shouldOperate = ShouldOperateForPresence(presence) && (plugin.Configuration.AutoVibeCount > 0);
 
             UpdateAutoVibeMoodles(presence, shouldOperate);
 

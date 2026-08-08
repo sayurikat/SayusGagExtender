@@ -125,7 +125,7 @@ public class Configuration : IPluginConfiguration
     // 0.05 = 5 percentage points.
     // A force state turns on at its threshold, then only releases once fatigue
     // drops below threshold - this tolerance.
-    public float FatigueReleaseTolerance { get; set; } = 0.05f;
+    public float FatigueReleaseTolerance { get; set; } = 0.10f;
     public bool FatigueSitOnceOnStop { get; set; } = false;
 
     // Restriction list with stackable factors.

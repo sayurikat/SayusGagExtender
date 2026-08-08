@@ -372,7 +372,7 @@ public partial class ConfigWindow
             configuration.FatigueForcedWalkPercent = 60;
             configuration.FatigueForcedStopPercent = 80;
             configuration.FatigueForcedSitPercent = 90;
-            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueReleaseTolerance = 0.10f;
             configuration.FatigueBaseRunStepsUntilForcedWalk = 600;
             configuration.FatigueUnrestrictedFactor = 1;
             configuration.FatigueWalkRateMultiplier = 0.25f;
@@ -387,7 +387,7 @@ public partial class ConfigWindow
             configuration.FatigueForcedWalkPercent = 60;
             configuration.FatigueForcedStopPercent = 80;
             configuration.FatigueForcedSitPercent = 90;
-            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueReleaseTolerance = 0.10f;
             configuration.FatigueBaseRunStepsUntilForcedWalk = 2500;
             configuration.FatigueUnrestrictedFactor = 1;
             configuration.FatigueWalkRateMultiplier = 0.25f;
@@ -402,7 +402,7 @@ public partial class ConfigWindow
             configuration.FatigueForcedWalkPercent = 60;
             configuration.FatigueForcedStopPercent = 80;
             configuration.FatigueForcedSitPercent = 90;
-            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueReleaseTolerance = 0.10f;
             configuration.FatigueBaseRunStepsUntilForcedWalk = 4500;
             configuration.FatigueUnrestrictedFactor = 1;
             configuration.FatigueWalkRateMultiplier = 0.37f;
@@ -417,7 +417,7 @@ public partial class ConfigWindow
             configuration.FatigueForcedWalkPercent = 60;
             configuration.FatigueForcedStopPercent = 80;
             configuration.FatigueForcedSitPercent = 90;
-            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueReleaseTolerance = 0.10f;
             configuration.FatigueBaseRunStepsUntilForcedWalk = 1800;
             configuration.FatigueUnrestrictedFactor = 1;
             configuration.FatigueWalkRateMultiplier = 0.25f;
@@ -432,7 +432,7 @@ public partial class ConfigWindow
             configuration.FatigueForcedWalkPercent = 60;
             configuration.FatigueForcedStopPercent = 80;
             configuration.FatigueForcedSitPercent = 90;
-            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueReleaseTolerance = 0.10f;
             configuration.FatigueBaseRunStepsUntilForcedWalk = 600;
             configuration.FatigueUnrestrictedFactor = 1;
             configuration.FatigueWalkRateMultiplier = 0.25f;
@@ -447,7 +447,7 @@ public partial class ConfigWindow
             configuration.FatigueForcedWalkPercent = 60;
             configuration.FatigueForcedStopPercent = 80;
             configuration.FatigueForcedSitPercent = 90;
-            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueReleaseTolerance = 0.10f;
             configuration.FatigueBaseRunStepsUntilForcedWalk = 1000;
             configuration.FatigueUnrestrictedFactor = 1;
             configuration.FatigueWalkRateMultiplier = 0.28f;
@@ -462,7 +462,7 @@ public partial class ConfigWindow
             configuration.FatigueForcedWalkPercent = 60;
             configuration.FatigueForcedStopPercent = 80;
             configuration.FatigueForcedSitPercent = 90;
-            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueReleaseTolerance = 0.10f;
             configuration.FatigueBaseRunStepsUntilForcedWalk = 350;
             configuration.FatigueUnrestrictedFactor = 1;
             configuration.FatigueWalkRateMultiplier = 0.23f;
@@ -477,7 +477,7 @@ public partial class ConfigWindow
             configuration.FatigueForcedWalkPercent = 60;
             configuration.FatigueForcedStopPercent = 80;
             configuration.FatigueForcedSitPercent = 90;
-            configuration.FatigueReleaseTolerance = 0.05f;
+            configuration.FatigueReleaseTolerance = 0.10f;
             configuration.FatigueBaseRunStepsUntilForcedWalk = 150;
             configuration.FatigueUnrestrictedFactor = 1;
             configuration.FatigueWalkRateMultiplier = 0.20f;

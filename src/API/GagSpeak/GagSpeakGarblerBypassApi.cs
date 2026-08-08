@@ -55,6 +55,7 @@ namespace SayusGagExtender.API.GagSpeak
 
                 pauseUntilUtc = DateTime.UtcNow + PauseDuration;
                 SetBoolMember(globals, "ChatGarblerActive", false);
+                Plugin.Log.Debug("GagSpeak chat garbler paused.");
             }
             catch (Exception ex)
             {
@@ -79,7 +80,10 @@ namespace SayusGagExtender.API.GagSpeak
             {
                 var globals = GetClientGlobals();
                 if (globals != null)
+                {
                     SetBoolMember(globals, "ChatGarblerActive", originalChatGarblerActive);
+                    Plugin.Log.Debug($"GagSpeak chat garbler restored to {originalChatGarblerActive}.");
+                }
             }
             catch (Exception ex)
             {

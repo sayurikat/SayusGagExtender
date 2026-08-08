@@ -473,7 +473,7 @@ public sealed class FatigueTracker : IDisposable
         if (Plugin.Condition.Any(
                 ConditionFlag.Performing,
                 ConditionFlag.Crafting,
-                ConditionFlag.Gathering,
+                //ConditionFlag.Gathering,
                 ConditionFlag.Fishing))
             return true;
 
@@ -699,12 +699,12 @@ public sealed class FatigueTracker : IDisposable
 
     private static float Clamp01(float value)
     {
-        return Math.Clamp(value, 0.0f, 1.0f);
+        return Math.Clamp(value, 0.0f, 2.0f);
     }
 
     private static float ClampPercent(float value)
     {
-        return Math.Clamp(value, 0.0f, 100.0f);
+        return Math.Clamp(value, 0.0f, 200.0f);
     }
 
     private float GetReleaseThreshold(float threshold)

@@ -181,7 +181,7 @@ namespace SayusGagExtender
             }
 
             var presence = GetControllerPresence();
-            var shouldOperate = ShouldOperateForPresence(presence);
+            var shouldOperate = ShouldOperateForPresence(presence) && (plugin.Configuration.AutoZapCount > 0);
 
             UpdateAutoZapMoodles(presence, shouldOperate);
 
