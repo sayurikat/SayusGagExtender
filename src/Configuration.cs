@@ -1,5 +1,6 @@
 using Dalamud.Configuration;
 using Dalamud.Game.Text;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +17,16 @@ namespace SayusGagExtender;
 public class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 0;
+
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public Dictionary<string, Configuration> CharacterProfiles { get; set; }
+    public bool CharacterProfilesMigrated { get; set; } = false;
+
+    [JsonIgnore]
+    internal bool IsCharacterProfile { get; set; } = false;
+
+    public bool ShouldSerializeCharacterProfiles() => !IsCharacterProfile;
+    public bool ShouldSerializeCharacterProfilesMigrated() => !IsCharacterProfile;
 
     public bool OpenMainWindowOnStartup { get; set; } = false;
     public bool OpenConfigWindowOnStartup { get; set; } = false;
@@ -315,6 +326,14 @@ public class Configuration : IPluginConfiguration
     public bool GagSpeakEnforcedRestraintCloner { get; set; }
     public string GagSpeakMasterName { get; set; }
     public string GagSpeakMasterWorld { get; set; }
+
+    public bool ShouldSerializeActiveRestraintSet() => !IsCharacterProfile;
+    public bool ShouldSerializeActiveRestrictions() => !IsCharacterProfile;
+    public bool ShouldSerializeActiveGags() => !IsCharacterProfile;
+    public bool ShouldSerializeGagSpeakRestraintCloner() => !IsCharacterProfile;
+    public bool ShouldSerializeGagSpeakEnforcedRestraintCloner() => !IsCharacterProfile;
+    public bool ShouldSerializeGagSpeakMasterName() => !IsCharacterProfile;
+    public bool ShouldSerializeGagSpeakMasterWorld() => !IsCharacterProfile;
     public Dictionary<Guid, string> HandGuardBlockedItems { get; set; } = new Dictionary<Guid, string>();
     public bool MoodleEnforcerEnabled { get; set; } = false;
     public List<MoodleEnforcerMoodleConfig> MoodleEnforcerMoodles { get; set; } = new();
@@ -429,6 +448,6 @@ public class Configuration : IPluginConfiguration
 
     public void Save()
     {
-        Plugin.PluginInterface.SavePluginConfig(this);
+        Plugin.Instance?.SaveConfiguration(this);
     }
 }

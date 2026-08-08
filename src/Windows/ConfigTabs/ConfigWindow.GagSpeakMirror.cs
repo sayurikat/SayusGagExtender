@@ -9,38 +9,42 @@ namespace SayusGagExtender.Windows
     {
         private void DrawGagSpeakMirrorTab()
         {
-            var restraintCloner = configuration.GagSpeakRestraintCloner;
-            if (ImGui.Checkbox("Mirror restriants to alt characters", ref restraintCloner))
+            var mirrorConfiguration = plugin.GlobalConfiguration;
+            ImGui.TextWrapped("Only the saved GagSpeak restraint set, restrictions, and gags are shared. All other settings and quotas use the current character profile.");
+            ImGui.Spacing();
+
+            var restraintCloner = mirrorConfiguration.GagSpeakRestraintCloner;
+            if (ImGui.Checkbox("Mirror restraints to alt characters", ref restraintCloner))
             {
-                configuration.GagSpeakRestraintCloner = restraintCloner;
-                configuration.Save();
+                mirrorConfiguration.GagSpeakRestraintCloner = restraintCloner;
+                mirrorConfiguration.Save();
             }
 
             ImGui.Spacing();
 
-            var enforced = configuration.GagSpeakEnforcedRestraintCloner;
+            var enforced = mirrorConfiguration.GagSpeakEnforcedRestraintCloner;
             if (ImGui.Checkbox("Locked mirroring (Prevents from changing restraints on alt characters)", ref enforced))
             {
-                configuration.GagSpeakEnforcedRestraintCloner = enforced;
-                configuration.Save();
+                mirrorConfiguration.GagSpeakEnforcedRestraintCloner = enforced;
+                mirrorConfiguration.Save();
             }
 
             ImGui.Spacing();
 
             ImGui.SetNextItemWidth(160);
-            var gagSpeakMasterName = configuration.GagSpeakMasterName;
+            var gagSpeakMasterName = mirrorConfiguration.GagSpeakMasterName;
             if (ImGui.InputText("GagSpeak Main Char Name", ref gagSpeakMasterName))
             {
-                configuration.GagSpeakMasterName = gagSpeakMasterName;
-                configuration.Save();
+                mirrorConfiguration.GagSpeakMasterName = gagSpeakMasterName;
+                mirrorConfiguration.Save();
             }
 
             ImGui.SetNextItemWidth(160);
-            var gagSpeakMasterWorld = configuration.GagSpeakMasterWorld;
+            var gagSpeakMasterWorld = mirrorConfiguration.GagSpeakMasterWorld;
             if (ImGui.InputText("GagSpeak Main Char World", ref gagSpeakMasterWorld))
             {
-                configuration.GagSpeakMasterWorld = gagSpeakMasterWorld;
-                configuration.Save();
+                mirrorConfiguration.GagSpeakMasterWorld = gagSpeakMasterWorld;
+                mirrorConfiguration.Save();
             }
 
             var name = Plugin.ObjectTable.LocalPlayer?.Name.ToString() ?? "";
@@ -49,9 +53,9 @@ namespace SayusGagExtender.Windows
 
             if (ImGui.Button($"Use {name}@{world}"))
             {
-                configuration.GagSpeakMasterName = name;
-                configuration.GagSpeakMasterWorld = world;
-                configuration.Save();
+                mirrorConfiguration.GagSpeakMasterName = name;
+                mirrorConfiguration.GagSpeakMasterWorld = world;
+                mirrorConfiguration.Save();
             }
 
             ImGui.Spacing();

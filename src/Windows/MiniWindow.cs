@@ -15,7 +15,7 @@ namespace SayusGagExtender.Windows;
 public class MiniWindow : Window, IDisposable
 {
     private readonly Plugin plugin;
-    private readonly Configuration configuration;
+    private Configuration configuration => plugin.Configuration;
     private readonly string iconPath;
 
     public MiniWindow(Plugin plugin)
@@ -29,7 +29,6 @@ public class MiniWindow : Window, IDisposable
         };
 
         this.plugin = plugin;
-        configuration = plugin.Configuration;
         this.iconPath = Path.Combine(Plugin.PluginInterface.AssemblyLocation.Directory?.FullName!, "icon_512.png");
     }
 

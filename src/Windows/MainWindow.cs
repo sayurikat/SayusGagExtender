@@ -15,7 +15,7 @@ namespace SayusGagExtender.Windows;
 public class MainWindow : Window, IDisposable
 {
     private readonly Plugin plugin;
-    private readonly Configuration configuration;
+    private Configuration configuration => plugin.Configuration;
     private readonly string iconPath;
 
     public MainWindow(Plugin plugin)
@@ -29,7 +29,6 @@ public class MainWindow : Window, IDisposable
         };
 
         this.plugin = plugin;
-        configuration = plugin.Configuration;
         this.iconPath = Path.Combine(Plugin.PluginInterface.AssemblyLocation.Directory?.FullName!, "icon_512.png");
     }
 
@@ -137,7 +136,7 @@ public class MainWindow : Window, IDisposable
             DrawFeaturesRow("Auto Vibe", configuration.AutoVibeEnabled, plugin.RandomVibeSender.IsActive);
             DrawFeaturesRow("Chat2 Blindfold Feature", configuration.Chat2BlindfoldFeatureEnable, plugin.BlindfoldMonitor.IsActive);
             DrawFeaturesRow("XIVMessenger Feature", configuration.XivMessengerManagerEnabled, plugin.XIVMessengerManager.IsActive);
-            DrawFeaturesRow("GagSpeak Mirror", configuration.GagSpeakRestraintCloner, plugin.MirrorGagSpeak.IsActive);
+            DrawFeaturesRow("GagSpeak Mirror", plugin.GlobalConfiguration.GagSpeakRestraintCloner, plugin.MirrorGagSpeak.IsActive);
         }
     }
 

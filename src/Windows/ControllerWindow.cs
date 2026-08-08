@@ -13,7 +13,7 @@ namespace SayusGagExtender.Windows;
 public class ControllerWindow : Window, IDisposable
 {
     private readonly Plugin plugin;
-    private readonly Configuration configuration;
+    private Configuration configuration => plugin.Configuration;
     private int selectedUserIndex = -1;
     private string newUserName = string.Empty;
     private string newUserWorld = string.Empty;
@@ -89,7 +89,6 @@ public class ControllerWindow : Window, IDisposable
         SizeCondition = ImGuiCond.FirstUseEver;
         SizeConstraints = new WindowSizeConstraints { MinimumSize = new Vector2(560, 320), MaximumSize = new Vector2(float.MaxValue, float.MaxValue) };
         this.plugin = plugin;
-        configuration = plugin.Configuration;
     }
 
     public void Dispose()
@@ -98,6 +97,9 @@ public class ControllerWindow : Window, IDisposable
 
     public override void Draw()
     {
+        if (selectedUserIndex >= configuration.ControllerUsers.Count)
+            selectedUserIndex = -1;
+
         DrawHeader();
         ImGui.Separator();
         ImGui.Spacing();

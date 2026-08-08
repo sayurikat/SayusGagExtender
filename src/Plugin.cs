@@ -52,6 +52,7 @@ public sealed class Plugin : IDalamudPlugin
     public API.CammyApi CammyApi { get; private set; }
     public XivMessengerApi XivMessengerApi { get; private set; }
     public CharacterHelper CharacterHelper { get; set; }
+    public CharacterProfileManager CharacterProfiles { get; private set; }
     public EmoteGuard EmoteGuard { get; set; }
     public AutoAttackKiller AutoAttackKiller { get; set; }
     public WeaponSheather WeaponSheather { get; set; }
@@ -83,7 +84,9 @@ public sealed class Plugin : IDalamudPlugin
 
 
     private const string CommandName = "/sge";
-    public Configuration Configuration { get; init; }
+    public Configuration Configuration { get; private set; }
+    public Configuration GlobalConfiguration { get; init; }
+    private bool startupWindowsInitialized;
 
     public readonly WindowSystem WindowSystem = new("Sayus Gag Extender");
     private ConfigWindow ConfigWindow { get; init; }
@@ -94,7 +97,8 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Instance = this;
-        Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        GlobalConfiguration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+        Configuration = new Configuration { IsCharacterProfile = true };
 
         // You might normally want to embed resources and load them from the manifest stream
         
@@ -157,6 +161,7 @@ public sealed class Plugin : IDalamudPlugin
         Utils = new Utils(Instance);
         FriendListHelper = new FriendListHelper(Instance);
         CharacterHelper = new CharacterHelper(Instance);
+        CharacterProfiles = new CharacterProfileManager(Instance, GlobalConfiguration);
         MoodleEnforcer = new MoodleEnforcer(Instance);
         TeleportBlocker = new TeleportBlocker(Instance);
         MountBlocker = new MountBlocker(Instance);
@@ -184,21 +189,6 @@ public sealed class Plugin : IDalamudPlugin
         XIVMessengerManager = new XIVMessengerManager(Instance);
         JobManager = new JobManager(Instance);
 
-        if (Configuration.OpenMainWindowOnStartup)
-        {
-            //MainWindow.Toggle();
-            //MainWindow.BringToFront();
-            if (Configuration.ControllerWindowPreferred) ControllerWindow.IsOpen = true;
-            else MainWindow.IsOpen = true;
-        }
-        if (Configuration.OpenConfigWindowOnStartup)
-        {
-            ConfigWindow.IsOpen = true;
-        }
-        if (Configuration.OpenMiniWindowOnStartup)
-        {
-            MiniWindow.IsOpen = true;
-        }
     }
 
     public void Dispose()
@@ -233,7 +223,6 @@ public sealed class Plugin : IDalamudPlugin
         EmoteEnforcer?.Dispose();
         CustomizePlusEnforcer?.Dispose();
         MovementBlocker?.Dispose();
-        CharacterHelper?.Dispose();
         RemoteChatCommandMonitor?.Dispose();
         Pedometer?.Dispose();
         FatigueTracker?.Dispose();
@@ -243,6 +232,8 @@ public sealed class Plugin : IDalamudPlugin
         CammyEnforcer?.Dispose();
         XIVMessengerManager?.Dispose();
         JobManager?.Dispose();
+        CharacterProfiles?.Dispose();
+        CharacterHelper?.Dispose();
 
 
         GagSpeakRestraintSetApi?.Dispose();
@@ -261,6 +252,39 @@ public sealed class Plugin : IDalamudPlugin
 
 
         CommandManager.RemoveHandler(CommandName);
+    }
+
+    internal void ActivateConfiguration(Configuration configuration)
+    {
+        Configuration = configuration;
+
+        if (startupWindowsInitialized)
+            return;
+
+        startupWindowsInitialized = true;
+
+        if (Configuration.OpenMainWindowOnStartup)
+        {
+            if (Configuration.ControllerWindowPreferred) ControllerWindow.IsOpen = true;
+            else MainWindow.IsOpen = true;
+        }
+
+        if (Configuration.OpenConfigWindowOnStartup)
+            ConfigWindow.IsOpen = true;
+
+        if (Configuration.OpenMiniWindowOnStartup)
+            MiniWindow.IsOpen = true;
+    }
+
+    internal void SaveConfiguration(Configuration configuration)
+    {
+        if (CharacterProfiles is not null)
+        {
+            CharacterProfiles.Save();
+            return;
+        }
+
+        PluginInterface.SavePluginConfig(GlobalConfiguration);
     }
 
     private void OnCommand(string command, string args)

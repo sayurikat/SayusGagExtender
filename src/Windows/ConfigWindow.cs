@@ -13,7 +13,7 @@ public partial class ConfigWindow : Window, IDisposable
 {
 
     public Plugin plugin;
-    private readonly Configuration configuration;
+    private Configuration configuration => plugin.Configuration;
 
     private ConfigTab selectedTab = ConfigTab.General;
 
@@ -48,7 +48,6 @@ public partial class ConfigWindow : Window, IDisposable
         SizeCondition = ImGuiCond.FirstUseEver;
 
         this.plugin = plugin;
-        configuration = plugin.Configuration;
     }
 
     public void Dispose()
@@ -209,6 +208,7 @@ public partial class ConfigWindow : Window, IDisposable
     private void DrawSelectedTabHeader()
     {
         ImGui.TextUnformatted(GetSelectedTabName());
+        ImGui.TextDisabled($"Character profile: {plugin.CharacterProfiles.ActiveProfileDisplayName}");
     }
 
     private string GetSelectedTabName()

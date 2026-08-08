@@ -17,7 +17,7 @@ namespace SayusGagExtender
         private readonly Plugin plugin;
         private static readonly TimeSpan updateCooldown = TimeSpan.FromSeconds(2);
         private DateTime updateOnUTC = DateTime.MinValue;
-        private bool forceGagSpeakState => plugin.Configuration.GagSpeakEnforcedRestraintCloner;
+        private bool forceGagSpeakState => plugin.GlobalConfiguration.GagSpeakEnforcedRestraintCloner;
         private bool didLoginAndReady = false;
         private bool appliedAfterReload = false;
         public bool IsActive = false;
@@ -53,7 +53,7 @@ namespace SayusGagExtender
 
         private void OnFrameworkUpdate(IFramework framework)
         {
-            if (!plugin.Configuration.GagSpeakRestraintCloner && !ApplyGagSpeakLoginBugOrRaceConditionFix)
+            if (!plugin.GlobalConfiguration.GagSpeakRestraintCloner && !ApplyGagSpeakLoginBugOrRaceConditionFix)
                 return;
 
             if (!Plugin.Condition[ConditionFlag.NormalConditions])
@@ -74,7 +74,7 @@ namespace SayusGagExtender
                 if (now > firstApplicationDelayUntil)
                 {
                     //redundant when ApplyGagSpeakLoginBugOrRaceConditionFix == false
-                    if (plugin.Configuration.GagSpeakRestraintCloner)
+                    if (plugin.GlobalConfiguration.GagSpeakRestraintCloner)
                     {
                         if (!IsMasterCharacter())
                         {
@@ -123,30 +123,30 @@ namespace SayusGagExtender
             Plugin.ChatGui.Print($"Mirroring saved Gag Speak restraints. {forceGagSpeakState}");
             
             
-            if (plugin.Configuration.GagSpeakMasterName == null || plugin.Configuration.GagSpeakMasterName.Length < 0 || plugin.Configuration.GagSpeakMasterWorld == null || plugin.Configuration.GagSpeakMasterWorld.Length < 0)
+            if (string.IsNullOrWhiteSpace(plugin.GlobalConfiguration.GagSpeakMasterName) || string.IsNullOrWhiteSpace(plugin.GlobalConfiguration.GagSpeakMasterWorld))
                 return;
 
             var activeRestraintSet = plugin.GagSpeakRestraintSetApi.GetActiveRestraintSet().Value;
             var activeRestrictions = plugin.GagSpeakRestrictionsApi.GetActiveRestrictions();
             var activeGags = plugin.GagSpeakGagsApi.GetActiveGags();
 
-            if (activeRestraintSet != plugin.Configuration.ActiveRestraintSet)
+            if (activeRestraintSet != plugin.GlobalConfiguration.ActiveRestraintSet)
             {
                 plugin.GagSpeakRestraintSetApi.RemoveRestraintSet(activeRestraintSet);
-                plugin.GagSpeakRestraintSetApi.ApplyRestraintSet(plugin.Configuration.ActiveRestraintSet);
+                plugin.GagSpeakRestraintSetApi.ApplyRestraintSet(plugin.GlobalConfiguration.ActiveRestraintSet);
             }
 
 
 
             //int restrictionsMax = GagSpeakRestrictionsApi.MaxRestrictionsLayers;
-            bool restrictionsDiffer = !HaveSameStrings(activeRestrictions, plugin.Configuration.ActiveRestrictions);
+            bool restrictionsDiffer = !HaveSameStrings(activeRestrictions, plugin.GlobalConfiguration.ActiveRestrictions);
             if (restrictionsDiffer)
                 {
                 foreach (var restriction in activeRestrictions.Values)
                 {
                     plugin.GagSpeakRestrictionsApi.RemoveRestriction(restriction);
                 }
-                foreach (var restriction in plugin.Configuration.ActiveRestrictions.Values)
+                foreach (var restriction in plugin.GlobalConfiguration.ActiveRestrictions.Values)
                 {
                     plugin.GagSpeakRestrictionsApi.ApplyRestriction(restriction);
                 }
@@ -154,14 +154,14 @@ namespace SayusGagExtender
 
 
             //int gagsMax = GagSpeakGagsApi.MaxGagLayers;
-            bool gagsDiffer = !HaveSameStrings(activeGags, plugin.Configuration.ActiveGags);
+            bool gagsDiffer = !HaveSameStrings(activeGags, plugin.GlobalConfiguration.ActiveGags);
             if (gagsDiffer)
             {
                 foreach (var gag in activeGags.Values)
                 {
                     plugin.GagSpeakGagsApi.RemoveGag(gag);
                 }
-                foreach (var gag in plugin.Configuration.ActiveGags.Values)
+                foreach (var gag in plugin.GlobalConfiguration.ActiveGags.Values)
                 {
                     plugin.GagSpeakGagsApi.ApplyGag(gag);
                 }
@@ -169,13 +169,13 @@ namespace SayusGagExtender
         }
         private void UpdateSavedRestraintSet(string newSet)
         {
-            if (!plugin.Configuration.GagSpeakRestraintCloner)
+            if (!plugin.GlobalConfiguration.GagSpeakRestraintCloner)
                 return;
 
             if (IsMasterCharacter())
             {
-                plugin.Configuration.ActiveRestraintSet = newSet;
-                plugin.Configuration.Save();
+                plugin.GlobalConfiguration.ActiveRestraintSet = newSet;
+                plugin.GlobalConfiguration.Save();
                 Plugin.ChatGui.Print("Restraint set saved.");
             }
             else
@@ -188,13 +188,13 @@ namespace SayusGagExtender
         }
         private void UpdateSavedRestrictions(Dictionary<int, string> restrictions)
         {
-            if (!plugin.Configuration.GagSpeakRestraintCloner)
+            if (!plugin.GlobalConfiguration.GagSpeakRestraintCloner)
                 return;
 
             if (IsMasterCharacter())
             {
-                plugin.Configuration.ActiveRestrictions = restrictions;
-                plugin.Configuration.Save();
+                plugin.GlobalConfiguration.ActiveRestrictions = restrictions;
+                plugin.GlobalConfiguration.Save();
                 Plugin.ChatGui.Print("Restrictions saved.");
             }
             else
@@ -207,13 +207,13 @@ namespace SayusGagExtender
         }
         private void UpdateSavedGags(Dictionary<int, string> gags)
         {
-            if (!plugin.Configuration.GagSpeakRestraintCloner)
+            if (!plugin.GlobalConfiguration.GagSpeakRestraintCloner)
                 return;
 
             if (IsMasterCharacter())
             {
-                plugin.Configuration.ActiveGags = gags;
-                plugin.Configuration.Save();
+                plugin.GlobalConfiguration.ActiveGags = gags;
+                plugin.GlobalConfiguration.Save();
                 Plugin.ChatGui.Print("Gags saved.");
             }
             else
@@ -242,8 +242,8 @@ namespace SayusGagExtender
             var homeWorld = Plugin.ObjectTable.LocalPlayer?.HomeWorld.RowId ?? 0u;
             world = plugin.Utils.WorldRowIDToString(homeWorld);
 
-            if (name == plugin.Configuration.GagSpeakMasterName &&
-                world == plugin.Configuration.GagSpeakMasterWorld)
+            if (name == plugin.GlobalConfiguration.GagSpeakMasterName &&
+                world == plugin.GlobalConfiguration.GagSpeakMasterWorld)
             {
                 IsActive = false;
                 return true;

@@ -226,11 +226,17 @@ It can:
 
 GagSpeak Mirror saves the active GagSpeak state from a configured main character and mirrors it to alt characters.
 
+Sayu's Gag Extender settings and runtime quota logs are stored in a separate profile for each character. A new alt starts with default settings and does not consume another character's mount, teleport, or job-change quota.
+
+When upgrading from the shared configuration, existing settings move to the configured GagSpeak main character even when restraint mirroring is disabled. If no main character is configured, they move to the first character loaded after the upgrade.
+
 It can mirror:
 
 - Active restraint set
 - Active restrictions
 - Active gags
+
+No Sayu's Gag Extender settings, quota logs, or other feature configuration are mirrored between characters.
 
 Locked mirroring can prevent alt characters from changing away from the saved restraint state.
 
@@ -398,4 +404,3 @@ When reporting an issue, please include:
 - What you expected to happen.
 - What actually happened.
 - Relevant Dalamud log messages.
-

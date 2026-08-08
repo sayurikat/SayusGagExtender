@@ -4,6 +4,7 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using System;
 using System.Collections.Generic;
 using static FFXIVClientStructs.FFXIV.Client.Game.ActionManager;
+using static SayusGagExtender.CharacterHelper;
 using static SayusGagExtender.Configuration;
 
 namespace SayusGagExtender;
@@ -50,6 +51,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
         this.useActionHook.Enable();
 
         Plugin.Framework.Update += this.OnFrameworkUpdate;
+        plugin.CharacterProfiles.ProfileChanged += this.OnCharacterProfileChanged;
         this.RegisterQuotaMoodle();
 
     }
@@ -65,6 +67,16 @@ public unsafe sealed class TeleportBlocker : IDisposable
         this.RemoveQuotaMoodleIfApplied();
     }
 
+    private void OnCharacterProfileChanged(CharacterIdentity character, Configuration configuration)
+    {
+        this.RemoveQuotaMoodleIfApplied();
+        this.cachedMoodleActive = false;
+        this.nextMoodleRefreshMs = 0;
+        this.nextQuotaMaintenanceMs = 0;
+        this.teleportCountCooldown = DateTime.MinValue;
+        this.RegisterQuotaMoodle();
+    }
+
     private bool UseActionDetour(
         ActionManager* actionManager,
         ActionType actionType,
@@ -77,7 +89,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
     {
         if (this.Enabled && this.IsTeleportOrReturn(actionType, actionId))
         {
-            if (this.ShouldBlockTeleportAction(actionType, actionId) && plugin.MirrorGagSpeak.IsMasterCharacter())
+            if (this.ShouldBlockTeleportAction(actionType, actionId))
             {
                 Plugin.ChatGui.Print("Blocked teleport / return action");
                 return false;
@@ -94,7 +106,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
             comboRouteId,
             outOptAreaTargeted);
 
-        if (this.Enabled && result && this.IsTeleportOrReturn(actionType, actionId) && this.teleportCountCooldown < DateTime.UtcNow && plugin.MirrorGagSpeak.IsMasterCharacter())
+        if (this.Enabled && result && this.IsTeleportOrReturn(actionType, actionId) && this.teleportCountCooldown < DateTime.UtcNow)
         {
             // Teleport / Return can be noisy depending on how it is started.
             // Cooldown avoids double-counting the same attempt.
@@ -340,6 +352,7 @@ public unsafe sealed class TeleportBlocker : IDisposable
     public void Dispose()
     {
         Plugin.Framework.Update -= this.OnFrameworkUpdate;
+        plugin.CharacterProfiles.ProfileChanged -= this.OnCharacterProfileChanged;
 
         this.RemoveQuotaMoodleIfApplied();
 

@@ -6,6 +6,7 @@ using Lumina.Excel.Sheets;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static SayusGagExtender.CharacterHelper;
 using static SayusGagExtender.Configuration;
 
 namespace SayusGagExtender;
@@ -66,7 +67,7 @@ public unsafe sealed class JobManager : IDisposable
     // Give the gear/job change time to finish, then capture the final state.
     private DateTime quotaLockCaptureDueUtc = DateTime.MinValue;
 
-    private readonly DateTime startupGraceUntilUtc = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+    private DateTime startupGraceUntilUtc = DateTime.UtcNow + TimeSpan.FromSeconds(15);
 
     private static readonly TimeSpan JobSwitchCountCooldown = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan QuotaFinalCaptureGrace = TimeSpan.FromSeconds(10);
@@ -113,6 +114,7 @@ public unsafe sealed class JobManager : IDisposable
         equipGearsetHook.Enable();
 
         Plugin.Framework.Update += OnFrameworkUpdate;
+        plugin.CharacterProfiles.ProfileChanged += OnCharacterProfileChanged;
         RegisterQuotaMoodles();
         RegisterRouletteMoodle();
     }
@@ -120,12 +122,39 @@ public unsafe sealed class JobManager : IDisposable
     public void Dispose()
     {
         Plugin.Framework.Update -= OnFrameworkUpdate;
+        plugin.CharacterProfiles.ProfileChanged -= OnCharacterProfileChanged;
 
         RemoveQuotaMoodleIfApplied();
         RemoveRouletteEffectIfApplied();
 
         equipGearsetHook.Disable();
         equipGearsetHook.Dispose();
+    }
+
+    private void OnCharacterProfileChanged(CharacterIdentity character, Configuration configuration)
+    {
+        RemoveQuotaMoodleIfApplied();
+        RemoveRouletteEffectIfApplied();
+        ClearPendingRouletteSwitch();
+
+        currentLockedJob = new JobLockState();
+        lastSeenClassJob = 0;
+        lastSeenGearsetId = -1;
+        internalGearsetChange = false;
+        requestCaptureAllowedState = true;
+        requestCaptureSeenState = true;
+        requestCountAcceptedJobSwitch = false;
+        requestRevertToLockedJob = false;
+        cachedMoodleActive = false;
+        cachedOldMoodleBlockActiveForDetour = false;
+        wasBlockingActive = false;
+        nextStateCheckMs = 0;
+        nextMoodleRefreshMs = 0;
+        nextPrintMs = 0;
+        nextQuotaMaintenanceMs = 0;
+        jobSwitchCountCooldown = DateTime.MinValue;
+        quotaLockCaptureDueUtc = DateTime.MinValue;
+        startupGraceUntilUtc = DateTime.UtcNow + TimeSpan.FromSeconds(15);
     }
 
     public void Enable()

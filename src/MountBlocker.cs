@@ -5,6 +5,7 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using System;
 using System.Collections.Generic;
 using static FFXIVClientStructs.FFXIV.Client.Game.ActionManager;
+using static SayusGagExtender.CharacterHelper;
 using static SayusGagExtender.Configuration;
 
 namespace SayusGagExtender;
@@ -58,6 +59,7 @@ public unsafe sealed class MountBlocker : IDisposable
         this.useActionHook.Enable();
 
         Plugin.Framework.Update += this.OnFrameworkUpdate;
+        plugin.CharacterProfiles.ProfileChanged += this.OnCharacterProfileChanged;
         this.RegisterQuotaMoodles();
 
     }
@@ -71,6 +73,17 @@ public unsafe sealed class MountBlocker : IDisposable
     {
         plugin.Configuration.MountBlockFeature = false;
         this.RemoveQuotaMoodleIfApplied();
+    }
+
+    private void OnCharacterProfileChanged(CharacterIdentity character, Configuration configuration)
+    {
+        this.RemoveQuotaMoodleIfApplied();
+        this.cachedMoodleActive = false;
+        this.nextMountedCheckMs = 0;
+        this.nextMoodleRefreshMs = 0;
+        this.nextQuotaMaintenanceMs = 0;
+        this.mountCountCooldown = DateTime.MinValue;
+        this.RegisterQuotaMoodles();
     }
 
     private bool UseActionDetour(
@@ -366,6 +379,7 @@ public unsafe sealed class MountBlocker : IDisposable
     public void Dispose()
     {
         Plugin.Framework.Update -= this.OnFrameworkUpdate;
+        plugin.CharacterProfiles.ProfileChanged -= this.OnCharacterProfileChanged;
 
         this.RemoveQuotaMoodleIfApplied();
 
