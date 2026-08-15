@@ -60,9 +60,9 @@ namespace SayusGagExtender
             //return world;
 
         }
-        public void ExecuteNativeCommand(string command)
+        public void ExecuteNativeCommand(string command, bool bypassGarbleSpeak = false)
         {
-            if (plugin.GagSpeakGarblerBypassApi != null)
+            if (bypassGarbleSpeak && plugin.GagSpeakGarblerBypassApi != null)
                 plugin.GagSpeakGarblerBypassApi.ExecuteWithoutGarbler(() => ExecuteNativeCommandInner(command));
             else
                 ExecuteNativeCommandInner(command);

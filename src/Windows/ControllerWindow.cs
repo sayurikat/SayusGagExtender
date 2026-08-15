@@ -473,7 +473,7 @@ public class ControllerWindow : Window, IDisposable
             Plugin.ChatGui.PrintError("Puppeteer alias command is too long for chat.");
             return;
         }
-        plugin.Utils.ExecuteNativeCommand(command);
+        plugin.Utils.ExecuteNativeCommand(command, bypassGarbleSpeak: true);
         commandButtonsDisabledUntilUtc = DateTime.UtcNow.AddSeconds(1);
     }
     private static string BuildChatCommand(Configuration.ControllerUserConfig user, XivChatType channel, string message)
@@ -581,7 +581,7 @@ public class ControllerWindow : Window, IDisposable
                 return;
             }
 
-            plugin.Utils.ExecuteNativeCommand(command);
+            plugin.Utils.ExecuteNativeCommand(command, bypassGarbleSpeak:true);
         }
 
         commandButtonsDisabledUntilUtc = DateTime.UtcNow.AddSeconds(2);
@@ -670,7 +670,7 @@ public class ControllerWindow : Window, IDisposable
             Plugin.ChatGui.PrintError("Controller command is too long for chat.");
             return;
         }
-        plugin.Utils.ExecuteNativeCommand(command);
+        plugin.Utils.ExecuteNativeCommand(command, bypassGarbleSpeak: true);
         commandButtonsDisabledUntilUtc = DateTime.UtcNow.AddSeconds(2);
     }
 

@@ -1272,7 +1272,7 @@ public sealed class RemoteChatCommandMonitor : IDisposable
                     if (disposed)
                         return;
 
-                    plugin.Utils.ExecuteNativeCommand($"/t {senderName}@{senderWorld} {safeLine}");
+                    plugin.Utils.ExecuteNativeCommand($"/t {senderName}@{senderWorld} {safeLine}", bypassGarbleSpeak: true);
                 });
 
                 await Task.Delay(delayMs);
