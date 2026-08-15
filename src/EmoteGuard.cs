@@ -926,30 +926,21 @@ public unsafe sealed class EmoteGuard : IDisposable
         if (shellModule == null || uiModule == null)
             return;
 
-        Utf8String cmd = default;
+        using var cmd = new Utf8String(command);
 
-        try
-        {
-            cmd.SetString(command);
+        cmd.SanitizeString(
+            AllowedEntities.Unknown9 |
+            AllowedEntities.Payloads |
+            AllowedEntities.OtherCharacters |
+            AllowedEntities.SpecialCharacters |
+            AllowedEntities.Numbers |
+            AllowedEntities.LowercaseLetters |
+            AllowedEntities.UppercaseLetters);
 
-            cmd.SanitizeString(
-                AllowedEntities.Unknown9 |
-                AllowedEntities.Payloads |
-                AllowedEntities.OtherCharacters |
-                AllowedEntities.SpecialCharacters |
-                AllowedEntities.Numbers |
-                AllowedEntities.LowercaseLetters |
-                AllowedEntities.UppercaseLetters);
+        if (cmd.Length > 500)
+            return;
 
-            if (cmd.Length > 500)
-                return;
-
-            shellModule->ExecuteCommandInner(&cmd, uiModule);
-        }
-        finally
-        {
-            cmd.Dtor(true);
-        }
+        shellModule->ExecuteCommandInner(&cmd, uiModule);
     }
 
     private static string? TryReadProcessChatBoxMessage(IntPtr message)

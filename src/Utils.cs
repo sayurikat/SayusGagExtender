@@ -62,6 +62,10 @@ namespace SayusGagExtender
         }
         public void ExecuteNativeCommand(string command, bool bypassGarbleSpeak = false)
         {
+            _ = Plugin.Framework.RunOnFrameworkThread(() => ExecuteNativeCommandOnFrameworkThread(command, bypassGarbleSpeak));
+        }
+        private void ExecuteNativeCommandOnFrameworkThread(string command, bool bypassGarbleSpeak)
+        {
             if (bypassGarbleSpeak && plugin.GagSpeakGarblerBypassApi != null)
                 plugin.GagSpeakGarblerBypassApi.ExecuteWithoutGarbler(() => ExecuteNativeCommandInner(command));
             else
@@ -83,33 +87,24 @@ namespace SayusGagExtender
             if (shellModule == null || uiModule == null)
                 return;
 
-            Utf8String cmd = default;
+            using var cmd = new Utf8String(command);
 
-            try
-            {
-                cmd.SetString(command);
+            cmd.SanitizeString(
+                AllowedEntities.Unknown9 |
+                AllowedEntities.Payloads |
+                AllowedEntities.OtherCharacters |
+                AllowedEntities.SpecialCharacters |
+                AllowedEntities.Numbers |
+                AllowedEntities.LowercaseLetters |
+                AllowedEntities.UppercaseLetters);
 
-                cmd.SanitizeString(
-                    AllowedEntities.Unknown9 |
-                    AllowedEntities.Payloads |
-                    AllowedEntities.OtherCharacters |
-                    AllowedEntities.SpecialCharacters |
-                    AllowedEntities.Numbers |
-                    AllowedEntities.LowercaseLetters |
-                    AllowedEntities.UppercaseLetters);
+            if (cmd.Length > 500)
+                return;
 
-                if (cmd.Length > 500)
-                    return;
+            shellModule->ExecuteCommandInner(&cmd, uiModule);
 
-                shellModule->ExecuteCommandInner(&cmd, uiModule);
-
-                // If your ClientStructs build uses the overload with a bool:
-                // shellModule->ExecuteCommandInner(&cmd, uiModule, false);
-            }
-            finally
-            {
-                cmd.Dtor(true);
-            }
+            // If your ClientStructs build uses the overload with a bool:
+            // shellModule->ExecuteCommandInner(&cmd, uiModule, false);
         }
         public unsafe void ExecuteCommand(string command)
         {
